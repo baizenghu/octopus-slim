@@ -53,7 +53,7 @@ export function createAuditRouter(authService: AuthService, auditLogger: AuditLo
       // 序列化 BigInt 为字符串
       const serialized = {
         ...result,
-        data: result.data.map((r) => ({
+        data: result.data.map((r: any) => ({
           ...r,
           logId: r.logId.toString(),
         })),

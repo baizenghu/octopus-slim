@@ -80,7 +80,7 @@ export class EngineAdapter extends EventEmitter {
    * 进程内 RPC 调用。
    * TODO: 对接 handleGatewayRequest — 将 method+params 路由到对应的引擎 handler
    */
-  async call<T = unknown>(method: string, params?: unknown): Promise<T> {
+  async call<T = unknown>(method: string, _params?: unknown): Promise<T> {
     if (!this.initialized) {
       throw new Error('[engine] EngineAdapter not initialized');
     }
@@ -94,7 +94,7 @@ export class EngineAdapter extends EventEmitter {
 
   async callAgent(
     params: AgentCallParams,
-    onEvent: (event: AgentStreamEvent) => void,
+    _onEvent: (event: AgentStreamEvent) => void,
   ): Promise<{ runId: string }> {
     const idempotencyKey = params.idempotencyKey || randomUUID();
 

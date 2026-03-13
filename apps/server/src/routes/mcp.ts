@@ -276,12 +276,12 @@ export function createMcpRouter(
       const server = await prisma.mCPServer.findUnique({ where: { id } });
       if (server) {
         const allAgents = await prisma.agent.findMany({ select: { name: true, ownerId: true, mcpFilter: true } });
-        const referencingAgents = allAgents.filter((a) => {
+        const referencingAgents = allAgents.filter((a: any) => {
           const filter = a.mcpFilter as string[] | null;
           return Array.isArray(filter) && (filter.includes(id) || filter.includes(server.name));
         });
         if (referencingAgents.length > 0) {
-          const names = referencingAgents.map((a) => `${a.ownerId}/${a.name}`).join(', ');
+          const names = referencingAgents.map((a: any) => `${a.ownerId}/${a.name}`).join(', ');
           res.status(409).json({ error: `无法删除：以下 Agent 仍在使用此 MCP Server：${names}。请先取消关联后再删除。` });
           return;
         }
@@ -794,12 +794,12 @@ export function createMcpRouter(
 
       // 引用完整性检查
       const allAgents = await prisma.agent.findMany({ where: { ownerId: user.id }, select: { name: true, ownerId: true, mcpFilter: true } });
-      const referencingAgents = allAgents.filter((a) => {
+      const referencingAgents = allAgents.filter((a: any) => {
         const filter = a.mcpFilter as string[] | null;
         return Array.isArray(filter) && (filter.includes(id) || filter.includes(existing.name));
       });
       if (referencingAgents.length > 0) {
-        const names = referencingAgents.map((a) => a.name).join(', ');
+        const names = referencingAgents.map((a: any) => a.name).join(', ');
         res.status(409).json({ error: `无法删除：以下 Agent 仍在使用此 MCP Server：${names}。请先取消关联后再删除。` });
         return;
       }

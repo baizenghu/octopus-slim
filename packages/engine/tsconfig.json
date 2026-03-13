@@ -1,22 +1,28 @@
 {
   "compilerOptions": {
-    "target": "ES2022",
-    "module": "ESNext",
-    "moduleResolution": "bundler",
-    "lib": ["ES2022"],
-    "strict": true,
-    "esModuleInterop": true,
-    "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
+    "allowImportingTsExtensions": true,
+    "allowSyntheticDefaultImports": true,
     "declaration": true,
-    "declarationMap": true,
-    "sourceMap": true,
-    "outDir": "./dist",
-    "rootDir": "./src",
+    "esModuleInterop": true,
+    "experimentalDecorators": true,
+    "forceConsistentCasingInFileNames": true,
+    "lib": ["DOM", "DOM.Iterable", "ES2023", "ScriptHost"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "noEmit": true,
+    "noEmitOnError": true,
+    "outDir": "dist",
     "resolveJsonModule": true,
-    "isolatedModules": true,
-    "allowSyntheticDefaultImports": true
+    "skipLibCheck": true,
+    "strict": true,
+    "target": "es2023",
+    "useDefineForClassFields": false,
+    "paths": {
+      "octopus/plugin-sdk": ["./src/plugin-sdk/index.ts"],
+      "octopus/plugin-sdk/*": ["./src/plugin-sdk/*.ts"],
+      "octopus/plugin-sdk/account-id": ["./src/plugin-sdk/account-id.ts"]
+    }
   },
-  "include": ["src"],
-  "exclude": ["node_modules", "dist"]
+  "include": ["src/**/*", "extensions/**/*"],
+  "exclude": ["node_modules", "dist", "test", "scripts", "ui"]
 }

@@ -2,8 +2,8 @@
   "name": "@octopus/quota",
   "version": "1.0.0",
   "description": "配额管理模块",
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",

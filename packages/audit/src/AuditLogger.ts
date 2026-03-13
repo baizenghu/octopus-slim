@@ -11,7 +11,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as zlib from 'zlib';
-import { createLogger, format, transports, Logger } from 'winston';
+import { createLogger, format, Logger } from 'winston';
 import DailyRotateFile from 'winston-daily-rotate-file';
 import type { PrismaClient } from '@prisma/client';
 import type {

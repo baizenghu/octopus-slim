@@ -36,6 +36,5 @@ export async function disconnectDatabase(): Promise<void> {
 // 导出 Prisma Client 实例（便捷用法）
 export const db = getPrismaClient();
 
-// 重新导出 Prisma 生成的类型
+// 重新导出 Prisma Client 类型
 export { PrismaClient } from '@prisma/client';
-export type { User, AuditLog, UserSession } from '@prisma/client';

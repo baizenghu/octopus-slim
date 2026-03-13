@@ -1,0 +1,142 @@
+{
+  "title": "销售数据分析仪表盘（丰富图表版）",
+  "charts": [
+    {
+      "type": "kpi",
+      "title": "总销售额",
+      "measures": [
+        "销售额"
+      ],
+      "config": {
+        "agg": "sum",
+        "format": ",.0f"
+      },
+      "col_span": 3
+    },
+    {
+      "type": "gauge",
+      "title": "目标达成率",
+      "measures": [
+        "达成率"
+      ],
+      "config": {
+        "max": 100,
+        "unit": "%"
+      },
+      "col_span": 3
+    },
+    {
+      "type": "kpi",
+      "title": "订单总数",
+      "measures": [
+        "订单数"
+      ],
+      "config": {
+        "agg": "count"
+      },
+      "col_span": 3
+    },
+    {
+      "type": "kpi",
+      "title": "平均利润率",
+      "measures": [
+        "利润率"
+      ],
+      "config": {
+        "agg": "mean",
+        "format": ".2%"
+      },
+      "col_span": 3
+    },
+    {
+      "type": "area",
+      "title": "销售趋势（面积图）",
+      "dimensions": [
+        "日期"
+      ],
+      "measures": [
+        "销售额",
+        "销售量"
+      ],
+      "config": {
+        "stack": false,
+        "agg": {
+          "销售额": "sum",
+          "销售量": "sum"
+        }
+      },
+      "col_span": 8
+    },
+    {
+      "type": "rose",
+      "title": "产品销售占比",
+      "dimensions": [
+        "产品"
+      ],
+      "measures": [
+        "销售额"
+      ],
+      "col_span": 4,
+      "config": {
+        "top_n": 8,
+        "others_label": "其他产品"
+      }
+    },
+    {
+      "type": "bar",
+      "title": "地区销售对比 Top 10",
+      "dimensions": [
+        "地区"
+      ],
+      "measures": [
+        "销售额"
+      ],
+      "config": {
+        "horizontal": true,
+        "agg": "sum"
+      },
+      "col_span": 6
+    },
+    {
+      "type": "radar",
+      "title": "地区综合评分",
+      "dimensions": [
+        "地区"
+      ],
+      "measures": [
+        "销售额",
+        "销售量",
+        "利润率",
+        "订单数"
+      ],
+      "col_span": 6
+    },
+    {
+      "type": "funnel",
+      "title": "销售转化漏斗",
+      "dimensions": [
+        "阶段"
+      ],
+      "measures": [
+        "用户数"
+      ],
+      "col_span": 4
+    },
+    {
+      "type": "heatmap",
+      "title": "地区×产品销售热力图",
+      "dimensions": [
+        "地区",
+        "产品"
+      ],
+      "measures": [
+        "销售额"
+      ],
+      "col_span": 8,
+      "config": {
+        "agg": "sum"
+      }
+    }
+  ],
+  "theme": "executive"
+}

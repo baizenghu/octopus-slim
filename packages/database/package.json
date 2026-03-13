@@ -2,8 +2,8 @@
   "name": "@octopus/database",
   "version": "1.0.0",
   "description": "数据库访问层 - Prisma ORM",
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",

@@ -335,12 +335,12 @@ export function createSkillsRouter(
 
       // 引用完整性检查：检查是否有 agent 关联了此 Skill
       const allAgents = await prisma.agent.findMany({ select: { name: true, ownerId: true, skillsFilter: true } });
-      const referencingAgents = allAgents.filter((a) => {
+      const referencingAgents = allAgents.filter((a: any) => {
         const filter = a.skillsFilter as string[] | null;
         return Array.isArray(filter) && (filter.includes(id) || filter.includes(existing.name));
       });
       if (referencingAgents.length > 0) {
-        const names = referencingAgents.map((a) => `${a.ownerId}/${a.name}`).join(', ');
+        const names = referencingAgents.map((a: any) => `${a.ownerId}/${a.name}`).join(', ');
         res.status(409).json({ error: `无法删除：以下 Agent 仍在使用此技能：${names}。请先取消关联后再删除。` });
         return;
       }

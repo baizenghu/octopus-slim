@@ -2,8 +2,8 @@
   "name": "@octopus/audit",
   "version": "1.0.0",
   "description": "审计日志模块",
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",

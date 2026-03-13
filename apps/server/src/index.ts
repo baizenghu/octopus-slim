@@ -155,7 +155,7 @@ async function main() {
   });
 
   // 启动时清理过期审计导出文件（24 小时前）
-  auditLogger.cleanup().then((n) => {
+  auditLogger.cleanup().then((n: number) => {
     if (n > 0) console.log(`[audit] Cleaned up ${n} expired export files`);
   }).catch(() => {});
 

@@ -277,7 +277,7 @@ export function createAgentsRouter(
       prisma.databaseConnection.findMany({ where: { userId, enabled: true }, select: { name: true } }),
     ]);
 
-    const defaultMcpFilter = mcpServers.map(s => s.id);
+    const defaultMcpFilter = mcpServers.map((s: { id: string }) => s.id);
     await prisma.agent.create({
       data: {
         id: randomUUID().replace(/-/g, '').slice(0, 16),
@@ -288,9 +288,9 @@ export function createAgentsRouter(
         isDefault: true,
         identity: { name: 'Octopus AI', emoji: '🐙' },
         toolsFilter: ['list_files', 'read_file', 'write_file'],
-        skillsFilter: skills.map(s => s.name),
+        skillsFilter: skills.map((s: { name: string }) => s.name),
         mcpFilter: defaultMcpFilter,
-        allowedConnections: connections.map(c => c.name),
+        allowedConnections: connections.map((c: { name: string }) => c.name),
       },
     });
 
