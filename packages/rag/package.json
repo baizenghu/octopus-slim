@@ -1,0 +1,16 @@
+{
+  "name": "@octopus/rag",
+  "version": "1.0.0",
+  "description": "知识库RAG模块",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "vitest",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "chromadb": "^1.8.0"
+  }
+}

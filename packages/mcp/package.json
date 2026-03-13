@@ -1,0 +1,16 @@
+{
+  "name": "@octopus/mcp",
+  "version": "1.0.0",
+  "description": "MCP 协议支持模块 - 注册/发现/执行/沙箱",
+  "main": "./src/index.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "vitest",
+    "test:unit": "vitest run",
+    "lint": "eslint src/",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {},
+  "devDependencies": {}
+}

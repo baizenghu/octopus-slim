@@ -1,0 +1,27 @@
+{
+  "name": "@octopus/auth",
+  "version": "1.0.0",
+  "description": "认证授权模块 - LDAP/JWT/RBAC",
+  "main": "./src/index.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "vitest",
+    "test:unit": "vitest run",
+    "lint": "eslint src/",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "jsonwebtoken": "^9.0.0",
+    "ldapjs": "^3.0.0",
+    "bcryptjs": "^2.4.3"
+  },
+  "devDependencies": {
+    "@types/jsonwebtoken": "^9.0.0",
+    "@types/ldapjs": "^3.0.0",
+    "@types/bcryptjs": "^2.4.0"
+  },
+  "peerDependencies": {
+    "ioredis": "^5.0.0"
+  }
+}

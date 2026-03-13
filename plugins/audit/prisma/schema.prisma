@@ -1,0 +1,75 @@
+// Plugin-local Prisma schema — generates client into plugin's own node_modules
+// 只需要 AuditLog 表，其他模型引用也包含在内以满足关系完整性
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../node_modules/.prisma/client"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+/// 用户表（只读引用，供 AuditLog FK 使用）
+model User {
+  userId      String    @id @map("user_id") @db.VarChar(64)
+  username    String    @unique @db.VarChar(255)
+  email       String    @unique @db.VarChar(255)
+  displayName String?   @map("display_name") @db.VarChar(255)
+  department  String?   @db.VarChar(255)
+  roles       Json
+  quotas      Json
+  passwordHash String?  @map("password_hash") @db.VarChar(255)
+  status      String    @default("active") @db.VarChar(20)
+  ldapDn      String?   @map("ldap_dn") @db.VarChar(512)
+  lastLoginAt DateTime? @map("last_login_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  auditLogs AuditLog[]
+  sessions  UserSession[]
+
+  @@index([department])
+  @@index([status])
+  @@map("users")
+}
+
+/// 审计日志表
+model AuditLog {
+  logId        BigInt   @id @default(autoincrement()) @map("log_id")
+  userId       String?  @map("user_id") @db.VarChar(64)
+  action       String   @db.VarChar(255)
+  resource     String?  @db.VarChar(512)
+  details      Json?
+  ipAddress    String?  @map("ip_address") @db.VarChar(45)
+  userAgent    String?  @map("user_agent") @db.VarChar(512)
+  success      Boolean  @default(true)
+  errorMessage String?  @map("error_message") @db.Text
+  durationMs   Int?     @map("duration_ms")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [userId], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+  @@index([userId, action, createdAt])
+  @@map("audit_logs")
+}
+
+/// 用户会话表（供关系完整性）
+model UserSession {
+  sessionId String   @id @map("session_id") @db.VarChar(128)
+  userId    String   @map("user_id") @db.VarChar(64)
+  tokenHash String   @map("token_hash") @db.VarChar(128)
+  ipAddress String?  @map("ip_address") @db.VarChar(45)
+  userAgent String?  @map("user_agent") @db.VarChar(512)
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [userId], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("user_sessions")
+}

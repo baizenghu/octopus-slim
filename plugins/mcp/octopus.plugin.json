@@ -1,0 +1,15 @@
+{
+  "id": "enterprise-mcp",
+  "name": "Enterprise MCP",
+  "description": "将企业级 MCP Server 工具注册为原生 agent 工具，对所有用户全局可用",
+  "version": "1.0.0",
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "databaseUrl": {
+        "type": "string",
+        "description": "MySQL 连接串（同 .env DATABASE_URL）"
+      }
+    }
+  }
+}

@@ -1,0 +1,67 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../node_modules/.prisma/client"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model MCPServer {
+  id          String   @id @map("server_id") @db.VarChar(64)
+  name        String   @db.VarChar(255)
+  description String?  @db.VarChar(512)
+  scope       String   @db.VarChar(20)
+  ownerId     String?  @map("owner_id") @db.VarChar(64)
+  transport   String   @db.VarChar(20)
+  command     String?  @db.VarChar(512)
+  url         String?  @db.VarChar(512)
+  args        Json?
+  env         Json?
+  enabled     Boolean  @default(true)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([scope])
+  @@map("mcp_servers")
+}
+
+/// 技能表
+model Skill {
+  id          String   @id @map("skill_id") @db.VarChar(64)
+  name        String   @db.VarChar(255)
+  description String?  @db.Text
+  scope       String   @db.VarChar(20) /// 'enterprise' | 'personal'
+  ownerId     String?  @map("owner_id") @db.VarChar(64)
+  version     String?  @db.VarChar(20)
+  status      String   @default("pending") @db.VarChar(20)
+  scriptPath  String?  @map("script_path") @db.VarChar(512)
+  command     String?  @db.VarChar(255)
+  scanReport  Json?    @map("scan_report")
+  enabled     Boolean  @default(false)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([scope])
+  @@index([ownerId])
+  @@map("skills")
+}
+
+/// 数据库连接表
+model DatabaseConnection {
+  id          String   @id @map("connection_id") @db.VarChar(64)
+  userId      String   @map("user_id") @db.VarChar(64)
+  name        String   @db.VarChar(255)
+  dbType      String   @map("db_type") @db.VarChar(20)
+  host        String   @db.VarChar(255)
+  port        Int
+  dbUser      String   @map("db_user") @db.VarChar(255)
+  dbPassword  String   @map("db_password") @db.VarChar(512)
+  dbName      String   @map("db_name") @db.VarChar(255)
+  enabled     Boolean  @default(true)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@unique([userId, name])
+  @@index([userId])
+  @@map("database_connections")
+}

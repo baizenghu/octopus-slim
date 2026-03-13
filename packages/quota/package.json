@@ -1,0 +1,16 @@
+{
+  "name": "@octopus/quota",
+  "version": "1.0.0",
+  "description": "配额管理模块",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "vitest",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "ioredis": "^5.3.0"
+  }
+}

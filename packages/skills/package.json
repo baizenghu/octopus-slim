@@ -1,0 +1,23 @@
+{
+  "name": "@octopus/skills",
+  "version": "1.0.0",
+  "description": "Skills 安全管理模块 - 扫描/隔离/监控/编排",
+  "main": "./src/index.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "vitest",
+    "test:unit": "vitest run",
+    "lint": "eslint src/",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "dockerode": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/dockerode": "^3.3.0"
+  },
+  "peerDependencies": {
+    "@octopus/workspace": "workspace:*"
+  }
+}

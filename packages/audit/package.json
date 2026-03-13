@@ -1,0 +1,23 @@
+{
+  "name": "@octopus/audit",
+  "version": "1.0.0",
+  "description": "审计日志模块",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "vitest",
+    "test:unit": "vitest run",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@octopus/database": "workspace:*",
+    "@prisma/client": "^6.0.0",
+    "winston": "^3.11.0",
+    "winston-daily-rotate-file": "^5.0.0"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.0"
+  }
+}
