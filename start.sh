@@ -14,7 +14,7 @@ LOG_DIR="$ROOT_DIR/.dev-logs"
 PID_DIR="$ROOT_DIR/.dev-pids"
 
 # ─── 确保当前进程有 docker 组权限 ─────────────────────────────
-# native gateway 需要访问 docker socket，若当前 shell 没有 docker 组则用 sg 重新执行
+# sandbox 需要访问 docker socket，若当前 shell 没有 docker 组则用 sg 重新执行
 if ! id -Gn | grep -qw docker; then
   exec sg docker -c "\"$0\" $*"
 fi
@@ -32,17 +32,8 @@ source "$ROOT_DIR/.env" 2>/dev/null || true
 set +a
 GATEWAY_PORT="${GATEWAY_PORT:-18790}"
 ADMIN_PORT="${ADMIN_CONSOLE_PORT:-3001}"
-NATIVE_GW_PORT="${OCTOPUS_NATIVE_PORT:-18791}"
 
 mkdir -p "$LOG_DIR" "$PID_DIR"
-
-# ─── 企业 Native Gateway State 目录（项目内） ───────────────────────────────
-# State 目录已迁移到项目内 .octopus-state/，随 git 版本控制。
-# OCTOPUS_HOME: exec-approvals.json 路径 = $OCTOPUS_HOME/.octopus/exec-approvals.json
-# OCTOPUS_STATE_DIR: 覆盖 --profile enterprise 的默认 state 目录（~/.octopus/）
-OCTOPUS_STATE_DIR="${ROOT_DIR}/.octopus-state"
-OCTOPUS_HOME="${OCTOPUS_STATE_DIR}"
-mkdir -p "${OCTOPUS_HOME}/.octopus"
 
 # ─── 杀掉一个服务（按进程组） ─────────────────────────────
 #
@@ -113,31 +104,18 @@ stop_all() {
   echo -e "${YELLOW}⏹  正在停止所有服务...${NC}"
 
   # 1) 按 PID 文件停止（进程组级别）
-  kill_service "native-gateway"
   kill_service "gateway"
   kill_service "admin-console"
-  kill_service "amap-mcp"
 
-  # 2) 清理端口残留（防止漏网之鱼）；octopus-gateway 是 supervisor 启动的独立进程，必须按端口清理
-  kill_port "$NATIVE_GW_PORT" "Native Gateway"
+  # 2) 清理端口残留（防止漏网之鱼）
   kill_port "$GATEWAY_PORT" "Gateway"
   kill_port "$ADMIN_PORT" "Admin Console"
 
   # 3) 模式匹配清理（最后兜底）
-  pkill -f "octopus/octopus.mjs.*gateway" 2>/dev/null || true
-  pkill -f "tsx.*watch.*apps/gateway" 2>/dev/null || true
+  pkill -f "tsx.*watch.*apps/server" 2>/dev/null || true
   pkill -f "vite.*--port.*${ADMIN_PORT}" 2>/dev/null || true
-  pkill -f "amap-mcp-server" 2>/dev/null || true
   # 也杀掉可能被 tsx 拉起的 node 子进程
-  pkill -f "node.*apps/gateway/src/index" 2>/dev/null || true
-
-  # 4) 等待 native gateway 端口彻底释放（supervisor 可能在 kill 后还会短暂重启一次）
-  local waited=0
-  while lsof -ti :"$NATIVE_GW_PORT" > /dev/null 2>&1 && [ $waited -lt 20 ]; do
-    kill -9 $(lsof -ti :"$NATIVE_GW_PORT" 2>/dev/null) 2>/dev/null || true
-    sleep 0.5
-    waited=$((waited + 1))
-  done
+  pkill -f "node.*apps/server/src/index" 2>/dev/null || true
 
   echo -e "${GREEN}✓ 全部停止${NC}"
 }
@@ -151,7 +129,7 @@ show_status() {
   echo ""
 
   local has_service=false
-  for name in native-gateway gateway admin-console; do
+  for name in gateway admin-console; do
     local pid_file="$PID_DIR/${name}.pid"
     [ -f "$pid_file" ] || continue
     has_service=true
@@ -170,7 +148,6 @@ show_status() {
   fi
 
   echo ""
-  echo -e "  Native Gateway: http://localhost:${NATIVE_GW_PORT}"
   echo -e "  Gateway:        http://localhost:${GATEWAY_PORT}"
   echo -e "  Admin Console:  http://localhost:${ADMIN_PORT}"
   echo -e "  Health Check:   http://localhost:${GATEWAY_PORT}/health"
@@ -235,91 +212,9 @@ start_all() {
     fi
   fi
 
-  # 3. 启动地图 MCP Server（高德地图 Streamable HTTP，需在 Native Gateway 之前就绪）
-  echo -e "${YELLOW}[3/6]${NC} 启动地图 MCP Server (端口 8000)..."
-  AMAP_MAPS_API_KEY="${AMAP_MAPS_API_KEY:-}"
-  if [ -z "$AMAP_MAPS_API_KEY" ]; then
-    echo -e "  ${YELLOW}⚠${NC} AMAP_MAPS_API_KEY 未设置，跳过高德地图 MCP 启动"
-  else
-    AMAP_MAPS_API_KEY="$AMAP_MAPS_API_KEY" setsid "$HOME/.local/bin/uvx" amap-mcp-server streamable-http > "$LOG_DIR/amap-mcp.log" 2>&1 &
-    local amap_pid=$!
-    echo "$amap_pid" > "$PID_DIR/amap-mcp.pid"
-    echo -e "  ${GREEN}✓${NC} 地图 MCP PGID $amap_pid"
-    # 等待地图 MCP 就绪
-    echo -n "  等待地图 MCP 启动"
-    for i in {1..15}; do
-      if nc -z localhost 8000 > /dev/null 2>&1; then
-        echo -e " ${GREEN}✓${NC}"
-        break
-      fi
-      echo -n "."
-      sleep 1
-    done
-  fi
-
-  # 3.5 统一 agent state 目录权限为 700（仅所有者可访问）
-  if [ -d ".octopus-state/agents" ]; then
-    find .octopus-state/agents -mindepth 1 -maxdepth 1 -type d -exec chmod 700 {} \;
-    echo -e "  ${GREEN}✓${NC} [security] Agent state 目录权限已统一为 700"
-  fi
-
-  # 4. 启动 Native Octopus Gateway
-  echo -e "${YELLOW}[4/6]${NC} 启动 Native Octopus Gateway (端口 ${NATIVE_GW_PORT})..."
-  cd "$ROOT_DIR"
-  if [ -f "$PID_DIR/native-gateway.pid" ] && kill -0 "$(cat "$PID_DIR/native-gateway.pid")" 2>/dev/null; then
-    echo -e "  ${GREEN}✓${NC} Native Gateway 已在运行 (PID $(cat "$PID_DIR/native-gateway.pid"))"
-  else
-    # supervisor 循环：native gateway 会因 config 变更触发 "full process restart"
-    # (supervisor restart)，此时进程退出等待外部 supervisor 拉起。
-    # 用 while 循环充当 supervisor，自动重启；setsid 创建独立进程组方便整体停止。
-    # OCTOPUS_GATEWAY_TOKEN 需要同时作为环境变量传入，供内置 agent 工具（如 cron）
-    # 在内部回连 Gateway 时进行认证（callGateway → process.env.OCTOPUS_GATEWAY_TOKEN）
-    if [ -z "${OCTOPUS_GATEWAY_TOKEN:-}" ]; then
-      echo -e "  ${RED}✗${NC} OCTOPUS_GATEWAY_TOKEN 未设置，请在 .env 中配置"
-      exit 1
-    fi
-    setsid bash -c '
-      while true; do
-        OCTOPUS_HOME="'"${OCTOPUS_HOME}"'" \
-        OCTOPUS_STATE_DIR="'"${OCTOPUS_STATE_DIR}"'" \
-        OCTOPUS_GATEWAY_TOKEN="'"${OCTOPUS_GATEWAY_TOKEN}"'" \
-        DATABASE_URL="'"${DATABASE_URL:-}"'" \
-        HTTP_PROXY="'"${HTTP_PROXY:-${http_proxy:-}}"'" \
-        HTTPS_PROXY="'"${HTTPS_PROXY:-${https_proxy:-}}"'" \
-        http_proxy="'"${http_proxy:-${HTTP_PROXY:-}}"'" \
-        https_proxy="'"${https_proxy:-${HTTPS_PROXY:-}}"'" \
-        NO_PROXY="'"${NO_PROXY:-localhost,127.0.0.1}"'" \
-        node --import "'"${ROOT_DIR}/scripts/proxy-preload.mjs"'" /home/baizh/octopus/octopus.mjs --profile enterprise gateway run --force --port '"$NATIVE_GW_PORT"' \
-          --token "'"${OCTOPUS_GATEWAY_TOKEN}"'" \
-          >> "'"$LOG_DIR/native-gateway.log"'" 2>&1
-        echo "[supervisor] Native Gateway exited ($?), restarting in 3s..." >> "'"$LOG_DIR/native-gateway.log"'"
-        sleep 3
-      done
-    ' > /dev/null 2>&1 &
-    local native_pid=$!
-    echo "$native_pid" > "$PID_DIR/native-gateway.pid"
-    echo -e "  ${GREEN}✓${NC} Native Gateway PGID $native_pid"
-
-    # 等待 Native Gateway 就绪（最多 30 秒）
-    echo -n "  等待 Native Gateway 启动"
-    local native_ready=false
-    for i in {1..30}; do
-      if nc -z localhost "${NATIVE_GW_PORT}" > /dev/null 2>&1; then
-        echo -e " ${GREEN}✓${NC}"
-        native_ready=true
-        break
-      fi
-      echo -n "."
-      sleep 1
-    done
-    if ! $native_ready; then
-      echo -e " ${YELLOW}超时（可能仍在启动中，对话功能暂不可用，请查看日志）${NC}"
-    fi
-  fi
-
-  # 5. 启动 Gateway（setsid 创建独立进程组）
-  echo -e "${YELLOW}[5/6]${NC} 启动 Gateway (端口 ${GATEWAY_PORT})..."
-  cd "$ROOT_DIR/apps/gateway"
+  # 3. 启动 Gateway（setsid 创建独立进程组，引擎由 EngineAdapter 内部启动）
+  echo -e "${YELLOW}[3/4]${NC} 启动 Gateway (端口 ${GATEWAY_PORT})..."
+  cd "$ROOT_DIR/apps/server"
   setsid npx tsx src/index.ts > "$LOG_DIR/gateway.log" 2>&1 &
   local gw_pid=$!
   echo "$gw_pid" > "$PID_DIR/gateway.pid"
@@ -341,8 +236,8 @@ start_all() {
     echo -e " ${YELLOW}超时（可能仍在启动中，请查看日志）${NC}"
   fi
 
-  # 6. 启动 Admin Console（setsid 创建独立进程组）
-  echo -e "${YELLOW}[6/6]${NC} 启动 Admin Console (端口 ${ADMIN_PORT})..."
+  # 4. 启动 Admin Console（setsid 创建独立进程组）
+  echo -e "${YELLOW}[4/4]${NC} 启动 Admin Console (端口 ${ADMIN_PORT})..."
   cd "$ROOT_DIR/apps/admin-console"
   setsid npx vite --port "$ADMIN_PORT" > "$LOG_DIR/admin-console.log" 2>&1 &
   local admin_pid=$!
@@ -357,14 +252,12 @@ start_all() {
   echo -e "${GREEN}  🚀 启动完成！${NC}"
   echo -e "${GREEN}═══════════════════════════════════════════${NC}"
   echo ""
-  echo -e "  Native Gateway: ${CYAN}http://localhost:${NATIVE_GW_PORT}${NC}"
   echo -e "  Gateway:        ${CYAN}http://localhost:${GATEWAY_PORT}${NC}"
   echo -e "  Admin Console:  ${CYAN}http://localhost:${ADMIN_PORT}${NC}"
   echo -e "  Health:         ${CYAN}http://localhost:${GATEWAY_PORT}/health${NC}"
   echo ""
   echo -e "  日志目录：$LOG_DIR/"
-  echo -e "  查看日志：${YELLOW}tail -f $LOG_DIR/native-gateway.log${NC}"
-  echo -e "           ${YELLOW}tail -f $LOG_DIR/gateway.log${NC}"
+  echo -e "  查看日志：${YELLOW}tail -f $LOG_DIR/gateway.log${NC}"
   echo -e "           ${YELLOW}tail -f $LOG_DIR/admin-console.log${NC}"
   echo -e "  停止服务：${YELLOW}./start.sh stop${NC}"
   echo ""
@@ -389,7 +282,6 @@ case "${1:-start}" in
     ;;
   logs)
     case "${2:-all}" in
-      native)   tail -f "$LOG_DIR/native-gateway.log" ;;
       gateway)  tail -f "$LOG_DIR/gateway.log" ;;
       admin)    tail -f "$LOG_DIR/admin-console.log" ;;
       *)        tail -f "$LOG_DIR"/*.log ;;

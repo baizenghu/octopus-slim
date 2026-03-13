@@ -1,0 +1,346 @@
+{
+  "meta": {
+    "lastTouchedVersion": "2026.3.9",
+    "lastTouchedAt": "2026-03-11T04:46:06.240Z"
+  },
+  "wizard": {
+    "lastRunAt": "2026-03-09T13:10:32.809Z",
+    "lastRunVersion": "2026.3.9",
+    "lastRunCommand": "configure",
+    "lastRunMode": "local"
+  },
+  "auth": {
+    "profiles": {
+      "openai-codex:default": {
+        "provider": "openai-codex",
+        "mode": "oauth"
+      }
+    }
+  },
+  "models": {
+    "mode": "merge",
+    "providers": {
+      "custom-api-deepseek-com": {
+        "baseUrl": "https://api.deepseek.com/v1",
+        "apiKey": "YOUR_DEEPSEEK_API_KEY",
+        "api": "openai-completions",
+        "models": [
+          {
+            "id": "deepseek-chat",
+            "name": "deepseek-chat (Custom Provider)",
+            "reasoning": false,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 131072,
+            "maxTokens": 8192
+          },
+          {
+            "id": "deepseek-reasoner",
+            "name": "DeepSeek R1 (Thinking)",
+            "reasoning": true,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 131072,
+            "maxTokens": 8192
+          }
+        ]
+      }
+    }
+  },
+  "agents": {
+    "defaults": {
+      "model": {
+        "primary": "custom-api-deepseek-com/deepseek-chat",
+        "fallbacks": [
+          "custom-api-deepseek-com/deepseek-chat",
+          "custom-api-deepseek-com/deepseek-reasoner"
+        ]
+      },
+      "models": {
+        "custom-api-deepseek-com/deepseek-chat": {},
+        "custom-api-deepseek-com/deepseek-reasoner": {},
+        "custom-api-deepseek-com/deepseek-chat": {}
+      },
+      "workspace": "/home/baizh/octopus/.octopus-state/workspace",
+      "contextPruning": {
+        "mode": "cache-ttl",
+        "ttl": "1h"
+      },
+      "compaction": {
+        "mode": "safeguard",
+        "memoryFlush": {
+          "enabled": true
+        }
+      },
+      "maxConcurrent": 8,
+      "subagents": {
+        "maxConcurrent": 3,
+        "maxSpawnDepth": 2,
+        "maxChildrenPerAgent": 5,
+        "archiveAfterMinutes": 120,
+        "runTimeoutSeconds": 600
+      },
+      "sandbox": {
+        "mode": "all",
+        "workspaceAccess": "rw",
+        "scope": "agent",
+        "docker": {
+          "image": "octopus-sandbox:enterprise",
+          "binds": [
+            "/home/baizh/octopus/data/skills/skill-1772173187785-jp886z/scripts:/workspace/.opencode/skill/echarts-visualization/scripts:ro",
+            "/home/baizh/octopus/data/skills/skill-ppt-generator/scripts:/workspace/.opencode/skill/ppt-generator/scripts:ro"
+          ],
+          "dangerouslyAllowReservedContainerTargets": true,
+          "dangerouslyAllowExternalBindSources": true
+        }
+      }
+    },
+    "list": [
+      {
+        "id": "main",
+        "model": "custom-api-deepseek-com/deepseek-chat"
+      },
+      {
+        "id": "ent_user-baizh_default",
+        "name": "ent_user-baizh_default",
+        "workspace": "/home/baizh/octopus/data/users/user-baizh/workspace",
+        "agentDir": "/home/baizh/octopus/.octopus-state/agents/ent_user-baizh_default/agent",
+        "model": "custom-api-deepseek-com/deepseek-chat",
+        "subagents": {
+          "allowAgents": [
+            "ent_user-baizh_caiwu"
+          ]
+        }
+      },
+      {
+        "id": "ent_user-admin_default",
+        "name": "ent_user-admin_default",
+        "workspace": "/home/baizh/octopus/data/users/user-admin/agents/default",
+        "agentDir": "/home/baizh/octopus/.octopus-state/agents/ent_user-admin_default/agent",
+        "model": "custom-api-deepseek-com/deepseek-chat"
+      },
+      {
+        "id": "ent_user-think_default",
+        "name": "ent_user-think_default",
+        "workspace": "/home/baizh/octopus/data/users/user-think/workspace",
+        "agentDir": "/home/baizh/octopus/.octopus-state/agents/ent_user-think_default/agent",
+        "model": "custom-api-deepseek-com/deepseek-chat"
+      },
+      {
+        "id": "ent_user-baizh_caiwu",
+        "name": "ent_user-baizh_caiwu",
+        "workspace": "/home/baizh/octopus/data/users/user-baizh/agents/caiwu/workspace",
+        "agentDir": "/home/baizh/octopus/.octopus-state/agents/ent_user-baizh_caiwu/agent",
+        "model": "custom-api-deepseek-com/deepseek-chat",
+        "subagents": {
+          "allowAgents": []
+        }
+      },
+      {
+        "id": "ent_user-baizh_____",
+        "name": "ent_user-baizh_____",
+        "workspace": "/home/baizh/octopus/data/users/user-baizh/agents/超级助手",
+        "agentDir": "/home/baizh/octopus/.octopus-state/agents/ent_user-baizh_____/agent",
+        "model": "custom-api-deepseek-com/deepseek-chat"
+      },
+      {
+        "id": "ent_user-admin_____",
+        "name": "ent_user-admin_____",
+        "workspace": "/home/baizh/octopus/data/users/user-admin/agents/财务助手",
+        "agentDir": "/home/baizh/octopus/.octopus-state/agents/ent_user-admin_____/agent",
+        "model": "custom-api-deepseek-com/deepseek-chat"
+      }
+    ]
+  },
+  "tools": {
+    "web": {
+      "search": {
+        "enabled": false
+      },
+      "fetch": {
+        "enabled": false
+      }
+    },
+    "exec": {
+      "host": "sandbox",
+      "security": "full"
+    },
+    "fs": {
+      "workspaceOnly": true
+    },
+    "sandbox": {
+      "tools": {
+        "allow": [
+          "*"
+        ]
+      }
+    }
+  },
+  "commands": {
+    "native": "auto",
+    "nativeSkills": "auto",
+    "restart": true,
+    "ownerDisplay": "raw"
+  },
+  "session": {
+    "reset": {
+      "mode": "idle",
+      "idleMinutes": 60
+    }
+  },
+  "gateway": {
+    "port": 19791,
+    "mode": "local",
+    "bind": "loopback",
+    "controlUi": {
+      "allowedOrigins": [
+        "http://localhost:19791",
+        "http://127.0.0.1:19791",
+        "http://localhost:18790",
+        "http://localhost:3001"
+      ],
+      "allowInsecureAuth": false,
+      "dangerouslyDisableDeviceAuth": true
+    },
+    "auth": {
+      "mode": "token",
+      "token": "abca31c41f54d37dce78e0ec037716f4471391d1174376d6d9f1cedf2d53fcc0"
+    },
+    "tailscale": {
+      "mode": "off",
+      "resetOnExit": false
+    },
+    "http": {
+      "endpoints": {
+        "chatCompletions": {
+          "enabled": false
+        },
+        "responses": {
+          "enabled": false
+        }
+      }
+    }
+  },
+  "skills": {
+    "load": {
+      "extraDirs": [
+        "/home/baizh/octopus/data/skills"
+      ]
+    },
+    "entries": {
+      "coding-agent": {
+        "enabled": false
+      },
+      "healthcheck": {
+        "enabled": false
+      },
+      "openai-image-gen": {
+        "enabled": false
+      },
+      "openai-whisper-api": {
+        "enabled": false
+      },
+      "skill-creator": {
+        "enabled": false
+      },
+      "weather": {
+        "enabled": false
+      },
+      "prose": {
+        "enabled": false
+      },
+      "feishu-drive": {
+        "enabled": false
+      },
+      "feishu-perm": {
+        "enabled": false
+      },
+      "feishu-doc": {
+        "enabled": false
+      },
+      "feishu-wiki": {
+        "enabled": false
+      }
+    }
+  },
+  "plugins": {
+    "allow": [
+      "memory-lancedb-pro",
+      "enterprise-audit",
+      "enterprise-mcp"
+    ],
+    "load": {
+      "paths": [
+        "/home/baizh/octopus/.octopus-state/extensions",
+        "/home/baizh/octopus/plugins"
+      ]
+    },
+    "slots": {
+      "memory": "memory-lancedb-pro"
+    },
+    "entries": {
+      "memory-lancedb-pro": {
+        "enabled": true,
+        "config": {
+          "dbPath": "/home/baizh/octopus/.octopus-state/memory/lancedb-pro",
+          "embedding": {
+            "apiKey": "YOUR_JINA_API_KEY",
+            "model": "jina-embeddings-v5-text-small",
+            "baseURL": "https://api.jina.ai/v1",
+            "dimensions": 1024,
+            "taskQuery": "retrieval.query",
+            "taskPassage": "retrieval.passage",
+            "normalized": true
+          },
+          "retrieval": {
+            "mode": "hybrid",
+            "vectorWeight": 0.7,
+            "bm25Weight": 0.3,
+            "rerank": "none",
+            "hardMinScore": 0.3,
+            "candidatePoolSize": 20,
+            "recencyHalfLifeDays": 14,
+            "recencyWeight": 0.1,
+            "timeDecayHalfLifeDays": 60,
+            "filterNoise": true
+          },
+          "autoCapture": true,
+          "autoRecall": true,
+          "scopes": {
+            "default": "global",
+            "agentAccess": {}
+          }
+        }
+      },
+      "enterprise-audit": {
+        "enabled": true,
+        "config": {
+          "databaseUrl": "mysql://openclaw:YOUR_DB_PASSWORD_URLENCODED@localhost:3306/openclaw_enterprise",
+          "logDir": "/home/baizh/octopus/data/audit-logs",
+          "retentionDays": 30
+        }
+      },
+      "enterprise-mcp": {
+        "enabled": true,
+        "config": {
+          "databaseUrl": "mysql://openclaw:YOUR_DB_PASSWORD_URLENCODED@localhost:3306/openclaw_enterprise",
+          "dataRoot": "/home/baizh/octopus/data"
+        }
+      }
+    }
+  }
+}

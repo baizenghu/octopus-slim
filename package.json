@@ -16,9 +16,11 @@
     "clean": "turbo clean"
   },
   "devDependencies": {
+    "@prisma/client": "6",
+    "@types/node": "^22.0.0",
+    "prisma": "6",
     "turbo": "^2.0.0",
     "typescript": "^5.4.0",
-    "vitest": "^2.0.0",
-    "@types/node": "^22.0.0"
+    "vitest": "^2.0.0"
   }
 }
