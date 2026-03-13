@@ -1,0 +1,157 @@
+/**
+ * 审计日志 API 路由
+ *
+ * GET  /api/audit/logs      - 查询审计日志（需 ADMIN 权限）
+ * GET  /api/audit/export    - 导出审计日志（需 ADMIN 权限）
+ * POST /api/audit/archive   - 手动触发归档（需 ADMIN 权限）
+ * GET  /api/audit/stats     - 获取日志统计（需 ADMIN 权限）
+ */
+
+import { Router } from 'express';
+import type { AuthService } from '@octopus/auth';
+import type { AuditLogger } from '@octopus/audit';
+import { AuditAction } from '@octopus/audit';
+import type { AuditExportFormat, AuditQueryFilters } from '@octopus/audit';
+import { createAuthMiddleware, type AuthenticatedRequest } from '../middleware/auth';
+
+export function createAuditRouter(authService: AuthService, auditLogger: AuditLogger): Router {
+  const router = Router();
+  const authMiddleware = createAuthMiddleware(authService);
+
+  /**
+   * ADMIN 权限检查中间件
+   */
+  const adminOnly = (req: AuthenticatedRequest, res: any, next: any) => {
+    const user = req.user;
+    if (!user || !(user.roles as string[])?.some(r => r.toLowerCase() === 'admin')) {
+      res.status(403).json({ error: 'Admin access required' });
+      return;
+    }
+    next();
+  };
+
+  /**
+   * 查询审计日志
+   * GET /api/audit/logs?userId=&action=&startTime=&endTime=&success=&limit=&offset=
+   */
+  router.get('/logs', authMiddleware, adminOnly, async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const filters: AuditQueryFilters = {
+        userId: req.query.userId as string,
+        action: req.query.action as AuditAction,
+        startTime: req.query.startTime as string,
+        endTime: req.query.endTime as string,
+        success: req.query.success !== undefined ? req.query.success === 'true' : undefined,
+        resource: req.query.resource as string,
+        limit: req.query.limit ? parseInt(req.query.limit as string, 10) : 50,
+        offset: req.query.offset ? parseInt(req.query.offset as string, 10) : 0,
+        orderBy: (req.query.orderBy as 'asc' | 'desc') || 'desc',
+      };
+
+      const result = await auditLogger.query(filters);
+
+      // 序列化 BigInt 为字符串
+      const serialized = {
+        ...result,
+        data: result.data.map((r) => ({
+          ...r,
+          logId: r.logId.toString(),
+        })),
+      };
+
+      res.json(serialized);
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /**
+   * 导出审计日志
+   * GET /api/audit/export?format=csv|json&userId=&startTime=&endTime=
+   */
+  router.get('/export', authMiddleware, adminOnly, async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const format = (req.query.format as AuditExportFormat) || 'csv';
+      if (!['csv', 'json'].includes(format)) {
+        res.status(400).json({ error: 'format must be csv or json' });
+        return;
+      }
+
+      const filters: AuditQueryFilters = {
+        userId: req.query.userId as string,
+        action: req.query.action as AuditAction,
+        startTime: req.query.startTime as string,
+        endTime: req.query.endTime as string,
+        success: req.query.success !== undefined ? req.query.success === 'true' : undefined,
+      };
+
+      const filepath = await auditLogger.export(filters, format);
+
+      // 记录导出操作审计
+      auditLogger.log({
+        userId: req.user!.id,
+        username: req.user!.username,
+        action: AuditAction.AUDIT_EXPORT,
+        resource: `export:${format}`,
+        details: { filters },
+        ipAddress: req.ip || 'unknown',
+        success: true,
+      }).catch(() => {});
+
+      const contentType = format === 'csv' ? 'text/csv' : 'application/json';
+      const filename = filepath.split('/').pop() || `audit-export.${format}`;
+
+      res.setHeader('Content-Type', contentType);
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.sendFile(filepath);
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /**
+   * 手动触发日志归档
+   * POST /api/audit/archive { beforeDate?: string }
+   */
+  router.post('/archive', authMiddleware, adminOnly, async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const beforeDate = req.body.beforeDate ? new Date(req.body.beforeDate) : undefined;
+      const result = await auditLogger.archive(beforeDate);
+
+      // 记录归档操作审计
+      auditLogger.log({
+        userId: req.user!.id,
+        username: req.user!.username,
+        action: AuditAction.AUDIT_ARCHIVE,
+        resource: `archive:${result.archiveFile}`,
+        details: { archivedCount: result.archivedCount },
+        ipAddress: req.ip || 'unknown',
+        success: true,
+      }).catch(() => {});
+
+      res.json({
+        message: `Archived ${result.archivedCount} records`,
+        ...result,
+        beforeDate: result.beforeDate.toISOString(),
+      });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /**
+   * 获取审计日志统计
+   * GET /api/audit/stats?days=7
+   */
+  router.get('/stats', authMiddleware, adminOnly, async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const days = req.query.days ? parseInt(req.query.days as string, 10) : 7;
+      const stats = await auditLogger.getStats(days);
+      res.json(stats);
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  return router;
+}
