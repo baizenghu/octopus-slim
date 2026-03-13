@@ -1,0 +1,98 @@
+# .gitignore for octopus
+
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build output
+dist/
+*.tsbuildinfo
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test
+coverage/
+
+# Prisma
+prisma/migrations/
+
+# Docker volumes
+docker/data/
+
+# User data (dev) — 运行时数据不进 git
+/data/users/
+/data/audit-logs/
+/data/mcp-servers/
+/data/tmp/
+
+# Turbo
+.turbo/
+
+# Local dev runtime
+.dev-logs/
+.dev-pids/
+*.log
+
+# Temporary test/debug files
+fix_index.js
+run_test.js
+test_*.js
+test_*.ts
+src_index_backup.ts
+
+# Runtime artifacts
+*.tar.gz
+data/skills/test-enterprise-skill/
+data/skills/.venv/
+data/skills/*/scripts/__pycache__/
+
+# Plugin runtime cache
+plugins/*/tools-cache.json
+
+# ─── .octopus-state (Engine State) ────────────────
+# 运行时临时数据不进 git
+.octopus-state/logs/
+.octopus-state/completions/
+.octopus-state/subagents/
+.octopus-state/canvas/
+.octopus-state/devices/
+.octopus-state/update-check.json
+.octopus-state/octopus.json.bak*
+.octopus-state/.octopus/
+# extensions: 逐个排除，memory-lancedb-pro 源码跟踪
+.octopus-state/extensions/audit/
+.octopus-state/extensions/memory-lancedb-pro/.git/
+.octopus-state/extensions/memory-lancedb-pro/node_modules/
+# plugins 运行时产物
+.octopus-state/plugins/
+# 运行时会话/记忆/cron 数据（用户数据不进 git）
+.octopus-state/agents/
+.octopus-state/memory/
+.octopus-state/cron/
+.octopus-state/identity/
+.octopus-state/sandbox/
+.octopus-state/workspace/
+# 安全：排除含敏感 token 的配置文件
+.octopus-state/octopus.json
+
+__pycache__/
+*.pyc
+*.zip
+
+# ─── 本地开发 / 运行时 ────────────────
+.claude/
+.octopus-state/feishu/
+.octopus-state/mcp-refresh-signal
