@@ -15,7 +15,7 @@ import type { AuthService } from '@octopus/auth';
 import type { AuditLogger } from '@octopus/audit';
 import type { WorkspaceManager } from '@octopus/workspace';
 import { createAuthMiddleware, type AuthenticatedRequest } from '../middleware/auth';
-import { OctopusBridge } from '../services/OctopusBridge';
+import { EngineAdapter } from '../services/EngineAdapter';
 
 import type { AppPrismaClient } from '../types/prisma';
 
@@ -24,7 +24,7 @@ export function createAdminRouter(
   _auditLogger: AuditLogger,
   prisma: AppPrismaClient,
   workspaceManager?: WorkspaceManager,
-  bridge?: OctopusBridge,
+  bridge?: EngineAdapter,
 ): Router {
   const router = Router();
   const authMiddleware = createAuthMiddleware(authService, prisma);
@@ -263,7 +263,7 @@ export function createAdminRouter(
       const nativeAgentIds: string[] = [];
 
       for (const agent of userAgents) {
-        const nativeAgentId = OctopusBridge.userAgentId(id, agent.name);
+        const nativeAgentId = EngineAdapter.userAgentId(id, agent.name);
         nativeAgentIds.push(nativeAgentId);
         if (bridge?.isConnected) {
           bridge.agentsDelete(nativeAgentId).catch(() => { });
@@ -271,7 +271,7 @@ export function createAdminRouter(
         // memory scope 无需清理：默认行为不依赖 agentAccess 配置
       }
       // 默认 agent 不在 agents 表中，也需要清理原生 gateway
-      const defaultNativeId = OctopusBridge.userAgentId(id, 'default');
+      const defaultNativeId = EngineAdapter.userAgentId(id, 'default');
       nativeAgentIds.push(defaultNativeId);
       if (bridge?.isConnected) {
         bridge.agentsDelete(defaultNativeId).catch(() => { });

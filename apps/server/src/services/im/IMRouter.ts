@@ -9,7 +9,7 @@
  */
 
 import type { IMAdapter, IMIncomingMessage } from './IMAdapter';
-import { OctopusBridge } from '../OctopusBridge';
+import { EngineAdapter } from '../EngineAdapter';
 import type { AuthService } from '@octopus/auth';
 import type { AppPrismaClient } from '../../types/prisma';
 import { randomUUID } from 'crypto';
@@ -26,7 +26,7 @@ function stripThinkTags(text: string): string {
 export class IMRouter {
   constructor(
     private prisma: AppPrismaClient,
-    private bridge: OctopusBridge,
+    private bridge: EngineAdapter,
     private authService: AuthService,
     private ensureAgent: (userId: string, agentName: string) => Promise<void>,
   ) {}
@@ -202,9 +202,9 @@ export class IMRouter {
     msg: IMIncomingMessage,
   ): Promise<void> {
     const agentName = 'default';
-    const agentId = OctopusBridge.userAgentId(userId, agentName);
+    const agentId = EngineAdapter.userAgentId(userId, agentName);
     const sessionId = `im-${msg.channel}-${msg.imUserId}`;
-    const sessionKey = OctopusBridge.userSessionKey(userId, agentName, sessionId);
+    const sessionKey = EngineAdapter.userSessionKey(userId, agentName, sessionId);
 
     try {
       await this.ensureAgent(userId, agentName);

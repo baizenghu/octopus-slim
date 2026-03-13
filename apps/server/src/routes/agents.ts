@@ -15,7 +15,7 @@ import { randomUUID } from 'crypto';
 import type { AuthService } from '@octopus/auth';
 import type { WorkspaceManager } from '@octopus/workspace';
 import { createAuthMiddleware, type AuthenticatedRequest } from '../middleware/auth';
-import type { OctopusBridge } from '../services/OctopusBridge';
+import type { EngineAdapter } from '../services/EngineAdapter';
 import { getSoulTemplate, getMemoryTemplate } from '../services/SoulTemplate';
 
 import type { AppPrismaClient } from '../types/prisma';
@@ -32,7 +32,7 @@ export function createAgentsRouter(
   authService: AuthService,
   prisma: AppPrismaClient,
   workspaceManager?: WorkspaceManager,
-  bridge?: OctopusBridge,
+  bridge?: EngineAdapter,
   dataRoot?: string,
 ): Router {
   const router = Router();
@@ -51,7 +51,7 @@ export function createAgentsRouter(
    */
   async function syncAllowAgents(userId: string) {
     if (!bridge?.isConnected) return;
-    const { OctopusBridge: OCB } = await import('../services/OctopusBridge');
+    const { EngineAdapter: OCB } = await import('../services/EngineAdapter');
     try {
       // 查询该用户的所有 agent
       const agents = await prisma.agent.findMany({
@@ -119,7 +119,7 @@ export function createAgentsRouter(
    */
   async function syncToNative(userId: string, agentName: string, systemPrompt?: string | null, identity?: any, isUpdate = false) {
     if (!bridge?.isConnected || !workspaceManager) return;
-    const { OctopusBridge: OCB } = await import('../services/OctopusBridge');
+    const { EngineAdapter: OCB } = await import('../services/EngineAdapter');
     const nativeAgentId = OCB.userAgentId(userId, agentName);
 
     // 专业 agent 使用独立工作空间，default agent 使用用户主 workspace
@@ -178,7 +178,7 @@ export function createAgentsRouter(
    */
   async function syncToolsMd(userId: string, agentName: string, mcpFilter: string[], toolsFilter?: string[]) {
     if (!bridge?.isConnected) return;
-    const { OctopusBridge: OCB } = await import('../services/OctopusBridge');
+    const { EngineAdapter: OCB } = await import('../services/EngineAdapter');
     const nativeAgentId = OCB.userAgentId(userId, agentName);
 
     try {
@@ -465,7 +465,7 @@ export function createAgentsRouter(
 
       // 从原生 Gateway 删除（deleteFiles: true 清理 sessions 等 state 数据），清理 memory scope 配置 + 工作空间
       if (bridge?.isConnected) {
-        const { OctopusBridge: OCB } = await import('../services/OctopusBridge');
+        const { EngineAdapter: OCB } = await import('../services/EngineAdapter');
         const nativeAgentId = OCB.userAgentId(user.id, existing.name);
         await bridge.agentsDelete(nativeAgentId).catch(() => { });
         // 清理残留的 state 目录（原生 gateway deleteFiles 清内容但可能留空目录/sessions）
@@ -524,7 +524,7 @@ export function createAgentsRouter(
         return;
       }
 
-      const { OctopusBridge: OCB } = await import('../services/OctopusBridge');
+      const { EngineAdapter: OCB } = await import('../services/EngineAdapter');
       const nativeAgentId = OCB.userAgentId(user.id, existing.name);
 
       // 并行读取所有配置文件，单个文件失败时 content 返回空字符串
@@ -588,7 +588,7 @@ export function createAgentsRouter(
         return;
       }
 
-      const { OctopusBridge: OCB } = await import('../services/OctopusBridge');
+      const { EngineAdapter: OCB } = await import('../services/EngineAdapter');
       const nativeAgentId = OCB.userAgentId(user.id, existing.name);
       await bridge.agentFilesSet(nativeAgentId, fileName, content);
 

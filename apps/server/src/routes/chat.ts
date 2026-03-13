@@ -12,7 +12,7 @@
  * GET  /api/chat/export/:sessionId            - 导出会话（暂不支持）
  * DELETE /api/chat/history/:sessionId         - 清除会话
  *
- * 所有 AI 对话委托 Native Octopus Gateway（通过 OctopusBridge WebSocket RPC）
+ * 所有 AI 对话委托 Native Octopus Gateway（通过 EngineAdapter WebSocket RPC）
  */
 
 import { Router } from 'express';
@@ -24,7 +24,7 @@ import { createAuthMiddleware, type AuthenticatedRequest } from '../middleware/a
 import type { AuthService } from '@octopus/auth';
 import type { WorkspaceManager } from '@octopus/workspace';
 import type { AuditLogger } from '@octopus/audit';
-import { OctopusBridge } from '../services/OctopusBridge';
+import { EngineAdapter } from '../services/EngineAdapter';
 import { getSoulTemplate, getMemoryTemplate } from '../services/SoulTemplate';
 import type { QuotaManager } from '@octopus/quota';
 
@@ -50,7 +50,7 @@ export function createChatRouter(
   _config: GatewayConfig,
   authService: AuthService,
   workspaceManager: WorkspaceManager,
-  bridge: OctopusBridge | undefined,
+  bridge: EngineAdapter | undefined,
   prisma?: any,
   auditLogger?: AuditLogger,
   _reminderCache?: unknown,
@@ -189,7 +189,7 @@ export function createChatRouter(
   /** 确保 native gateway 中存在对应 agent，不存在时自动创建；同时配置 memory scope 隔离 */
   async function ensureNativeAgent(userId: string, agentName: string) {
     if (!bridge?.isConnected) return;
-    const nativeAgentId = OctopusBridge.userAgentId(userId, agentName);
+    const nativeAgentId = EngineAdapter.userAgentId(userId, agentName);
     // 专业 agent 使用独立 workspace，防止文件互相覆盖（IDENTITY.md/SOUL.md 等）
     const workspacePath = agentName === 'default'
       ? workspaceManager.getSubPath(userId, 'WORKSPACE')
@@ -550,7 +550,7 @@ export function createChatRouter(
     // 加载 Agent 配置
     const agent = await loadAgent(user.id, reqAgentId);
     const agentName = agent?.name || 'default';
-    const nativeAgentId = OctopusBridge.userAgentId(user.id, agentName);
+    const nativeAgentId = EngineAdapter.userAgentId(user.id, agentName);
     // 若前端传来的 sessionId 已经是完整 native session key（历史会话继续聊天），直接使用
     let sessionKey: string;
     let sid: string;
@@ -564,7 +564,7 @@ export function createChatRouter(
       sid = rawSessionId;
     } else {
       sid = rawSessionId || randomUUID().replace(/-/g, '').slice(0, 16);
-      sessionKey = OctopusBridge.userSessionKey(user.id, agentName, sid);
+      sessionKey = EngineAdapter.userSessionKey(user.id, agentName, sid);
     }
 
     // 确保 native gateway 有此 agent（首次对话时自动创建）
@@ -847,7 +847,7 @@ export function createChatRouter(
 
     const agent = await loadAgent(user.id, reqAgentId);
     const agentName = agent?.name || 'default';
-    const nativeAgentId = OctopusBridge.userAgentId(user.id, agentName);
+    const nativeAgentId = EngineAdapter.userAgentId(user.id, agentName);
     let sessionKey: string;
     let sid: string;
     if (rawSessionId && rawSessionId.startsWith('agent:')) {
@@ -859,7 +859,7 @@ export function createChatRouter(
       sid = rawSessionId;
     } else {
       sid = rawSessionId || randomUUID().replace(/-/g, '').slice(0, 16);
-      sessionKey = OctopusBridge.userSessionKey(user.id, agentName, sid);
+      sessionKey = EngineAdapter.userSessionKey(user.id, agentName, sid);
     }
     await ensureNativeAgent(user.id, agentName);
     const extraPrompt = await buildEnterpriseSystemPrompt(user, agent);
@@ -957,7 +957,7 @@ export function createChatRouter(
           ? await prisma.agent.findFirst({ where: { id: reqAgentId, ownerId: user.id } })
           : await prisma.agent.findFirst({ where: { ownerId: user.id, isDefault: true } });
         const agentName = agent?.name || 'default';
-        nativeAgentId = OctopusBridge.userAgentId(user.id, agentName);
+        nativeAgentId = EngineAdapter.userAgentId(user.id, agentName);
         agentPrefix = `agent:${nativeAgentId}:session:`;
       } else {
         // 无 DB 时退回到用户级别过滤
@@ -1024,7 +1024,7 @@ export function createChatRouter(
       const reqAgentId = req.query.agentId as string | undefined;
       const agent = await loadAgent(user.id, reqAgentId);
       const agentName = agent?.name || 'default';
-      sessionId = OctopusBridge.userSessionKey(user.id, agentName, sessionId);
+      sessionId = EngineAdapter.userSessionKey(user.id, agentName, sessionId);
     }
     // 用户归属校验：确保 session 属于当前用户
     if (!validateSessionOwnership(sessionId, user.id)) {
@@ -1123,7 +1123,7 @@ export function createChatRouter(
       const reqAgentId = req.query.agentId as string | undefined;
       const agent = await loadAgent(user.id, reqAgentId);
       const agentName = agent?.name || 'default';
-      sessionId = OctopusBridge.userSessionKey(user.id, agentName, sessionId);
+      sessionId = EngineAdapter.userSessionKey(user.id, agentName, sessionId);
     }
     // 用户归属校验：确保 session 属于当前用户
     if (!validateSessionOwnership(sessionId, user.id)) {
@@ -1259,7 +1259,7 @@ export function createChatRouter(
       const { agentId: reqAgentId } = req.body || {};
       const agent = await loadAgent(user.id, reqAgentId);
       const agentName = agent?.name || 'default';
-      sessionId = OctopusBridge.userSessionKey(user.id, agentName, sessionId);
+      sessionId = EngineAdapter.userSessionKey(user.id, agentName, sessionId);
     }
 
     // 权限校验：session key 必须包含当前用户 ID
@@ -1327,7 +1327,7 @@ export function createChatRouter(
     }
     try {
       const agentName = (req.query.agentName as string) || 'default';
-      const nativeAgentId = OctopusBridge.userAgentId(user.id, agentName);
+      const nativeAgentId = EngineAdapter.userAgentId(user.id, agentName);
       const catalog = await bridge.toolsCatalog(nativeAgentId);
       res.json(catalog);
     } catch (err) {

@@ -8,7 +8,7 @@
  * 保留此文件仅供参考，未来可安全删除。
  */
 
-import type { OctopusBridge } from './OctopusBridge';
+import type { EngineAdapter } from './EngineAdapter';
 import type { IMService } from './im/IMService';
 
 /** agent 事件 payload 类型（从 _raw_event 解构） */
@@ -42,7 +42,7 @@ export class HeartbeatForwarder {
   private activeRuns = new Map<string, { agentId: string; content: string }>();
 
   constructor(
-    private bridge: OctopusBridge,
+    private bridge: EngineAdapter,
     private imService: IMService,
     private prisma: any,
   ) {}

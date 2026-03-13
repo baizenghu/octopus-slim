@@ -40,7 +40,7 @@ import { createImInternalRouter } from './routes/im-internal';
 import { MCPRegistry, MCPExecutor } from '@octopus/mcp';
 import { QuotaManager } from '@octopus/quota';
 import { createQuotaMiddleware } from './middleware/quota';
-import { OctopusBridge } from './services/OctopusBridge';
+import { EngineAdapter } from './services/EngineAdapter';
 import { ensureAgentTemplates } from './services/SoulTemplate';
 import { IMService } from './services/im';
 import { HeartbeatForwarder } from './services/HeartbeatForwarder';
@@ -160,23 +160,20 @@ async function main() {
   }).catch(() => {});
 
   // 初始化 Native Gateway Bridge
-  let bridge: OctopusBridge | undefined;
+  let bridge: EngineAdapter | undefined;
   let imService: IMService | undefined;
   if (config.nativeGateway.token) {
-    bridge = new OctopusBridge({
-      url: config.nativeGateway.url,
-      token: config.nativeGateway.token,
-    });
+    bridge = new EngineAdapter();
     try {
-      await bridge.connect();
-      console.log('   Native Gateway: connected');
+      await bridge.initialize();
+      console.log('   Engine: initialized (single-process)');
 
       // 启动时将数据库中所有已启用的 Agent 同步到原生 Gateway
       if (prismaClient) {
         try {
           const agents = await prismaClient.agent.findMany({ where: { enabled: true } });
           for (const agent of agents) {
-            const nativeId = OctopusBridge.userAgentId(agent.ownerId, agent.name);
+            const nativeId = EngineAdapter.userAgentId(agent.ownerId, agent.name);
             const workspacePath = path.join(
               config.workspace.dataRoot,
               'users', agent.ownerId, 'agents', agent.name,
@@ -210,7 +207,7 @@ async function main() {
           bridge: imBridge,
           authService,
           ensureAgent: async (userId: string, agentName: string) => {
-            const nativeAgentId = OctopusBridge.userAgentId(userId, agentName);
+            const nativeAgentId = EngineAdapter.userAgentId(userId, agentName);
             const workspacePath = agentName === 'default'
               ? path.join(config.workspace.dataRoot, 'users', userId, 'workspace')
               : path.join(config.workspace.dataRoot, 'users', userId, 'agents', agentName, 'workspace');
@@ -302,7 +299,7 @@ async function main() {
     const redisStatus = quotaManager.getRedisStatus();
 
     // Native Gateway 状态
-    const nativeGatewayStatus = bridge?.isConnected ? 'connected' : 'disconnected';
+    const nativeGatewayStatus = bridge?.isConnected ? 'running' : 'stopped';
 
     // Plugin 状态：通过检查 native gateway 日志获取太重，用简单的内存标记
     // 当前通过 bridge 是否连接来推断 plugin 是否已加载（plugin 由 native gateway 加载）
@@ -313,7 +310,7 @@ async function main() {
     };
 
     // 整体状态：任一核心服务异常则 degraded
-    const overallStatus = (nativeGatewayStatus === 'disconnected' || dbStatus === 'error')
+    const overallStatus = (nativeGatewayStatus === 'stopped' || dbStatus === 'error')
       ? 'degraded' : 'ok';
 
     res.json({
@@ -393,7 +390,7 @@ async function main() {
   const shutdown = async () => {
     console.log('Shutting down gracefully...');
     server.close();
-    bridge?.disconnect();
+    bridge?.shutdown();
     await prismaClient?.$disconnect();
     process.exit(0);
   };

@@ -14,8 +14,8 @@ import { randomUUID } from 'crypto';
 import { Router } from 'express';
 import type { AuthService } from '@octopus/auth';
 import { createAuthMiddleware, type AuthenticatedRequest } from '../middleware/auth';
-import { OctopusBridge } from '../services/OctopusBridge';
-import type { OctopusBridge as BridgeType } from '../services/OctopusBridge';
+import { EngineAdapter } from '../services/EngineAdapter';
+import type { EngineAdapter as BridgeType } from '../services/EngineAdapter';
 
 // ---- 心跳模型配置 ----
 
@@ -191,7 +191,7 @@ export function createSchedulerRouter(
           res.status(404).json({ error: 'Agent not found' });
           return;
         }
-        const nativeAgentId = OctopusBridge.userAgentId(user.id, agent.name);
+        const nativeAgentId = EngineAdapter.userAgentId(user.id, agent.name);
 
         // 写入 DB
         const taskId = randomUUID().replace(/-/g, '').slice(0, 16);
@@ -233,7 +233,7 @@ export function createSchedulerRouter(
 
       // ---- 普通定时任务 ----
       if (bridge?.isConnected) {
-        const nativeAgentId = OctopusBridge.userAgentId(user.id, 'default');
+        const nativeAgentId = EngineAdapter.userAgentId(user.id, 'default');
         const message = taskConfig?.message || `执行定时任务: ${name}`;
         const schedule = cronExpr
           ? { kind: 'cron' as const, expr: cronExpr }
@@ -299,8 +299,8 @@ export function createSchedulerRouter(
           res.status(404).json({ error: 'Agent not found' });
           return;
         }
-        const oldNativeAgentId = OctopusBridge.userAgentId(user.id, oldAgent.name);
-        const nextNativeAgentId = OctopusBridge.userAgentId(user.id, nextAgent.name);
+        const oldNativeAgentId = EngineAdapter.userAgentId(user.id, oldAgent.name);
+        const nextNativeAgentId = EngineAdapter.userAgentId(user.id, nextAgent.name);
 
         if (nextDbAgentId !== oldDbAgentId) {
           const existing = await prisma.scheduledTask.findFirst({
@@ -407,7 +407,7 @@ export function createSchedulerRouter(
         // native cron 不支持直接 patch，先删后建
         await bridge.cronRemove(id).catch(() => {});
         const { name, cron: cronExpr, taskConfig } = req.body;
-        const nativeAgentId = OctopusBridge.userAgentId(user.id, 'default');
+        const nativeAgentId = EngineAdapter.userAgentId(user.id, 'default');
         const job = await bridge.cronAdd({
           name: name?.trim() || id,
           agentId: nativeAgentId,
@@ -457,7 +457,7 @@ export function createSchedulerRouter(
         // 查 agent 获取 nativeAgentId
         const agent = await prisma.agent.findFirst({ where: { id: dbAgentId, ownerId: user.id } });
         if (agent) {
-          const nativeAgentId = OctopusBridge.userAgentId(user.id, agent.name);
+          const nativeAgentId = EngineAdapter.userAgentId(user.id, agent.name);
 
           // 通过 RPC 清空原生 agent 目录中的 HEARTBEAT.md
           try {
@@ -524,9 +524,9 @@ export function createSchedulerRouter(
           res.status(404).json({ error: 'Agent not found' });
           return;
         }
-        const nativeAgentId = OctopusBridge.userAgentId(user.id, agent.name);
+        const nativeAgentId = EngineAdapter.userAgentId(user.id, agent.name);
         const heartbeatSessionId = `heartbeat-${randomUUID().replace(/-/g, '').slice(0, 16)}`;
-        const sessionKey = OctopusBridge.userSessionKey(user.id, agent.name, heartbeatSessionId);
+        const sessionKey = EngineAdapter.userSessionKey(user.id, agent.name, heartbeatSessionId);
         const content = taskCfg?.content || '';
         const prompt = buildHeartbeatRunPrompt(content);
         let cleanupTriggered = false;

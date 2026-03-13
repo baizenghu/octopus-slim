@@ -8,7 +8,7 @@
 import type { IMAdapter } from './IMAdapter';
 import { IMRouter } from './IMRouter';
 import { FeishuAdapter } from './FeishuAdapter';
-import type { OctopusBridge } from '../OctopusBridge';
+import type { EngineAdapter } from '../EngineAdapter';
 import type { AuthService } from '@octopus/auth';
 import type { AppPrismaClient } from '../../types/prisma';
 
@@ -19,7 +19,7 @@ export class IMService {
 
   constructor(params: {
     prisma: AppPrismaClient;
-    bridge: OctopusBridge;
+    bridge: EngineAdapter;
     authService: AuthService;
     ensureAgent: (userId: string, agentName: string) => Promise<void>;
   }) {
