@@ -1,0 +1,87 @@
+# Octopus Enterprise - systemd service unit
+#
+# 安装步骤:
+#   1. 根据实际环境修改下方参数（User / WorkingDirectory / EnvironmentFile）
+#   2. sudo cp deploy/octopus-enterprise.service /etc/systemd/system/
+#   3. sudo systemctl daemon-reload
+#   4. sudo systemctl enable --now octopus-enterprise
+#
+# 管理:
+#   sudo systemctl status octopus-enterprise
+#   sudo systemctl restart octopus-enterprise
+#   journalctl -u octopus-enterprise -f
+#
+# 也可以用 PM2 替代 systemd 管理:
+#   pm2 start ecosystem.config.js
+#   pm2 startup          # 生成 systemd 自启动脚本
+#   pm2 save
+#
+
+[Unit]
+Description=Octopus Enterprise Platform
+Documentation=https://github.com/octopus-enterprise
+After=network.target mysql.service redis.service docker.service
+Wants=mysql.service redis.service docker.service
+
+[Service]
+# ─── 基本参数（部署时按需修改） ──────────────────────────
+Type=forking
+User=%i
+Group=%i
+
+# 项目根目录（修改为实际部署路径）
+WorkingDirectory=/opt/octopus-enterprise
+
+# 环境变量文件
+EnvironmentFile=/opt/octopus-enterprise/.env
+
+# ─── 环境变量（与 start-dev.sh 保持一致） ─────────────────
+Environment=OCTOPUS_STATE_DIR=/opt/octopus-enterprise/.octopus-state
+Environment=OCTOPUS_HOME=/opt/octopus-enterprise/.octopus-state
+Environment=NODE_ENV=production
+
+# ─── 启动 / 停止命令 ──────────────────────────────────────
+# 方式 1: 使用 start-dev.sh（推荐，含 supervisor 循环）
+ExecStart=/opt/octopus-enterprise/start-dev.sh start
+ExecStop=/opt/octopus-enterprise/start-dev.sh stop
+ExecReload=/opt/octopus-enterprise/start-dev.sh restart
+
+# 方式 2: 使用 PM2（取消注释替换上方命令）
+# ExecStart=/usr/bin/pm2 start /opt/octopus-enterprise/ecosystem.config.js
+# ExecStop=/usr/bin/pm2 stop all
+# ExecReload=/usr/bin/pm2 restart all
+
+# ─── 进程管理 ─────────────────────────────────────────────
+# start-dev.sh 使用 setsid 创建后台进程组
+RemainAfterExit=yes
+
+# 自动重启策略
+Restart=on-failure
+RestartSec=10
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+# ─── 资源限制 ─────────────────────────────────────────────
+# 允许足够的文件描述符（WebSocket + DB 连接）
+LimitNOFILE=65536
+# 允许足够的进程数（native gateway + gateway + admin console + 子进程）
+LimitNPROC=4096
+
+# ─── 日志 ─────────────────────────────────────────────────
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=octopus-enterprise
+
+# ─── 安全加固 ─────────────────────────────────────────────
+# Docker sandbox 需要访问 docker socket，因此不能过度限制
+ProtectSystem=false
+PrivateTmp=true
+NoNewPrivileges=false
+
+# ─── 超时 ─────────────────────────────────────────────────
+# Native gateway 启动可能较慢（30s+）
+TimeoutStartSec=120
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target
