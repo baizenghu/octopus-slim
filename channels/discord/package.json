@@ -1,0 +1,11 @@
+{
+  "name": "@octopus/discord",
+  "version": "2026.3.9",
+  "description": "Octopus Discord channel plugin",
+  "type": "module",
+  "octopus": {
+    "extensions": [
+      "./index.ts"
+    ]
+  }
+}
