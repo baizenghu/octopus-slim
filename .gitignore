@@ -96,3 +96,4 @@ __pycache__/
 .claude/
 .octopus-state/feishu/
 .octopus-state/mcp-refresh-signal
+.octopus-state/extensions/

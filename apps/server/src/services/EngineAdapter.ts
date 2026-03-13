@@ -151,7 +151,15 @@ export class EngineAdapter extends EventEmitter {
         client,
         isWebchatConnect: () => false,
         respond: (ok: boolean, payload?: unknown, error?: { message?: string }) => {
-          if (responded) return;
+          if (responded) {
+            // agent handler 的第二次 respond（异步执行完成/失败后）。
+            if (!ok && method === 'agent') {
+              const runId = (payload as any)?.runId || (params as any)?.idempotencyKey;
+              console.error(`[engine] agent run ${runId} async error:`, error?.message);
+              this.emit('_agent_async_error', { runId, error: error?.message ?? 'unknown error' });
+            }
+            return;
+          }
           responded = true;
           if (ok) {
             resolve(payload as T);
@@ -177,16 +185,22 @@ export class EngineAdapter extends EventEmitter {
   ): Promise<{ runId: string }> {
     const idempotencyKey = params.idempotencyKey || randomUUID();
     this.trackedRunIds.add(idempotencyKey);
-
     // 不透明导入事件监听
-    const { onAgentEvent } = await opaqueImport(`${ENGINE_ROOT}infra/agent-events.js`);
+    const { onAgentEvent, emitAgentEvent } = await opaqueImport(`${ENGINE_ROOT}infra/agent-events.js`);
 
     // 订阅该次运行的事件
     let serverRunId: string | null = null;
+    let cleaned = false;
+    const cleanup = () => {
+      if (cleaned) return;
+      cleaned = true;
+      unsubscribe();
+      this.off('_agent_async_error', asyncErrorHandler);
+    };
+
     const unsubscribe = onAgentEvent((evt: any) => {
       // 只处理本次运行的事件
       if (!this.trackedRunIds.has(evt.runId)) return;
-
       const mapped = this.mapEngineEvent(evt);
       if (mapped) {
         onEvent(mapped);
@@ -195,9 +209,27 @@ export class EngineAdapter extends EventEmitter {
       // 运行结束时清理
       if (evt.stream === 'lifecycle' && (evt.data.phase === 'end' || evt.data.phase === 'error')) {
         this.trackedRunIds.delete(evt.runId);
-        unsubscribe();
+        cleanup();
       }
     });
+
+    // 监听异步执行失败（dispatchAgentRunFromGateway 的 .catch 触发）。
+    // 引擎的 agent handler 先 respond(accepted) 再异步执行 agentCommandFromIngress。
+    // 如果异步执行在 emitAgentEvent(lifecycle:start) 之前就失败（如 agent 不存在、
+    // 配置解析错误等），不会发出任何 agent event，listener 永远等不到结束信号。
+    // 此处捕获第二次 respond(error) 并合成 lifecycle error 事件来通知 listener。
+    const asyncErrorHandler = (data: { runId: string; error: string }) => {
+      const effectiveRunId = serverRunId || idempotencyKey;
+      if (data.runId !== effectiveRunId) return;
+      console.error('[engine] agent async failure, synthesizing error event:', data.error);
+      // 合成 lifecycle error 事件，让 listener 能收到结束信号
+      emitAgentEvent({
+        runId: effectiveRunId,
+        stream: 'lifecycle',
+        data: { phase: 'error', error: data.error, endedAt: Date.now(), synthetic: true },
+      });
+    };
+    this.on('_agent_async_error', asyncErrorHandler);
 
     try {
       const result = await this.call<{ runId?: string; accepted?: boolean }>('agent', {
@@ -211,7 +243,7 @@ export class EngineAdapter extends EventEmitter {
       return { runId: serverRunId };
     } catch (err) {
       this.trackedRunIds.delete(idempotencyKey);
-      unsubscribe();
+      cleanup();
       throw err;
     }
   }

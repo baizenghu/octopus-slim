@@ -55,7 +55,7 @@ import * as path from 'path';
  */
 export function loadConfig(): GatewayConfig {
   // 默认数据目录：项目根目录下的 data/
-  const defaultDataRoot = path.resolve(__dirname, '..', '..', '..', '..', 'data');
+  const defaultDataRoot = path.resolve(__dirname, '..', '..', '..', 'data');
 
   return {
     port: parseInt(process.env.GATEWAY_PORT || '18790', 10),

@@ -238,7 +238,7 @@ start_all() {
 
   # 4. 启动 Admin Console（setsid 创建独立进程组）
   echo -e "${YELLOW}[4/4]${NC} 启动 Admin Console (端口 ${ADMIN_PORT})..."
-  cd "$ROOT_DIR/apps/admin-console"
+  cd "$ROOT_DIR/apps/console"
   setsid npx vite --port "$ADMIN_PORT" > "$LOG_DIR/admin-console.log" 2>&1 &
   local admin_pid=$!
   echo "$admin_pid" > "$PID_DIR/admin-console.pid"

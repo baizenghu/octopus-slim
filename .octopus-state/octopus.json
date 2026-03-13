@@ -1,6 +1,6 @@
 {
   "meta": {
-    "lastTouchedVersion": "2026.3.9",
+    "lastTouchedVersion": "1.0.0",
     "lastTouchedAt": "2026-03-11T04:46:06.240Z"
   },
   "wizard": {
@@ -95,7 +95,7 @@
         "runTimeoutSeconds": 600
       },
       "sandbox": {
-        "mode": "all",
+        "mode": "off",
         "workspaceAccess": "rw",
         "scope": "agent",
         "docker": {
@@ -176,7 +176,7 @@
       }
     },
     "exec": {
-      "host": "sandbox",
+      "host": "gateway",
       "security": "full"
     },
     "fs": {

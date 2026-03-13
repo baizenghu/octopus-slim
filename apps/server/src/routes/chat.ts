@@ -186,10 +186,27 @@ export function createChatRouter(
   const dataRoot = _config.workspace.dataRoot;
 
 
+  /** 已确认存在的 native agent 缓存，避免每次 chat 都调 RPC */
+  const knownNativeAgents = new Set<string>();
+
   /** 确保 native gateway 中存在对应 agent，不存在时自动创建；同时配置 memory scope 隔离 */
   async function ensureNativeAgent(userId: string, agentName: string) {
     if (!bridge?.isConnected) return;
     const nativeAgentId = EngineAdapter.userAgentId(userId, agentName);
+
+    // 内存缓存命中，跳过 RPC
+    if (knownNativeAgents.has(nativeAgentId)) return;
+
+    // 先检查引擎中是否已有该 agent
+    try {
+      const result = await bridge.agentsList() as any;
+      const agents: any[] = result?.agents || [];
+      for (const a of agents) knownNativeAgents.add(a.id);
+      if (knownNativeAgents.has(nativeAgentId)) return;
+    } catch {
+      // agents.list 失败时 fallback 到 create
+    }
+
     // 专业 agent 使用独立 workspace，防止文件互相覆盖（IDENTITY.md/SOUL.md 等）
     const workspacePath = agentName === 'default'
       ? workspaceManager.getSubPath(userId, 'WORKSPACE')
@@ -200,6 +217,7 @@ export function createChatRouter(
       isNewAgent = true;
     } catch {
       // 忽略"已存在"等错误
+      knownNativeAgents.add(nativeAgentId);
     }
     // 首次创建时等待 config reload 完成，再写入默认文件
     if (isNewAgent) {
