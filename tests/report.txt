@@ -1,0 +1,85 @@
+Octopus Enterprise 自动化测试报告
+运行时间: 2026-03-08 18:22:42
+模块: all
+────────────────────────────────────
+Login: OK (userId=user-admin)
+
+=== Health 健康检查 ===
+  [H-01] 健康检查端点 ... PASS
+
+=== Auth 认证模块 ===
+  [A-01] 正常登录 ... PASS
+  [A-02] 错误密码 → 401 ... PASS
+  [A-03] 空用户名 → 400 ... PASS
+  [A-04] Token 刷新 ... PASS
+  [A-05] 获取当前用户 /me ... PASS
+  [A-06] 无 Token 访问 /me → 401 ... PASS
+
+=== Chat 对话模块 ===
+  [C-01] 获取模型列表 ... PASS
+  [C-02] 发送消息（非流式） ... PASS
+  [C-03] 获取会话列表 ... PASS
+  [C-04] 获取历史记录 ... PASS
+
+=== Agents 管理模块 ===
+  [AG-01] 列出 agents ... PASS
+  [AG-02] 创建 agent ... PASS
+  [AG-03] 更新 agent ... PASS
+  [AG-04] 获取 agent 配置文件 ... PASS
+  [AG-05] 删除 default agent → 400 ... PASS
+  [AG-06] 删除测试 agent ... PASS
+
+=== Admin 管理模块 ===
+  [AD-01] 用户列表 ... PASS
+  [AD-02] 创建测试用户 ... PASS
+  [AD-03] 更新测试用户 ... PASS
+  [AD-04] 仪表盘统计 ... PASS
+  [AD-05] 删除测试用户 ... PASS
+
+=== Audit 审计日志模块 ===
+  [AU-01] 查询审计日志 ... PASS
+  [AU-02] 导出 CSV ... PASS
+  [AU-03] 审计统计 ... PASS
+
+=== Files 文件管理模块 ===
+  [F-01] 上传文件 ... PASS
+  [F-02] 列出文件 ... PASS
+  [F-03] 下载文件 ... PASS
+  [F-04] 路径穿越防护 → 非200 ... PASS
+  [F-05] 删除文件 ... PASS
+
+=== Skills 技能模块 ===
+  [SK-01] 列出企业技能 ... PASS
+  [SK-02] 列出个人技能 ... PASS
+
+=== MCP 模块 ===
+  [M-01] 列出企业 MCP ... PASS
+  [M-02] 列出个人 MCP ... PASS
+
+=== Scheduler 定时任务模块 ===
+  [SC-01] 列出定时任务 ... PASS
+  [SC-02] 创建定时任务 ... PASS
+  [SC-03] 删除定时任务 ... PASS
+
+=== Quotas 配额模块 ===
+  [Q-01] 获取用户配额 ... PASS
+
+=== Env 环境变量模块 ===
+  [E-01] 获取用户环境变量 ... PASS
+  [E-02] 写入用户环境变量 ... PASS
+
+=== DB-Conn 数据库连接模块 ===
+  [DC-01] 列出数据库连接 ... PASS
+  [DC-02] 创建数据库连接 ... PASS
+  [DC-03] 删除数据库连接 ... SKIP (无测试连接)
+
+=== Security 安全测试 ===
+  [S-01] JWT 伪造 → 401 ... PASS
+  [S-02] 无 Token 访问 /agents → 401 ... PASS
+  [S-03] 无 Token 访问 /admin → 401 ... PASS
+  [S-04] 路径穿越 files → 非200 ... PASS
+  [S-05] 路径穿越 encoded → 非200 ... PASS
+
+────────────────────────────────────
+总计: 48 | 通过: 47 | 失败: 0 | 跳过: 1
+结果: ALL TESTS PASSED
