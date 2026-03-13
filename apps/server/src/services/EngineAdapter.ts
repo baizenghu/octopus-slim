@@ -4,13 +4,19 @@
  * 单进程架构下，通过进程内函数调用替代 WebSocket RPC。
  * 保持与 OctopusBridge 完全相同的 public 方法签名，
  * 路由文件只需替换类名即可完成迁移。
- *
- * TODO: initialize() 中实现引擎初始化，call() 中对接 handleGatewayRequest
  */
 
 import { randomUUID } from 'crypto';
 import { EventEmitter } from 'events';
 import { ConfigBatcher } from '../utils/config-batcher';
+
+// 全局 Symbol，与引擎 server-plugins.ts 中一致
+const FALLBACK_GATEWAY_CONTEXT_KEY = Symbol.for("octopus.fallbackGatewayContextState");
+
+// 不透明动态导入 — 阻止 TypeScript 追踪引擎源码（避免 TS6059 rootDir 错误）
+// eslint-disable-next-line @typescript-eslint/no-implied-eval, no-new-func
+const opaqueImport = new Function('s', 'return import(s)') as (specifier: string) => Promise<any>;
+const ENGINE_ROOT = new URL('../../../../packages/engine/src/', import.meta.url).href;
 
 // ---- Agent RPC 参数（与 OctopusBridge 一致）----
 
@@ -43,6 +49,8 @@ export interface AgentStreamEvent {
 export class EngineAdapter extends EventEmitter {
   private initialized = false;
   private configBatcher: ConfigBatcher;
+  private engineServer: { close: (opts?: Record<string, unknown>) => Promise<void> } | null = null;
+  private unsubAgentEvents: (() => void) | null = null;
 
   /** 由 callAgent 发起的 runId 集合，用于区分心跳等非 callAgent 触发的事件 */
   readonly trackedRunIds = new Set<string>();
@@ -57,14 +65,35 @@ export class EngineAdapter extends EventEmitter {
 
   // ---- 生命周期 ----
 
-  async initialize(): Promise<void> {
-    // TODO: 引擎初始化 — 加载配置、启动 agent manager、cron scheduler、plugin system
-    // 待 @octopus/engine 编译通过后实现
+  async initialize(port = 19791): Promise<void> {
+    // 动态导入引擎的 gateway 启动函数（不透明导入避免 TS 追踪）
+    const { startGatewayServer } = await opaqueImport(`${ENGINE_ROOT}gateway/server.js`);
+
+    // 启动引擎 gateway（它会自动 setFallbackGatewayContext）
+    this.engineServer = await startGatewayServer(port, {
+      bind: 'loopback',
+      controlUiEnabled: false,
+    });
+
+    // 订阅全局 agent 事件，转发给 EventEmitter
+    const { onAgentEvent } = await opaqueImport(`${ENGINE_ROOT}infra/agent-events.js`);
+    this.unsubAgentEvents = onAgentEvent((evt: any) => {
+      this.emit('_raw_event', evt);
+    });
+
     this.initialized = true;
-    console.log('[engine] EngineAdapter initialized (single-process mode)');
+    console.log(`[engine] EngineAdapter initialized (single-process, port=${port})`);
   }
 
   async shutdown(): Promise<void> {
+    if (this.unsubAgentEvents) {
+      this.unsubAgentEvents();
+      this.unsubAgentEvents = null;
+    }
+    if (this.engineServer) {
+      await this.engineServer.close({ reason: 'shutdown' });
+      this.engineServer = null;
+    }
     this.configBatcher.destroy();
     this.initialized = false;
     console.log('[engine] EngineAdapter shut down');
@@ -76,49 +105,151 @@ export class EngineAdapter extends EventEmitter {
 
   // ---- 通用 RPC 调用 ----
 
-  /**
-   * 进程内 RPC 调用。
-   * TODO: 对接 handleGatewayRequest — 将 method+params 路由到对应的引擎 handler
-   */
-  async call<T = unknown>(method: string, _params?: unknown): Promise<T> {
+  async call<T = unknown>(method: string, params?: unknown): Promise<T> {
     if (!this.initialized) {
       throw new Error('[engine] EngineAdapter not initialized');
     }
-    // TODO: 实现进程内 handler 调用
-    // const handler = coreGatewayHandlers[method];
-    // return handler({ params, respond, context, ... });
-    throw new Error(`[engine] call('${method}') not yet implemented — pending engine integration`);
+
+    // 通过全局 Symbol 访问引擎设置的 fallback context
+    const state = (globalThis as any)[FALLBACK_GATEWAY_CONTEXT_KEY];
+    const context = state?.context;
+    if (!context) {
+      throw new Error('[engine] No gateway context available — engine not started?');
+    }
+
+    // 不透明导入引擎模块
+    const { handleGatewayRequest } = await opaqueImport(`${ENGINE_ROOT}gateway/server-methods.js`);
+    const { PROTOCOL_VERSION } = await opaqueImport(`${ENGINE_ROOT}gateway/protocol/index.js`);
+
+    // 构造合成 operator 客户端（与引擎 server-plugins.ts 中 createSyntheticOperatorClient 一致）
+    const client = {
+      connect: {
+        minProtocol: PROTOCOL_VERSION,
+        maxProtocol: PROTOCOL_VERSION,
+        client: {
+          id: 'gateway-client' as const,
+          version: 'internal',
+          platform: 'node',
+          mode: 'backend' as const,
+        },
+        role: 'operator',
+        scopes: ['operator.admin', 'operator.approvals', 'operator.pairing'],
+      },
+    };
+
+    // Promise 包装 respond 回调
+    return new Promise<T>((resolve, reject) => {
+      let responded = false;
+
+      void handleGatewayRequest({
+        req: {
+          type: 'req' as const,
+          id: `engine-adapter-${randomUUID()}`,
+          method,
+          params: params ?? {},
+        },
+        client,
+        isWebchatConnect: () => false,
+        respond: (ok: boolean, payload?: unknown, error?: { message?: string }) => {
+          if (responded) return;
+          responded = true;
+          if (ok) {
+            resolve(payload as T);
+          } else {
+            reject(new Error(error?.message ?? `Gateway method "${method}" failed`));
+          }
+        },
+        context,
+      }).catch((err: Error) => {
+        if (!responded) {
+          responded = true;
+          reject(err);
+        }
+      });
+    });
   }
 
   // ---- Agent 调用 ----
 
   async callAgent(
     params: AgentCallParams,
-    _onEvent: (event: AgentStreamEvent) => void,
+    onEvent: (event: AgentStreamEvent) => void,
   ): Promise<{ runId: string }> {
     const idempotencyKey = params.idempotencyKey || randomUUID();
-
-    // TODO: 对接引擎的 agent handler
-    // 当前占位实现，后续需要：
-    // 1. 调用引擎的 agent 执行入口
-    // 2. 将引擎产生的事件流通过 onEvent 回调输出
-    // 3. 在 done/error 时清理 trackedRunIds
-
     this.trackedRunIds.add(idempotencyKey);
 
+    // 不透明导入事件监听
+    const { onAgentEvent } = await opaqueImport(`${ENGINE_ROOT}infra/agent-events.js`);
+
+    // 订阅该次运行的事件
+    let serverRunId: string | null = null;
+    const unsubscribe = onAgentEvent((evt: any) => {
+      // 只处理本次运行的事件
+      if (!this.trackedRunIds.has(evt.runId)) return;
+
+      const mapped = this.mapEngineEvent(evt);
+      if (mapped) {
+        onEvent(mapped);
+      }
+
+      // 运行结束时清理
+      if (evt.stream === 'lifecycle' && (evt.data.phase === 'end' || evt.data.phase === 'error')) {
+        this.trackedRunIds.delete(evt.runId);
+        unsubscribe();
+      }
+    });
+
     try {
-      const result = await this.call<{ status: string; runId: string }>('agent', {
+      const result = await this.call<{ runId?: string; accepted?: boolean }>('agent', {
         ...params,
         idempotencyKey,
         deliver: params.deliver ?? false,
       });
 
-      const serverRunId = result.runId || idempotencyKey;
+      serverRunId = result.runId || idempotencyKey;
       this.trackedRunIds.add(serverRunId);
       return { runId: serverRunId };
     } catch (err) {
       this.trackedRunIds.delete(idempotencyKey);
+      unsubscribe();
       throw err;
+    }
+  }
+
+  // ---- 引擎事件映射 ----
+
+  private mapEngineEvent(evt: { stream: string; data: Record<string, unknown>; runId: string }): AgentStreamEvent | null {
+    const { stream, data, runId } = evt;
+
+    switch (stream) {
+      case 'assistant':
+        return {
+          type: 'text_delta',
+          content: (data.text as string) ?? (data.delta as string) ?? '',
+          runId,
+        };
+      case 'tool':
+        return {
+          type: 'tool_call',
+          toolName: data.toolName as string,
+          toolArgs: typeof data.args === 'string' ? data.args : JSON.stringify(data.args ?? ''),
+          toolResult: typeof data.result === 'string' ? data.result : JSON.stringify(data.result ?? ''),
+          runId,
+        };
+      case 'lifecycle':
+        if (data.phase === 'end') {
+          return { type: 'done', runId };
+        }
+        if (data.phase === 'error') {
+          return { type: 'error', error: (data.error as string) ?? 'unknown error', runId };
+        }
+        return { type: 'lifecycle', phase: data.phase as string, runId };
+      case 'thinking':
+        return { type: 'thinking', content: (data.text as string) ?? '', runId };
+      case 'error':
+        return { type: 'error', error: (data.message as string) ?? 'unknown error', runId };
+      default:
+        return null;
     }
   }
 

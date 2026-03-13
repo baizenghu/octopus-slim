@@ -165,7 +165,7 @@ async function main() {
   if (config.nativeGateway.token) {
     bridge = new EngineAdapter();
     try {
-      await bridge.initialize();
+      await bridge.initialize(19791);
       console.log('   Engine: initialized (single-process)');
 
       // 启动时将数据库中所有已启用的 Agent 同步到原生 Gateway
