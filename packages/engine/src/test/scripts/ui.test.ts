@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { assertSafeWindowsShellArgs, shouldUseShellForCommand } from "../../scripts/ui.js";
+// @ts-expect-error — untyped .js script
+import { assertSafeWindowsShellArgs, shouldUseShellForCommand } from "../../../scripts/ui.js";
 
 describe("scripts/ui windows spawn behavior", () => {
   it("enables shell for Windows command launchers that require cmd.exe", () => {

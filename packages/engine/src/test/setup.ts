@@ -16,9 +16,9 @@ import type {
   ChannelId,
   ChannelOutboundAdapter,
   ChannelPlugin,
-} from "../src/channels/plugins/types.js";
-import type { OctopusConfig } from "../src/config/config.js";
-import type { OutboundSendDeps } from "../src/infra/outbound/deliver.js";
+} from "../channels/plugins/types.js";
+import type { OctopusConfig } from "../config/config.js";
+import type { OutboundSendDeps } from "../infra/outbound/deliver.js";
 import { withIsolatedTestHome } from "./test-env.js";
 
 // Set HOME/state isolation before importing any runtime Octopus modules.
@@ -30,9 +30,9 @@ const [
   { getActivePluginRegistry, setActivePluginRegistry },
   { createTestRegistry },
 ] = await Promise.all([
-  import("../src/infra/warning-filter.js"),
-  import("../src/plugins/runtime.js"),
-  import("../src/test-utils/channel-plugins.js"),
+  import("../infra/warning-filter.js"),
+  import("../plugins/runtime.js"),
+  import("../test-utils/channel-plugins.js"),
 ]);
 
 installProcessWarningFilter();
@@ -61,7 +61,7 @@ const createStubOutbound = (
   deliveryMode: ChannelOutboundAdapter["deliveryMode"] = "direct",
 ): ChannelOutboundAdapter => ({
   deliveryMode,
-  sendText: async ({ deps, to, text }) => {
+  sendText: async ({ deps, to, text }: { deps?: any; to: any; text: any }) => {
     const send = pickSendFn(id, deps);
     if (send) {
       // oxlint-disable-next-line typescript/no-explicit-any
@@ -70,7 +70,7 @@ const createStubOutbound = (
     }
     return { channel: id, messageId: "test" };
   },
-  sendMedia: async ({ deps, to, text, mediaUrl }) => {
+  sendMedia: async ({ deps, to, text, mediaUrl }: { deps?: any; to?: any; text?: any; mediaUrl?: any }) => {
     const send = pickSendFn(id, deps);
     if (send) {
       // oxlint-disable-next-line typescript/no-explicit-any
@@ -120,7 +120,7 @@ const createStubPlugin = (params: {
       const match = accountId ? accounts?.[accountId] : undefined;
       return (match && typeof match === "object") || typeof match === "string" ? match : entry;
     },
-    isConfigured: async (_account, cfg: OctopusConfig) => {
+    isConfigured: async (_account: any, cfg: OctopusConfig) => {
       const channels = cfg.channels as Record<string, unknown> | undefined;
       return Boolean(channels?.[params.id]);
     },

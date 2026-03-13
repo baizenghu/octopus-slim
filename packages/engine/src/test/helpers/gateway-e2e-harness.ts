@@ -5,12 +5,12 @@ import { request as httpRequest } from "node:http";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
-import { GatewayClient } from "../../src/gateway/client.js";
-import { connectGatewayClient } from "../../src/gateway/test-helpers.e2e.js";
-import { loadOrCreateDeviceIdentity } from "../../src/infra/device-identity.js";
-import { extractFirstTextBlock } from "../../src/shared/chat-message-content.js";
-import { sleep } from "../../src/utils.js";
-import { GATEWAY_CLIENT_MODES, GATEWAY_CLIENT_NAMES } from "../../src/utils/message-channel.js";
+import { GatewayClient } from "../../gateway/client.js";
+import { connectGatewayClient } from "../../gateway/test-helpers.e2e.js";
+import { loadOrCreateDeviceIdentity } from "../../infra/device-identity.js";
+import { extractFirstTextBlock } from "../../shared/chat-message-content.js";
+import { sleep } from "../../utils.js";
+import { GATEWAY_CLIENT_MODES, GATEWAY_CLIENT_NAMES } from "../../utils/message-channel.js";
 
 export { extractFirstTextBlock };
 
@@ -156,14 +156,14 @@ export async function spawnGatewayInstance(name: string): Promise<GatewayInstanc
         },
         stdio: ["ignore", "pipe", "pipe"],
       },
-    );
+    ) as unknown as ChildProcessWithoutNullStreams;
 
-    child.stdout?.setEncoding("utf8");
-    child.stderr?.setEncoding("utf8");
-    child.stdout?.on("data", (d) => stdout.push(String(d)));
-    child.stderr?.on("data", (d) => stderr.push(String(d)));
+    child!.stdout?.setEncoding("utf8");
+    child!.stderr?.setEncoding("utf8");
+    child!.stdout?.on("data", (d) => stdout.push(String(d)));
+    child!.stderr?.on("data", (d) => stderr.push(String(d)));
 
-    await waitForPortOpen(child, stdout, stderr, port, GATEWAY_START_TIMEOUT_MS);
+    await waitForPortOpen(child!, stdout, stderr, port, GATEWAY_START_TIMEOUT_MS);
 
     return {
       name,
@@ -173,7 +173,7 @@ export async function spawnGatewayInstance(name: string): Promise<GatewayInstanc
       homeDir,
       stateDir,
       configPath,
-      child,
+      child: child!,
       stdout,
       stderr,
     };
@@ -322,8 +322,8 @@ async function connectStatusClient(
       onHelloOk: () => {
         finish();
       },
-      onConnectError: (err) => finish(err),
-      onClose: (code, reason) => {
+      onConnectError: (err: any) => finish(err),
+      onClose: (code: any, reason: any) => {
         finish(new Error(`gateway closed (${code}): ${reason}`));
       },
     });
@@ -349,7 +349,7 @@ export async function waitForNodeStatus(
   try {
     while (Date.now() < deadline) {
       const list = await client.request<NodeListPayload>("node.list", {});
-      const match = list.nodes?.find((n) => n.nodeId === nodeId);
+      const match = list.nodes?.find((n: any) => n.nodeId === nodeId);
       if (match?.connected && match?.paired) {
         return;
       }

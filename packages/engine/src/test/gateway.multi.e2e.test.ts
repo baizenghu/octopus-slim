@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, describe, expect, it } from "vitest";
-import { GatewayClient } from "../src/gateway/client.js";
-import { connectGatewayClient } from "../src/gateway/test-helpers.e2e.js";
-import { GATEWAY_CLIENT_MODES, GATEWAY_CLIENT_NAMES } from "../src/utils/message-channel.js";
+import { GatewayClient } from "../gateway/client.js";
+import { connectGatewayClient } from "../gateway/test-helpers.e2e.js";
+import { GATEWAY_CLIENT_MODES, GATEWAY_CLIENT_NAMES } from "../utils/message-channel.js";
 import {
   type ChatEventPayload,
   type GatewayInstance,
@@ -93,7 +93,7 @@ describe("gateway multi-instance e2e", () => {
         clientVersion: "1.0.0",
         platform: "test",
         mode: GATEWAY_CLIENT_MODES.CLI,
-        onEvent: (evt) => {
+        onEvent: (evt: any) => {
           if (evt.event === "chat" && evt.payload && typeof evt.payload === "object") {
             chatEvents.push(evt.payload as ChatEventPayload);
           }

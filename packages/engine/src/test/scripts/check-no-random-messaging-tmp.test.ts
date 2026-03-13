@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { findMessagingTmpdirCallLines } from "../../scripts/check-no-random-messaging-tmp.mjs";
+// @ts-expect-error — untyped .mjs script
+import { findMessagingTmpdirCallLines } from "../../../scripts/check-no-random-messaging-tmp.mjs";
 
 describe("check-no-random-messaging-tmp", () => {
   it("finds os.tmpdir calls imported from node:os", () => {

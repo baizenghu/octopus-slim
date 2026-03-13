@@ -118,7 +118,7 @@ describe("infra runtime", () => {
         markGatewaySigusr1RestartHandled();
 
         expect(emitGatewayRestart()).toBe(true);
-        const sigusr1Emits = emitSpy.mock.calls.filter((args) => args[0] === "SIGUSR1");
+        const sigusr1Emits = emitSpy.mock.calls.filter((args) => (args[0] as string) === "SIGUSR1");
         expect(sigusr1Emits.length).toBe(2);
       } finally {
         process.removeListener("SIGUSR1", handler);
@@ -140,7 +140,7 @@ describe("infra runtime", () => {
         expect(emitSpy).not.toHaveBeenCalledWith("SIGUSR1");
 
         await vi.advanceTimersByTimeAsync(1);
-        const sigusr1Emits = emitSpy.mock.calls.filter((args) => args[0] === "SIGUSR1");
+        const sigusr1Emits = emitSpy.mock.calls.filter((args) => (args[0] as string) === "SIGUSR1");
         expect(sigusr1Emits.length).toBe(1);
       } finally {
         process.removeListener("SIGUSR1", handler);
@@ -166,10 +166,10 @@ describe("infra runtime", () => {
         expect(second.cooldownMsApplied).toBe(30_000);
 
         await vi.advanceTimersByTimeAsync(29_999);
-        expect(emitSpy.mock.calls.filter((args) => args[0] === "SIGUSR1").length).toBe(1);
+        expect(emitSpy.mock.calls.filter((args) => (args[0] as string) === "SIGUSR1").length).toBe(1);
 
         await vi.advanceTimersByTimeAsync(1);
-        expect(emitSpy.mock.calls.filter((args) => args[0] === "SIGUSR1").length).toBe(2);
+        expect(emitSpy.mock.calls.filter((args) => (args[0] as string) === "SIGUSR1").length).toBe(2);
       } finally {
         process.removeListener("SIGUSR1", handler);
       }

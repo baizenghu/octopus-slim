@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { findRawWindowOpenLines } from "../../scripts/check-no-raw-window-open.mjs";
+// @ts-expect-error — untyped .mjs script
+import { findRawWindowOpenLines } from "../../../scripts/check-no-raw-window-open.mjs";
 
 describe("check-no-raw-window-open", () => {
   it("finds direct window.open calls", () => {

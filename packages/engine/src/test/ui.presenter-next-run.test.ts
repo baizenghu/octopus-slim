@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatNextRun } from "../ui/src/ui/presenter.ts";
+import { formatNextRun } from "../../ui/src/ui/presenter.ts";
 
 describe("formatNextRun", () => {
   it("returns n/a for nullish values", () => {

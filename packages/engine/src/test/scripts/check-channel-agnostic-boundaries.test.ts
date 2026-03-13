@@ -1,10 +1,6 @@
 import { describe, expect, it } from "vitest";
-import {
-  findChannelAgnosticBoundaryViolations,
-  findAcpUserFacingChannelNameViolations,
-  findChannelCoreReverseDependencyViolations,
-  findSystemMarkLiteralViolations,
-} from "../../scripts/check-channel-agnostic-boundaries.mjs";
+// @ts-expect-error — untyped .mjs script
+import { findChannelAgnosticBoundaryViolations, findAcpUserFacingChannelNameViolations, findChannelCoreReverseDependencyViolations, findSystemMarkLiteralViolations } from "../../../scripts/check-channel-agnostic-boundaries.mjs";
 
 describe("check-channel-agnostic-boundaries", () => {
   it("flags direct channel module imports", () => {
