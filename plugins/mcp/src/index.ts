@@ -591,6 +591,21 @@ export default function enterpriseMcpPlugin(api: any) {
           // 8. 执行
           console.log(`[enterprise-mcp][run_skill] Executing "${skillName}" (${skill.id}), script: ${scriptRelPath}, scope: ${skill.scope}, args: [${argsArray.join(', ')}]`);
 
+          // 配额拦截：超限时拒绝执行 Skill
+          try {
+            const quotaStatus = await checkUserQuota(userId, _dataRoot);
+            if (quotaStatus.exceeded) {
+              const usedMB = Math.round(quotaStatus.used / 1024 / 1024);
+              const limitMB = Math.round(quotaStatus.limit / 1024 / 1024);
+              return {
+                content: [{
+                  type: 'text' as const,
+                  text: `❌ 存储配额已超限（已用 ${usedMB}MB / 限额 ${limitMB}MB），请让用户清理 outputs 目录后重试。`,
+                }],
+              };
+            }
+          } catch { /* 配额检查失败不阻断执行 */ }
+
           let result: SkillExecResult;
           if (skill.scope === 'enterprise') {
             // 企业 Skill: 宿主机子进程执行
@@ -1431,6 +1446,40 @@ async function collectOutputFiles(outputsDir: string): Promise<string[]> {
   };
   await walk(outputsDir);
   return files;
+}
+
+/** 检查用户存储配额（轻量版，不依赖 WorkspaceManager 实例） */
+async function checkUserQuota(userId: string, dataRoot: string): Promise<{
+  used: number; limit: number; exceeded: boolean;
+}> {
+  const userRoot = path.join(dataRoot, 'users', userId);
+  if (!fs.existsSync(userRoot)) return { used: 0, limit: 5 * 1024 * 1024 * 1024, exceeded: false };
+
+  // 读取用户元数据中的配额设置（与 WorkspaceManager.checkQuota 保持一致）
+  let limitGB = 5; // 默认 5GB
+  try {
+    const metaPath = path.join(userRoot, 'metadata.json');
+    if (fs.existsSync(metaPath)) {
+      const meta = JSON.parse(await fsp.readFile(metaPath, 'utf-8'));
+      if (meta.quotas?.storage) limitGB = meta.quotas.storage;
+    }
+  } catch { /* 读取失败用默认值 */ }
+
+  let used = 0;
+  const walk = async (dir: string) => {
+    try {
+      const entries = await fsp.readdir(dir, { withFileTypes: true });
+      for (const e of entries) {
+        const p = path.join(dir, e.name);
+        if (e.isDirectory()) await walk(p);
+        else if (e.isFile()) { const s = await fsp.stat(p); used += s.size; }
+      }
+    } catch { /* 忽略权限错误 */ }
+  };
+  await walk(userRoot);
+
+  const limit = limitGB * 1024 * 1024 * 1024;
+  return { used, limit, exceeded: used > limit };
 }
 
 /** 解析参数字符串为数组（支持引号分隔） */
