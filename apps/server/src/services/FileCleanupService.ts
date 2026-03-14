@@ -87,7 +87,7 @@ export class FileCleanupService {
 
       let cleaned = 0;
       for (const file of expired) {
-        const absPath = path.join(this.config.dataRoot, 'users', file.userId, file.filePath);
+        const absPath = path.join(this.config.dataRoot, 'users', file.userId, 'workspace', file.filePath);
         try {
           if (fs.existsSync(absPath)) await fsp.unlink(absPath);
         } catch (err: any) {

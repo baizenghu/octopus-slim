@@ -325,7 +325,7 @@ export function createAgentsRouter(
   router.post('/', authMiddleware, async (req: AuthenticatedRequest, res, next) => {
     try {
       const user = req.user!;
-      const { name, model, identity, skillsFilter, mcpFilter, toolsFilter, allowedConnections } = req.body;
+      const { name, description, model, identity, skillsFilter, mcpFilter, toolsFilter, allowedConnections } = req.body;
 
       if (!name || typeof name !== 'string' || !name.trim()) {
         res.status(400).json({ error: 'name is required' });
@@ -336,7 +336,7 @@ export function createAgentsRouter(
         data: {
           id: randomUUID().replace(/-/g, '').slice(0, 16),
           name: name.trim(),
-          description: null,
+          description: description?.trim() || null,
           ownerId: user.id,
           model: model?.trim() || null,
           systemPrompt: null,
@@ -384,7 +384,7 @@ export function createAgentsRouter(
         return;
       }
 
-      const { name, model, identity, skillsFilter, mcpFilter, toolsFilter, allowedConnections, enabled } = req.body;
+      const { name, description, model, identity, skillsFilter, mcpFilter, toolsFilter, allowedConnections, enabled } = req.body;
 
       const data: Record<string, any> = {};
       // Agent ID（name）创建后不可修改，修改会导致 native agent ID 变更、历史 session 丢失
@@ -392,6 +392,7 @@ export function createAgentsRouter(
         res.status(400).json({ error: 'Agent ID 创建后不可修改' });
         return;
       }
+      if (description !== undefined) data.description = description?.trim() || null;
       if (model !== undefined) data.model = model?.trim() || null;
       if (identity !== undefined) data.identity = identity;
       if (skillsFilter !== undefined) data.skillsFilter = skillsFilter;
