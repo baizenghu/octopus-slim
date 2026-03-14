@@ -2,6 +2,8 @@
  * Gateway 配置加载
  */
 
+import type { FileCleanupConfig } from '@octopus/workspace';
+
 export interface GatewayConfig {
   /** 服务端口 */
   port: number;
@@ -46,6 +48,8 @@ export interface GatewayConfig {
     url: string;
     token: string;
   };
+  /** 文件清理配置 */
+  cleanup: FileCleanupConfig;
 }
 
 import * as path from 'path';
@@ -106,6 +110,12 @@ export function loadConfig(): GatewayConfig {
     nativeGateway: {
       url: process.env.OCTOPUS_GATEWAY_URL || 'ws://127.0.0.1:18791',
       token: process.env.OCTOPUS_GATEWAY_TOKEN || '',
+    },
+    cleanup: {
+      outputRetentionDays: parseInt(process.env.OUTPUT_RETENTION_DAYS || '7', 10),
+      tempRetentionHours: parseInt(process.env.TEMP_RETENTION_HOURS || '1', 10),
+      cleanupIntervalMinutes: parseInt(process.env.CLEANUP_INTERVAL_MINUTES || '30', 10),
+      orphanDetectionEnabled: process.env.ORPHAN_DETECTION_ENABLED !== 'false',
     },
   };
 }

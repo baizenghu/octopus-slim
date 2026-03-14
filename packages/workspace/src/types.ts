@@ -82,3 +82,17 @@ export interface PathValidationResult {
   /** 拒绝原因（仅 valid=false 时有值） */
   reason?: string;
 }
+
+/**
+ * 文件清理配置
+ */
+export interface FileCleanupConfig {
+  /** outputs/ 文件保留天数（默认 7） */
+  outputRetentionDays: number;
+  /** temp/ 文件保留小时数（默认 1） */
+  tempRetentionHours: number;
+  /** 清理扫描间隔（分钟，默认 30） */
+  cleanupIntervalMinutes: number;
+  /** 孤儿文件检测（每天一次，默认开启） */
+  orphanDetectionEnabled: boolean;
+}
