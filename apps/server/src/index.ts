@@ -17,6 +17,15 @@ import * as path from 'path';
 
 dotenv.config({ path: path.resolve(__dirname, '..', '..', '..', '.env') });
 
+// 引擎 state 目录指向项目内（确保不读 ~/.octopus/）
+const projectRoot = path.resolve(__dirname, '..', '..', '..');
+if (!process.env.OCTOPUS_HOME) {
+  process.env.OCTOPUS_HOME = path.join(projectRoot, '.octopus-state');
+}
+if (!process.env.OCTOPUS_STATE_DIR) {
+  process.env.OCTOPUS_STATE_DIR = path.join(projectRoot, '.octopus-state');
+}
+
 import express from 'express';
 import cors from 'cors';
 import rateLimit from 'express-rate-limit';
@@ -158,6 +167,17 @@ async function main() {
   auditLogger.cleanup().then((n: number) => {
     if (n > 0) console.log(`[audit] Cleaned up ${n} expired export files`);
   }).catch(() => {});
+
+  // 启动文件清理服务
+  if (prismaClient) {
+    const { FileCleanupService } = await import('./services/FileCleanupService');
+    const fileCleanup = new FileCleanupService({
+      dataRoot: config.workspace.dataRoot,
+      cleanup: config.cleanup,
+      prisma: prismaClient,
+    });
+    fileCleanup.start();
+  }
 
   // 初始化 Native Gateway Bridge
   let bridge: EngineAdapter | undefined;
