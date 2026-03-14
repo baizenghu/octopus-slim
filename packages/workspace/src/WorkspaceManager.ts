@@ -193,8 +193,22 @@ export class WorkspaceManager {
   }
 
   /**
+   * 配额拦截：超限时抛出异常，阻止写入操作
+   */
+  async enforceQuota(userId: string, customLimitGB?: number): Promise<void> {
+    const status = await this.checkQuota(userId, customLimitGB);
+    if (status.storage.exceeded) {
+      const usedMB = Math.round(status.storage.used / 1024 / 1024);
+      const limitMB = Math.round(status.storage.limit / 1024 / 1024);
+      throw new Error(
+        `存储配额已超限（已用 ${usedMB}MB / 限额 ${limitMB}MB），请清理文件后重试`,
+      );
+    }
+  }
+
+  /**
    * 删除用户工作空间
-   * 
+   *
    * ⚠️ 危险操作，建议先备份
    */
   async deleteWorkspace(userId: string): Promise<void> {
