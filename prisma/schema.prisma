@@ -211,3 +211,22 @@ model DatabaseConnection {
   @@index([userId])
   @@map("database_connections")
 }
+
+/// 生成文件注册表（文件生命周期管理）
+model GeneratedFile {
+  id          String   @id @map("file_id") @db.VarChar(512)  /// 确定性 ID: {userId}:outputs/{relPath}
+  userId      String   @map("user_id") @db.VarChar(64)
+  category    String   @db.VarChar(20)  /// 'output' | 'temp' | 'upload'
+  filePath    String   @map("file_path") @db.VarChar(1024)  /// 相对于 workspace 的路径
+  fileSize    Int      @map("file_size")  /// 字节
+  skillId     String?  @map("skill_id") @db.VarChar(64)  /// 产生该文件的 Skill ID
+  agentName   String?  @map("agent_name") @db.VarChar(255)  /// 产生该文件的 Agent
+  createdAt   DateTime @default(now()) @map("created_at")
+  expiresAt   DateTime @map("expires_at")  /// 根据 category 计算
+  status      String   @default("active") @db.VarChar(20)  /// 'active' | 'expired' | 'deleted'
+
+  @@index([userId])
+  @@index([status, expiresAt])
+  @@index([userId, category])
+  @@map("generated_files")
+}
