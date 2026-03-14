@@ -378,7 +378,7 @@ async function main() {
   app.use('/api/chat', quotaMiddleware, createChatRouter(config, authService, workspaceManager, bridge, prismaClient, auditLogger, undefined, quotaManager));
   app.use('/api/audit', createAuditRouter(authService, auditLogger));
   app.use('/api/admin', createAdminRouter(authService, auditLogger, prismaClient!, workspaceManager, bridge));
-  app.use('/api/files', quotaMiddleware, createFilesRouter(config, authService, workspaceManager));
+  app.use('/api/files', quotaMiddleware, createFilesRouter(config, authService, workspaceManager, prismaClient));
   if (prismaClient) {
     app.use('/api/mcp', quotaMiddleware, createMcpRouter(authService, prismaClient, mcpRegistry, mcpExecutor, config.workspace.dataRoot));
   }
