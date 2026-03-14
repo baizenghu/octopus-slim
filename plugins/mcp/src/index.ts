@@ -621,6 +621,38 @@ export default function enterpriseMcpPlugin(api: any) {
 
           // 收集 outputs 目录的文件列表
           const outputFiles = await collectOutputFiles(outputsPath);
+
+          // 注册生成的文件到数据库
+          if (prisma && outputFiles.length > 0) {
+            const expiresAt = new Date();
+            expiresAt.setDate(expiresAt.getDate() + 7); // outputs 默认 7 天过期
+            try {
+              for (const relPath of outputFiles) {
+                const fileId = `${userId}:outputs/${relPath}`;
+                const absPath = path.join(outputsPath, relPath);
+                let fileSize = 0;
+                try { fileSize = (await fsp.stat(absPath)).size; } catch { /* 忽略 */ }
+                await prisma.generatedFile.upsert({
+                  where: { id: fileId },
+                  update: { fileSize, expiresAt, status: 'active', skillId: skill.id, agentName: agentName || null },
+                  create: {
+                    id: fileId,
+                    userId,
+                    category: 'output',
+                    filePath: `outputs/${relPath}`,
+                    fileSize,
+                    skillId: skill.id,
+                    agentName: agentName || null,
+                    expiresAt,
+                    status: 'active',
+                  },
+                });
+              }
+            } catch (regErr: any) {
+              console.warn('[mcp] 文件注册失败（不影响执行）:', regErr.message);
+            }
+          }
+
           if (outputFiles.length > 0) {
             response.outputFiles = outputFiles;
             response.message = `技能执行${result.success ? '成功' : '失败'}，生成了 ${outputFiles.length} 个文件到 outputs/ 目录`;
