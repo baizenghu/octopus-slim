@@ -59,6 +59,7 @@ export function createFilesRouter(
   _config: GatewayConfig,
   authService: AuthService,
   workspaceManager: WorkspaceManager,
+  prismaClient?: any,  // PrismaClient（可选，用于 DB 状态同步）
 ): Router {
   const router = Router();
   const authMiddleware = createAuthMiddleware(authService);
@@ -109,6 +110,14 @@ export function createFilesRouter(
 
         // 确保用户工作空间已初始化
         await workspaceManager.initWorkspace(user.id, user.username || user.id);
+
+        // 配额拦截：超限时拒绝上传
+        try {
+          await workspaceManager.enforceQuota(user.id);
+        } catch (quotaErr: any) {
+          res.status(413).json({ error: quotaErr.message });
+          return;
+        }
 
         // 确定目标目录
         const subdir = (req.query.subdir as string) || '';
@@ -169,6 +178,12 @@ export function createFilesRouter(
       await workspaceManager.initWorkspace(user.id, user.username || user.id);
       const dirType = (req.query.dir as string) || 'files';
       const subdir = (req.query.subdir as string) || '';
+
+      // 目录类型白名单检查
+      if (!['files', 'outputs'].includes(dirType)) {
+        res.status(400).json({ error: '目录类型不合法，仅支持 files 或 outputs' });
+        return;
+      }
 
       // 子目录安全检查：禁止路径穿越（与上传接口一致）
       if (subdir && (subdir.includes('..') || path.isAbsolute(subdir) || subdir.includes('\0'))) {
@@ -415,9 +430,10 @@ export function createFilesRouter(
         return;
       }
 
-      // 禁止删除 outputs/ 中的文件
-      if (relativePath.startsWith('outputs')) {
-        res.status(403).json({ error: '不允许删除 AI 生成的输出文件' });
+      // outputs/ 中的文件允许用户删除（已有文件清理机制兜底）
+      // 仅禁止删除 outputs 目录本身
+      if (relativePath === 'outputs' || relativePath === 'outputs/') {
+        res.status(403).json({ error: '不允许删除 outputs 根目录' });
         return;
       }
 
@@ -440,6 +456,16 @@ export function createFilesRouter(
         await fsp.rm(fullPath, { recursive: true });
       } else {
         await fsp.unlink(fullPath);
+      }
+
+      // 如果删除的是 outputs 下的文件，同步更新 DB 状态
+      if (relativePath.startsWith('outputs/') && prismaClient) {
+        try {
+          await prismaClient.generatedFile.updateMany({
+            where: { userId: user.id, filePath: relativePath, status: 'active' },
+            data: { status: 'deleted' },
+          });
+        } catch { /* DB 同步失败不阻断删除响应 */ }
       }
 
       res.json({ message: '删除成功', path: relativePath });
