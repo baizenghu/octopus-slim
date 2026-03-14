@@ -310,6 +310,7 @@ export function createAdminRouter(
       await prisma.databaseConnection.deleteMany({ where: { userId: id } }).catch(() => { });
       await prisma.mCPServer.deleteMany({ where: { ownerId: id } }).catch(() => { });
       await prisma.skill.deleteMany({ where: { ownerId: id } }).catch(() => { });
+      await prisma.generatedFile.deleteMany({ where: { userId: id } }).catch(() => { });
       await prisma.iMUserBinding.deleteMany({ where: { userId: id } }).catch(() => { });
       await prisma.mailLog.deleteMany({ where: { userId: id } }).catch(() => { });
 
