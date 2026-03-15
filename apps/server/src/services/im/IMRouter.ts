@@ -87,8 +87,8 @@ export class IMRouter {
       return;
     }
 
-    // /agent 指令：需要 userId，放在 binding 查询之后
-    if (text.startsWith('/agent')) {
+    // /agent 指令：需要 userId，放在 binding 查询之后（精确匹配，避免 /agents 等误触发）
+    if (text === '/agent' || text.startsWith('/agent ')) {
       await this.handleAgentSwitch(adapter, msg, binding.userId);
       return;
     }
@@ -237,17 +237,8 @@ export class IMRouter {
       return;
     }
 
-    // 查 DB 验证 agent 存在且属于该用户
+    // 查 DB 验证 agent 存在且属于该用户（userId 来自 binding，已验证存在性）
     try {
-      const user = await this.prisma.user.findUnique({
-        where: { userId },
-        select: { userId: true },
-      });
-      if (!user) {
-        await adapter.sendText(imUserId, '用户信息异常，请重新绑定。');
-        return;
-      }
-
       const agent = await this.prisma.agent.findFirst({
         where: { ownerId: userId, name: targetName, enabled: true },
         select: { name: true, description: true, identity: true },
@@ -342,6 +333,20 @@ export class IMRouter {
     const sessionKey = EngineAdapter.userSessionKey(userId, agentName, sessionId);
 
     try {
+      // 非 default agent：验证 agent 仍然存在且启用，否则自动回落 default
+      if (agentName !== 'default') {
+        const agentExists = await this.prisma.agent.findFirst({
+          where: { ownerId: userId, name: agentName, enabled: true },
+          select: { name: true },
+        });
+        if (!agentExists) {
+          this.activeAgents.delete(imKey);
+          await adapter.sendText(msg.imUserId, `Agent "${agentName}" 已不可用，已自动切回主助手。`);
+          // 回落到 default，重新调用自身
+          return this.routeToAgent(adapter, userId, msg);
+        }
+      }
+
       await this.ensureAgent(userId, agentName);
 
       // 记录 outputs 目录的文件快照（用于对比新增文件）
