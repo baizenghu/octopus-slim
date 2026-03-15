@@ -11,6 +11,7 @@ import { FeishuAdapter } from './FeishuAdapter';
 import type { EngineAdapter } from '../EngineAdapter';
 import type { AuthService } from '@octopus/auth';
 import type { AppPrismaClient } from '../../types/prisma';
+import type { WorkspaceManager } from '@octopus/workspace';
 
 export class IMService {
   private adapters: IMAdapter[] = [];
@@ -22,6 +23,8 @@ export class IMService {
     bridge: EngineAdapter;
     authService: AuthService;
     ensureAgent: (userId: string, agentName: string) => Promise<void>;
+    dataRoot?: string;
+    workspaceManager?: WorkspaceManager;
   }) {
     this.prisma = params.prisma;
     this.router = new IMRouter(
@@ -29,6 +32,8 @@ export class IMService {
       params.bridge,
       params.authService,
       params.ensureAgent,
+      params.dataRoot,
+      params.workspaceManager,
     );
   }
 

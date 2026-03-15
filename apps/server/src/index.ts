@@ -226,6 +226,8 @@ async function main() {
           prisma: prismaClient,
           bridge: imBridge,
           authService,
+          dataRoot: config.workspace.dataRoot,
+          workspaceManager,
           ensureAgent: async (userId: string, agentName: string) => {
             const nativeAgentId = EngineAdapter.userAgentId(userId, agentName);
             const workspacePath = agentName === 'default'
@@ -352,7 +354,7 @@ async function main() {
         'enterprise-mcp': pluginStatus('enterprise-mcp'),
         'memory-lancedb-pro': pluginStatus('memory-lancedb-pro'),
       },
-      model: config.ai.model,
+      model: 'configured in octopus.json',
     });
   });
 
@@ -400,7 +402,7 @@ async function main() {
   const server = app.listen(config.port, bindHost, () => {
     console.log(`✅ Gateway started on http://${bindHost}:${config.port}`);
     console.log(`   Health: http://localhost:${config.port}/health`);
-    console.log(`   Model: ${config.ai.model} @ ${config.ai.apiBase}`);
+    console.log('   Model: configured in octopus.json (unified)');
     console.log(`   LDAP: ${config.mockLdap ? 'Mock (dev)' : config.ldap.url}`);
     console.log(`   Data: ${config.workspace.dataRoot}`);
     console.log(`   Audit: ${config.audit.logDir} (${config.audit.retentionDays}d retention)`);

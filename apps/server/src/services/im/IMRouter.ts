@@ -8,11 +8,16 @@
  * - 普通消息 → 路由到 callAgent
  */
 
+import * as fs from 'fs';
+import * as path from 'path';
 import type { IMAdapter, IMIncomingMessage } from './IMAdapter';
 import { EngineAdapter } from '../EngineAdapter';
 import type { AuthService } from '@octopus/auth';
 import type { AppPrismaClient } from '../../types/prisma';
+import type { WorkspaceManager } from '@octopus/workspace';
 import { randomUUID } from 'crypto';
+
+const FILE_SIZE_LIMIT = 10 * 1024 * 1024; // 10MB
 
 /** 清理模型输出中的 <think> 标签 */
 function stripThinkTags(text: string): string {
@@ -29,6 +34,8 @@ export class IMRouter {
     private bridge: EngineAdapter,
     private authService: AuthService,
     private ensureAgent: (userId: string, agentName: string) => Promise<void>,
+    private dataRoot?: string,
+    private workspaceManager?: WorkspaceManager,
   ) {}
 
   /** 注册 adapter 的消息回调 */
@@ -195,6 +202,52 @@ export class IMRouter {
     }
   }
 
+  /** 列出 outputs 目录下的文件名集合 */
+  private async listOutputFiles(dir: string): Promise<Set<string>> {
+    if (!dir) return new Set();
+    try {
+      const entries = await fs.promises.readdir(dir);
+      return new Set(entries);
+    } catch {
+      return new Set();
+    }
+  }
+
+  /** 发送新增的输出文件到 IM */
+  private async sendNewOutputFiles(
+    adapter: IMAdapter,
+    imUserId: string,
+    outputsDir: string,
+    filesBefore: Set<string>,
+  ): Promise<void> {
+    try {
+      const filesAfter = await this.listOutputFiles(outputsDir);
+      const newFiles = [...filesAfter].filter(f => !filesBefore.has(f));
+      if (newFiles.length === 0) return;
+
+      for (const fileName of newFiles) {
+        const filePath = path.join(outputsDir, fileName);
+        try {
+          const stat = await fs.promises.stat(filePath);
+          if (!stat.isFile()) continue;
+
+          if (stat.size <= FILE_SIZE_LIMIT) {
+            await adapter.sendFile!(imUserId, filePath, fileName);
+            console.log(`[im-router] Sent file via IM: ${fileName} (${(stat.size / 1024).toFixed(0)}KB)`);
+          } else {
+            const sizeMB = (stat.size / 1024 / 1024).toFixed(1);
+            await adapter.sendText(imUserId, `📎 文件 ${fileName} (${sizeMB}MB) 过大，请到 Web 端下载。`);
+          }
+        } catch (e: any) {
+          console.error(`[im-router] Failed to send file ${fileName}:`, e.message);
+          await adapter.sendText(imUserId, `📎 文件 ${fileName} 发送失败，请到 Web 端下载。`);
+        }
+      }
+    } catch (e: any) {
+      console.error('[im-router] sendNewOutputFiles error:', e.message);
+    }
+  }
+
   /** 普通消息路由到 callAgent */
   private async routeToAgent(
     adapter: IMAdapter,
@@ -209,6 +262,39 @@ export class IMRouter {
     try {
       await this.ensureAgent(userId, agentName);
 
+      // 记录 outputs 目录的文件快照（用于对比新增文件）
+      const outputsDir = this.dataRoot
+        ? path.join(this.dataRoot, 'users', userId, 'workspace', 'outputs')
+        : '';
+      const filesBefore = await this.listOutputFiles(outputsDir);
+
+      // 构建 IM 链路安全 system prompt（与 Web 聊天 chat.ts 对齐）
+      let extraSystemPrompt: string | undefined;
+      if (this.workspaceManager) {
+        try {
+          const workspacePath = this.workspaceManager.getSubPath(userId, 'WORKSPACE');
+          const filesPath = this.workspaceManager.getSubPath(userId, 'FILES');
+          const outputsPath = this.workspaceManager.getSubPath(userId, 'OUTPUTS');
+          const tempPath = this.workspaceManager.getSubPath(userId, 'TEMP');
+          extraSystemPrompt =
+            `## 工作区\n` +
+            `工作空间根目录: ${workspacePath}\n` +
+            `用户上传文件: ${filesPath}\n` +
+            `用户可下载文件: ${outputsPath}\n` +
+            `临时工作目录: ${tempPath}\n\n` +
+            `**文件管理规范（必须遵守）：**\n` +
+            `- files/：用户上传的文件，只读取不修改\n` +
+            `- outputs/：需要交付给用户的最终成果文件（报告、文档等）\n` +
+            `- temp/：你的中间产物（脚本、临时数据、草稿等）必须写入此目录\n` +
+            `- 严禁在工作空间根目录直接创建文件\n\n` +
+            `**安全约束（必须遵守）：**\n` +
+            `- 所有文件读写操作只能在 ${workspacePath} 目录内进行\n` +
+            `- 严禁访问、读取或修改该目录之外的任何文件或目录\n` +
+            `- 严禁访问其他用户的目录或系统敏感文件（如 /etc/passwd、~/.ssh 等）\n` +
+            `- Shell 命令在沙箱容器内执行，可以使用 exec 工具运行命令`;
+        } catch { /* ignore */ }
+      }
+
       // 调用 agent，等待 done 事件收集完整回复
       let finalContent = '';
 
@@ -219,6 +305,8 @@ export class IMRouter {
             agentId,
             sessionKey,
             deliver: false,
+            extraSystemPrompt,
+            isAdmin: false,
           },
           (event) => {
             if (event.type === 'text_delta') {
@@ -235,6 +323,11 @@ export class IMRouter {
         if (cleaned) {
           await adapter.sendText(msg.imUserId, cleaned);
         }
+      }
+
+      // 检测并发送新增的输出文件
+      if (outputsDir && adapter.sendFile) {
+        await this.sendNewOutputFiles(adapter, msg.imUserId, outputsDir, filesBefore);
       }
     } catch (e: any) {
       console.error(`[im-router] Agent call error for ${userId}:`, e.message);
