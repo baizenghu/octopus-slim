@@ -38,6 +38,9 @@ export class IMRouter {
     private workspaceManager?: WorkspaceManager,
   ) {}
 
+  /** IM 用户当前选中的 agent（进程级，重启回落 default） */
+  private activeAgents = new Map<string, string>();
+
   /** 注册 adapter 的消息回调 */
   attach(adapter: IMAdapter): void {
     adapter.onMessage((msg) => {
@@ -81,6 +84,12 @@ export class IMRouter {
         imUserId,
         '你还没有绑定企业账户。请发送：/bind 用户名 密码',
       );
+      return;
+    }
+
+    // /agent 指令：需要 userId，放在 binding 查询之后
+    if (text.startsWith('/agent')) {
+      await this.handleAgentSwitch(adapter, msg, binding.userId);
       return;
     }
 
@@ -202,6 +211,78 @@ export class IMRouter {
     }
   }
 
+  /** /agent [名称] → 切换当前 IM 会话的 agent */
+  private async handleAgentSwitch(
+    adapter: IMAdapter,
+    msg: IMIncomingMessage,
+    userId: string,
+  ): Promise<void> {
+    const { imUserId, channel } = msg;
+    const parts = msg.text.split(/\s+/);
+    const imKey = `${channel}:${imUserId}`;
+
+    // /agent（无参数）→ 显示当前 agent
+    if (parts.length < 2) {
+      const current = this.activeAgents.get(imKey) || 'default';
+      await adapter.sendText(imUserId, `当前 Agent: ${current}`);
+      return;
+    }
+
+    const targetName = parts[1];
+
+    // 切回 default 直接允许
+    if (targetName === 'default') {
+      this.activeAgents.delete(imKey);
+      await adapter.sendText(imUserId, '已切换到主助手 (default)');
+      return;
+    }
+
+    // 查 DB 验证 agent 存在且属于该用户
+    try {
+      const user = await this.prisma.user.findUnique({
+        where: { userId },
+        select: { userId: true },
+      });
+      if (!user) {
+        await adapter.sendText(imUserId, '用户信息异常，请重新绑定。');
+        return;
+      }
+
+      const agent = await this.prisma.agent.findFirst({
+        where: { ownerId: userId, name: targetName, enabled: true },
+        select: { name: true, description: true, identity: true },
+      });
+
+      if (!agent) {
+        // 列出可用 agent
+        const available = await this.prisma.agent.findMany({
+          where: { ownerId: userId, enabled: true, isDefault: false },
+          select: { name: true, identity: true },
+        });
+        const list = available.length > 0
+          ? available.map((a: any) => {
+              const displayName = a.identity?.name || a.name;
+              return `- ${displayName}（${a.name}）`;
+            }).join('\n')
+          : '（无可用专业 Agent）';
+        await adapter.sendText(imUserId, `未找到 Agent "${targetName}"。\n\n可用 Agent：\n${list}\n\n使用 /agent default 切回主助手`);
+        return;
+      }
+
+      // 确保 native agent 存在
+      await this.ensureAgent(userId, targetName);
+
+      // 更新 Map
+      this.activeAgents.set(imKey, targetName);
+
+      const displayName = (agent.identity as any)?.name || agent.name;
+      await adapter.sendText(imUserId, `已切换到 ${displayName}。使用 /agent default 切回主助手。`);
+    } catch (e: any) {
+      console.error(`[im-router] Agent switch error:`, e.message);
+      await adapter.sendText(imUserId, '切换 Agent 失败，请稍后重试。');
+    }
+  }
+
   /** 列出 outputs 目录下的文件名集合 */
   private async listOutputFiles(dir: string): Promise<Set<string>> {
     if (!dir) return new Set();
@@ -254,7 +335,8 @@ export class IMRouter {
     userId: string,
     msg: IMIncomingMessage,
   ): Promise<void> {
-    const agentName = 'default';
+    const imKey = `${msg.channel}:${msg.imUserId}`;
+    const agentName = this.activeAgents.get(imKey) || 'default';
     const agentId = EngineAdapter.userAgentId(userId, agentName);
     const sessionId = `im-${msg.channel}-${msg.imUserId}`;
     const sessionKey = EngineAdapter.userSessionKey(userId, agentName, sessionId);
@@ -264,18 +346,33 @@ export class IMRouter {
 
       // 记录 outputs 目录的文件快照（用于对比新增文件）
       const outputsDir = this.dataRoot
-        ? path.join(this.dataRoot, 'users', userId, 'workspace', 'outputs')
+        ? (agentName === 'default'
+            ? path.join(this.dataRoot, 'users', userId, 'workspace', 'outputs')
+            : path.join(this.dataRoot, 'users', userId, 'agents', agentName, 'workspace', 'outputs'))
         : '';
       const filesBefore = await this.listOutputFiles(outputsDir);
 
       // 构建 IM 链路安全 system prompt（与 Web 聊天 chat.ts 对齐）
       let extraSystemPrompt: string | undefined;
-      if (this.workspaceManager) {
+      if (this.workspaceManager || this.dataRoot) {
         try {
-          const workspacePath = this.workspaceManager.getSubPath(userId, 'WORKSPACE');
-          const filesPath = this.workspaceManager.getSubPath(userId, 'FILES');
-          const outputsPath = this.workspaceManager.getSubPath(userId, 'OUTPUTS');
-          const tempPath = this.workspaceManager.getSubPath(userId, 'TEMP');
+          let workspacePath: string, filesPath: string, outputsPath: string, tempPath: string;
+          if (agentName === 'default' && this.workspaceManager) {
+            workspacePath = this.workspaceManager.getSubPath(userId, 'WORKSPACE');
+            filesPath = this.workspaceManager.getSubPath(userId, 'FILES');
+            outputsPath = this.workspaceManager.getSubPath(userId, 'OUTPUTS');
+            tempPath = this.workspaceManager.getSubPath(userId, 'TEMP');
+          } else if (this.dataRoot) {
+            const base = agentName === 'default'
+              ? path.join(this.dataRoot, 'users', userId, 'workspace')
+              : path.join(this.dataRoot, 'users', userId, 'agents', agentName, 'workspace');
+            workspacePath = base;
+            filesPath = path.join(base, 'files');
+            outputsPath = path.join(base, 'outputs');
+            tempPath = path.join(base, 'temp');
+          } else {
+            throw new Error('no workspace info');
+          }
           extraSystemPrompt =
             `## 工作区\n` +
             `工作空间根目录: ${workspacePath}\n` +
