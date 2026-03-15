@@ -5,6 +5,8 @@
  * 只处理私聊文本消息，支持消息去重和超长分段发送。
  */
 
+import * as fs from 'fs';
+import * as path from 'path';
 import * as lark from '@larksuiteoapi/node-sdk';
 import type { IMAdapter, IMIncomingMessage } from './IMAdapter';
 
@@ -75,6 +77,45 @@ export class FeishuAdapter implements IMAdapter {
         },
       });
     }
+  }
+
+  /** 发送文件消息：先上传到飞书，再发文件消息 */
+  async sendFile(imUserId: string, filePath: string, fileName: string): Promise<void> {
+    const ext = path.extname(fileName).toLowerCase();
+    const fileTypeMap: Record<string, string> = {
+      '.pdf': 'pdf', '.doc': 'doc', '.docx': 'doc',
+      '.xls': 'xls', '.xlsx': 'xls', '.ppt': 'ppt', '.pptx': 'ppt',
+    };
+    const fileType = fileTypeMap[ext] || 'stream';
+
+    // RFC 5987: 非 ASCII 文件名需要 percent-encoding
+    const safeName = /^[\x20-\x7E]+$/.test(fileName) ? fileName : encodeURIComponent(fileName);
+
+    // Step 1: 上传文件到飞书
+    const uploadRes = await this.client.im.file.create({
+      data: {
+        file_type: fileType,
+        file_name: safeName,
+        file: fs.createReadStream(filePath),
+      } as any,
+    });
+
+    const resAny = uploadRes as any;
+    if (resAny.code !== undefined && resAny.code !== 0) {
+      throw new Error(`飞书文件上传失败: ${resAny.msg || `code ${resAny.code}`}`);
+    }
+    const fileKey = resAny.file_key ?? resAny.data?.file_key;
+    if (!fileKey) throw new Error('飞书文件上传失败: 未返回 file_key');
+
+    // Step 2: 发送文件消息
+    await this.client.im.message.create({
+      params: { receive_id_type: 'open_id' },
+      data: {
+        receive_id: imUserId,
+        msg_type: 'file',
+        content: JSON.stringify({ file_key: fileKey }),
+      },
+    });
   }
 
   /** 尝试删除/撤回消息（用于清理含敏感信息的消息） */

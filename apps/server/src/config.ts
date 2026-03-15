@@ -31,12 +31,6 @@ export interface GatewayConfig {
     dataRoot: string;
     defaultStorageQuota: number;
   };
-  /** AI 模型配置 */
-  ai: {
-    apiBase: string;
-    apiKey: string;
-    model: string;
-  };
   /** 审计日志配置 */
   audit: {
     logDir: string;
@@ -97,11 +91,6 @@ export function loadConfig(): GatewayConfig {
       dataRoot: process.env.DATA_ROOT || defaultDataRoot,
       defaultStorageQuota: parseInt(process.env.DEFAULT_STORAGE_QUOTA || '5', 10),
     },
-    ai: {
-      apiBase: process.env.OPENAI_API_BASE || '',
-      apiKey: process.env.OPENAI_API_KEY || '',
-      model: process.env.OPENAI_MODEL || 'deepseek-chat',
-    },
     audit: {
       logDir: process.env.AUDIT_LOG_DIR || path.join(process.env.DATA_ROOT || defaultDataRoot, 'audit-logs'),
       retentionDays: parseInt(process.env.AUDIT_RETENTION_DAYS || '30', 10),
@@ -113,6 +102,7 @@ export function loadConfig(): GatewayConfig {
     },
     cleanup: {
       outputRetentionDays: parseInt(process.env.OUTPUT_RETENTION_DAYS || '7', 10),
+      filesRetentionDays: parseInt(process.env.FILES_RETENTION_DAYS || '30', 10),
       tempRetentionHours: parseInt(process.env.TEMP_RETENTION_HOURS || '1', 10),
       cleanupIntervalMinutes: parseInt(process.env.CLEANUP_INTERVAL_MINUTES || '30', 10),
       orphanDetectionEnabled: process.env.ORPHAN_DETECTION_ENABLED !== 'false',

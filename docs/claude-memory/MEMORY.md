@@ -34,7 +34,7 @@
 - State 目录: `.octopus-state/`，配置文件: `octopus.json`
 - `OCTOPUS_GATEWAY_TOKEN`（.env）= `octopus.json` 的 `gateway.auth.token`
 - `OCTOPUS_STATE_DIR` / `OCTOPUS_HOME` = `.octopus-state/`
-- DB: `mysql -uopenclaw -p'YOUR_DB_PASSWORD' openclaw_enterprise`
+- DB: `mysql -uoctopus -p'YOUR_DB_PASSWORD' octopus_enterprise`
 - **sandbox.mode = "off"，exec.host = "gateway"**（Docker 镜像未构建，临时禁用）
 - **meta.lastTouchedVersion 必须与 engine/package.json version 一致**（否则引擎反复 reload）
 

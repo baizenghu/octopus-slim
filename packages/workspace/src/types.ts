@@ -89,6 +89,8 @@ export interface PathValidationResult {
 export interface FileCleanupConfig {
   /** outputs/ 文件保留天数（默认 7） */
   outputRetentionDays: number;
+  /** files/ 上传附件保留天数（默认 30） */
+  filesRetentionDays: number;
   /** temp/ 文件保留小时数（默认 1） */
   tempRetentionHours: number;
   /** 清理扫描间隔（分钟，默认 30） */

@@ -114,6 +114,69 @@ export function createAgentsRouter(
   }
 
   /**
+   * 同步 agent 的 model + tools 配置到原生 gateway 的 agents.list
+   * - model: "provider/modelId" 格式，写入后引擎使用对应模型
+   * - toolsFilter: 转换为引擎的 tools.allow 硬限制（引擎级别拦截，工具不可见）
+   */
+  async function syncAgentNativeConfig(userId: string, agentName: string, opts: {
+    model?: string | null;
+    toolsFilter?: string[] | null;
+  }) {
+    if (!bridge?.isConnected) return;
+    const { EngineAdapter: OCB } = await import('../services/EngineAdapter');
+    const nativeAgentId = OCB.userAgentId(userId, agentName);
+    try {
+      const { config } = await bridge.configGetParsed();
+      const currentList: any[] = (config as any)?.agents?.list || [];
+      const target = currentList.find((a: any) => a.id === nativeAgentId);
+      if (!target) return;
+
+      let changed = false;
+
+      // model 同步
+      if (opts.model !== undefined) {
+        const oldModel = target.model ?? null;
+        const newModel = opts.model || null;
+        if (JSON.stringify(oldModel) !== JSON.stringify(newModel)) {
+          if (newModel) {
+            target.model = newModel;
+          } else {
+            delete target.model;
+          }
+          changed = true;
+          console.log(`[agents] syncNativeConfig model: ${nativeAgentId} → ${newModel || '(global default)'}`);
+        }
+      }
+
+      // toolsFilter → 引擎 tools.allow 硬限制
+      if (opts.toolsFilter !== undefined) {
+        const tf = opts.toolsFilter;
+        // 构建 allow 列表：toolsFilter 白名单 + 始终允许 plugin 工具（run_skill 等）
+        let newAllow: string[] | undefined;
+        if (Array.isArray(tf) && tf.length > 0) {
+          // 白名单模式：只允许指定的工具 + plugin 工具组
+          newAllow = [...tf, 'group:plugins', 'memory_search', 'memory_get', 'sessions_list', 'sessions_history', 'sessions_send', 'sessions_spawn', 'agents_list', 'cron', 'image'];
+        } else {
+          // 空数组 = 全部禁用工作空间工具，但保留 plugin/memory/session 等非文件工具
+          newAllow = ['group:plugins', 'memory_search', 'memory_get', 'sessions_list', 'sessions_history', 'sessions_send', 'sessions_spawn', 'agents_list', 'cron', 'image'];
+        }
+        const oldAllow = target.tools?.allow;
+        if (JSON.stringify(oldAllow) !== JSON.stringify(newAllow)) {
+          target.tools = { ...target.tools, allow: newAllow };
+          changed = true;
+          console.log(`[agents] syncNativeConfig tools.allow: ${nativeAgentId} → [${newAllow.join(', ')}]`);
+        }
+      }
+
+      if (!changed) return;
+      (config as any).agents.list = currentList;
+      await bridge.configApplyFull(config);
+    } catch (e: any) {
+      console.error(`[agents] syncAgentNativeConfig failed for ${nativeAgentId}:`, e.message);
+    }
+  }
+
+  /**
    * 同步 agent 到原生 gateway，并自动配置 memory scope 隔离 + 独立工作空间
    * @param isUpdate 是否为更新操作（更新时不覆盖 MEMORY.md，保留已有记忆 #19 修复）
    */
@@ -354,6 +417,11 @@ export function createAgentsRouter(
       try {
         await syncToNative(user.id, agent.name, null, agent.identity, false);
         await syncAllowAgents(user.id);
+        // 创建时同步 model + tools 硬限制到 native agents.list
+        await syncAgentNativeConfig(user.id, agent.name, {
+          model: model?.trim() || null,
+          toolsFilter: toolsFilter ?? [],
+        });
         // 创建时同步 TOOLS.md（原生工具 + MCP 工具）
         await syncToolsMd(user.id, agent.name, mcpFilter || [], toolsFilter || []);
       } catch (e: any) {
@@ -421,11 +489,23 @@ export function createAgentsRouter(
         }
       }
 
+      // model 或 toolsFilter 变化时同步到 native agents.list（硬限制）
+      const modelChanged = model !== undefined &&
+        (model?.trim() || null) !== (existing.model || null);
+      const toolsFilterChanged = toolsFilter !== undefined &&
+        JSON.stringify(toolsFilter) !== JSON.stringify(existing.toolsFilter);
+      if (modelChanged || toolsFilterChanged) {
+        const syncOpts: { model?: string | null; toolsFilter?: string[] | null } = {};
+        if (modelChanged) syncOpts.model = model?.trim() || null;
+        if (toolsFilterChanged) syncOpts.toolsFilter = toolsFilter ?? [];
+        syncAgentNativeConfig(user.id, agent.name, syncOpts).catch((e: any) =>
+          console.error('[agents] syncAgentNativeConfig failed:', e.message),
+        );
+      }
+
       // mcpFilter 或 toolsFilter 变化时同步 TOOLS.md（增删工具实时写入）
       const mcpFilterChanged = mcpFilter !== undefined &&
         JSON.stringify(mcpFilter) !== JSON.stringify(existing.mcpFilter);
-      const toolsFilterChanged = toolsFilter !== undefined &&
-        JSON.stringify(toolsFilter) !== JSON.stringify(existing.toolsFilter);
       if (mcpFilterChanged || toolsFilterChanged) {
         const finalMcpFilter = mcpFilter ?? (existing.mcpFilter as string[]) ?? [];
         const finalToolsFilter = toolsFilter ?? (existing.toolsFilter as string[]) ?? [];

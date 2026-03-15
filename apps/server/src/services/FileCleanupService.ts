@@ -58,6 +58,7 @@ export class FileCleanupService {
   async runCleanup(): Promise<{ dbCleaned: number; fsCleaned: number; tempCleaned: number }> {
     const dbCleaned = await this.cleanExpiredFromDB();
     const tempCleaned = await this.cleanTempFiles();
+    const filesCleaned = await this.cleanUploadedFiles();
 
     // 孤儿检测：每 24 小时一次
     if (this.config.cleanup.orphanDetectionEnabled) {
@@ -68,11 +69,11 @@ export class FileCleanupService {
       }
     }
 
-    if (dbCleaned > 0 || tempCleaned > 0) {
-      console.log(`[cleanup] 清理完成: DB过期文件=${dbCleaned}, 临时文件=${tempCleaned}`);
+    if (dbCleaned > 0 || tempCleaned > 0 || filesCleaned > 0) {
+      console.log(`[cleanup] 清理完成: DB过期文件=${dbCleaned}, 临时文件=${tempCleaned}, 过期附件=${filesCleaned}`);
     }
 
-    return { dbCleaned, fsCleaned: 0, tempCleaned };
+    return { dbCleaned, fsCleaned: filesCleaned, tempCleaned };
   }
 
   private async cleanExpiredFromDB(): Promise<number> {
@@ -137,6 +138,63 @@ export class FileCleanupService {
     } catch (err: any) {
       console.error('[cleanup] temp 清理失败:', err.message);
     }
+    return cleaned;
+  }
+
+  /** 清理超过保留期的上传附件（files/ 目录） */
+  private async cleanUploadedFiles(): Promise<number> {
+    const usersDir = path.join(this.config.dataRoot, 'users');
+    if (!fs.existsSync(usersDir)) return 0;
+
+    const cutoffMs = (this.config.cleanup.filesRetentionDays ?? 30) * 24 * 60 * 60 * 1000;
+    const cutoffTime = Date.now() - cutoffMs;
+    let cleaned = 0;
+
+    try {
+      const users = await fsp.readdir(usersDir, { withFileTypes: true });
+      for (const user of users) {
+        if (!user.isDirectory()) continue;
+        // 清理用户主 workspace 的 files/
+        const filesDir = path.join(usersDir, user.name, 'workspace', 'files');
+        cleaned += await this.cleanOldFilesInDir(filesDir, cutoffTime);
+        // 清理各 agent workspace 的 files/
+        const agentsDir = path.join(usersDir, user.name, 'agents');
+        if (fs.existsSync(agentsDir)) {
+          const agents = await fsp.readdir(agentsDir, { withFileTypes: true });
+          for (const agent of agents) {
+            if (!agent.isDirectory()) continue;
+            const agentFilesDir = path.join(agentsDir, agent.name, 'files');
+            cleaned += await this.cleanOldFilesInDir(agentFilesDir, cutoffTime);
+          }
+        }
+      }
+    } catch (err: any) {
+      console.error('[cleanup] files/ 清理失败:', err.message);
+    }
+    return cleaned;
+  }
+
+  /** 清理指定目录中超过截止时间的文件 */
+  private async cleanOldFilesInDir(dir: string, cutoffTime: number): Promise<number> {
+    if (!fs.existsSync(dir)) return 0;
+    let cleaned = 0;
+    try {
+      const entries = await fsp.readdir(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        const fullPath = path.join(dir, entry.name);
+        try {
+          const stat = await fsp.stat(fullPath);
+          if (stat.mtimeMs < cutoffTime) {
+            if (entry.isDirectory()) {
+              await fsp.rm(fullPath, { recursive: true, force: true });
+            } else {
+              await fsp.unlink(fullPath);
+            }
+            cleaned++;
+          }
+        } catch { /* 忽略单文件失败 */ }
+      }
+    } catch { /* 忽略目录读取失败 */ }
     return cleaned;
   }
 

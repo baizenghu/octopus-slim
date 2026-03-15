@@ -21,7 +21,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import type { GatewayConfig } from '../config';
 import { createAuthMiddleware, type AuthenticatedRequest } from '../middleware/auth';
-import type { AuthService } from '@octopus/auth';
+import { Role, type AuthService } from '@octopus/auth';
 import type { WorkspaceManager } from '@octopus/workspace';
 import type { AuditLogger } from '@octopus/audit';
 import { EngineAdapter } from '../services/EngineAdapter';
@@ -549,7 +549,9 @@ export function createChatRouter(
     if (slashResult !== null) {
       if (slashResult.passthrough) {
         // 有附带问题：先发偏好提示，再用剩余文本继续走正常对话流程
-        finalMessage = slashResult.passthrough;
+        // 保留附件前缀（如果有的话）
+        const attachmentPrefix = finalMessage.match(/^(\[用户上传了 \d+ 个文件，已保存到工作空间\]\n(?:- .+\n?)+\n)/);
+        finalMessage = attachmentPrefix ? attachmentPrefix[1] + slashResult.passthrough : slashResult.passthrough;
       } else {
         // 纯斜杠命令：直接返回结果
         res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' });
@@ -612,7 +614,14 @@ export function createChatRouter(
     const heartbeat = setInterval(() => {
       try { if (!streamDone) res.write(': heartbeat\n\n'); } catch { /* closed */ }
     }, 15000);
-    res.on('close', () => { streamDone = true; clearInterval(heartbeat); });
+    res.on('close', () => {
+      if (!streamDone) {
+        streamDone = true;
+        // 客户端断开连接，通知引擎终止生成
+        bridge?.chatAbort(sessionKey).catch(() => {});
+      }
+      clearInterval(heartbeat);
+    });
 
     // 构建企业级 extraSystemPrompt
     const extraPrompt = await buildEnterpriseSystemPrompt(user, agent);
@@ -648,6 +657,7 @@ export function createChatRouter(
           sessionKey,
           extraSystemPrompt: extraPrompt,
           deliver: false,
+          isAdmin: Array.isArray(user.roles) && user.roles.includes(Role.ADMIN),
         },
         (event) => {
           if (streamDone) return;
@@ -898,7 +908,7 @@ export function createChatRouter(
     try {
       await new Promise<void>((resolve, reject) => {
         bridge!.callAgent(
-          { message: finalMsgNonStream, agentId: nativeAgentId, sessionKey, extraSystemPrompt: extraPrompt, deliver: false },
+          { message: finalMsgNonStream, agentId: nativeAgentId, sessionKey, extraSystemPrompt: extraPrompt, deliver: false, isAdmin: Array.isArray(user.roles) && user.roles.includes(Role.ADMIN) },
           (event) => {
             // native data.text 是累积全量文本（不是增量片段），直接替换
             if (event.type === 'text_delta') fullContent = event.content || fullContent;
@@ -950,7 +960,54 @@ export function createChatRouter(
     }
     try {
       const result = await bridge.modelsList() as any;
-      res.json({ models: result?.models || result || [] });
+      const allModels: any[] = result?.models || result || [];
+
+      // 从 octopus.json 读取已配置的 providers，只返回这些 provider 的模型
+      const { config: octopusCfg } = await bridge.configGetParsed();
+      const configuredProviders = new Set<string>();
+      // models.providers 中显式配置的
+      const providers = (octopusCfg as any)?.models?.providers;
+      if (providers && typeof providers === 'object') {
+        for (const key of Object.keys(providers)) {
+          configuredProviders.add(key);
+        }
+      }
+      // agents.defaults.model 中引用的 provider
+      const defaultModel = (octopusCfg as any)?.agents?.defaults?.model;
+      const primaryStr = typeof defaultModel === 'string' ? defaultModel : defaultModel?.primary;
+      if (primaryStr && primaryStr.includes('/')) {
+        configuredProviders.add(primaryStr.split('/')[0]);
+      }
+      const fallbacks: string[] = defaultModel?.fallbacks || [];
+      for (const fb of fallbacks) {
+        if (fb && fb.includes('/')) configuredProviders.add(fb.split('/')[0]);
+      }
+
+      // 过滤：只保留已配置 provider 的模型
+      const filtered = configuredProviders.size > 0
+        ? allModels.filter((m: any) => {
+            const provider = m.provider || (m.id?.includes('/') ? m.id.split('/')[0] : '');
+            return configuredProviders.has(provider);
+          })
+        : allModels;
+
+      // 补充：octopus.json 中自定义 provider 的模型可能不在引擎列表中，手动添加
+      const existingIds = new Set(filtered.map((m: any) => `${m.provider}/${m.id}`));
+      if (providers && typeof providers === 'object') {
+        for (const [providerKey, providerCfg] of Object.entries(providers)) {
+          const cfg = providerCfg as any;
+          const modelEntries: any[] = cfg?.models || [];
+          for (const entry of modelEntries) {
+            const modelId = typeof entry === 'string' ? entry : entry?.id;
+            const modelName = typeof entry === 'string' ? entry : (entry?.name || entry?.id);
+            if (modelId && !existingIds.has(`${providerKey}/${modelId}`)) {
+              filtered.push({ id: modelId, name: modelName, provider: providerKey });
+            }
+          }
+        }
+      }
+
+      res.json({ models: filtered });
     } catch {
       res.json({ models: [] });
     }
@@ -1221,13 +1278,14 @@ export function createChatRouter(
         content = String(firstUser.content || '');
       }
 
-      // 剥离记忆系统注入的标签和时间戳前缀（与 history 路由相同的净化逻辑）
+      // 剥离记忆系统注入的标签、时间戳前缀和附件前缀（与 history 路由相同的净化逻辑）
       content = content
         .replace(/<relevant-memories>[\s\S]*?<\/relevant-memories>/g, '')
         .replace(/\[UNTRUSTED DATA[\s\S]*?\[END UNTRUSTED DATA\]/g, '')
         .replace(/^\[(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s\d{4}-\d{2}-\d{2}[^\]]*\]\s*/m, '')
         .replace(/^\[请(?:使用|严格按照|优先使用)\s+[^\]]*(?:\]|\S*…)\s*/m, '')
         .replace(/^\/lesson\s+/m, '')
+        .replace(/^\[用户上传了 \d+ 个文件，已保存到工作空间\]\n(?:- .+\n?)+\n?/m, '')
         .trim();
 
       if (!content) return null;
@@ -1329,6 +1387,35 @@ export function createChatRouter(
     try {
       const result = await bridge.sessionsCompact(sessionId, req.body.maxLines);
       res.json(result);
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /**
+   * 终止正在进行的对话
+   */
+  router.post('/sessions/:sessionId/abort', authMiddleware, async (req: AuthenticatedRequest, res, next) => {
+    const user = req.user!;
+    const sessionId = req.params.sessionId;
+    if (!bridge?.isConnected) {
+      res.status(503).json({ error: 'Native gateway not connected' });
+      return;
+    }
+    try {
+      let sessionKey = sessionId;
+      if (!sessionId.startsWith('agent:')) {
+        // agentId 可能是 DB id，需要查出 name
+        const reqAgentId = req.query.agentId as string | undefined;
+        const agent = await loadAgent(user.id, reqAgentId);
+        const agentName = agent?.name || 'default';
+        sessionKey = EngineAdapter.userSessionKey(user.id, agentName, sessionId);
+      } else if (!validateSessionOwnership(sessionId, user.id)) {
+        res.status(403).json({ error: 'Access denied' });
+        return;
+      }
+      const result = await bridge.chatAbort(sessionKey);
+      res.json({ success: true, result });
     } catch (err) {
       next(err);
     }

@@ -17,6 +17,7 @@ import {
   Zap,
   Database,
   Loader2,
+  ChevronDown,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { adminApi, type AgentInfo, type SkillInfo, type McpServerInfo } from '../api';
@@ -115,6 +116,8 @@ export default function AgentsPage({ onConfigAgent }: AgentsPageProps) {
   const [formIdentityName, setFormIdentityName] = useState('');
   const [formIdentityEmoji, setFormIdentityEmoji] = useState('');
   const [formModel, setFormModel] = useState('');
+  const [availableModels, setAvailableModels] = useState<{ id: string; provider?: string }[]>([]);
+  const [modelDropdownOpen, setModelDropdownOpen] = useState(false);
   const [formEnabled, setFormEnabled] = useState(true);
   const [formToolsFilterEnabled, setFormToolsFilterEnabled] = useState(true);
   const [formToolsFilter, setFormToolsFilter] = useState<string[]>([]);
@@ -160,6 +163,24 @@ export default function AgentsPage({ onConfigAgent }: AgentsPageProps) {
 
   useEffect(() => { loadData(); }, [loadData]);
 
+  const refreshModels = useCallback(() => {
+    adminApi.getChatModels()
+      .then(data => setAvailableModels(data.models || []))
+      .catch(() => setAvailableModels([]));
+  }, []);
+
+  useEffect(() => {
+    if (!modelDropdownOpen) return;
+    const handler = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('[data-model-dropdown]')) {
+        setModelDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [modelDropdownOpen]);
+
   const resetForm = () => {
     setFormName('');
     setFormIdentityName('');
@@ -179,6 +200,7 @@ export default function AgentsPage({ onConfigAgent }: AgentsPageProps) {
   const openCreateModal = async () => {
     setEditingAgent(null);
     resetForm();
+    refreshModels();
     // 新建 agent 权限默认全部禁用，仅加载可用选项列表
     try {
       const [skillsRes, mcpRes] = await Promise.all([
@@ -195,6 +217,7 @@ export default function AgentsPage({ onConfigAgent }: AgentsPageProps) {
   };
 
   const openEditModal = (agent: AgentInfo) => {
+    refreshModels();
     setEditingAgent(agent);
     setFormName(agent.name);
     setFormIdentityName(agent.identity?.name || '');
@@ -529,13 +552,45 @@ export default function AgentsPage({ onConfigAgent }: AgentsPageProps) {
 
               {/* 模型 */}
               <div className="space-y-2">
-                <Label htmlFor="agent-model">模型 (留空使用全局默认)</Label>
-                <Input
-                  id="agent-model"
-                  placeholder="如: deepseek-chat, deepseek-coder"
-                  value={formModel}
-                  onChange={(e) => setFormModel(e.target.value)}
-                />
+                <Label htmlFor="agent-model">模型 (留空跟随全局默认)</Label>
+                <div className="relative" data-model-dropdown>
+                  <Input
+                    id="agent-model"
+                    placeholder="留空跟随全局默认"
+                    value={formModel}
+                    onChange={(e) => setFormModel(e.target.value)}
+                    className="pr-10"
+                  />
+                  <button
+                    type="button"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    onClick={() => setModelDropdownOpen(!modelDropdownOpen)}
+                  >
+                    <ChevronDown className="h-4 w-4" />
+                  </button>
+                  {modelDropdownOpen && (
+                    <div className="absolute z-50 mt-1 w-full rounded-md border bg-popover shadow-md">
+                      <div
+                        className="cursor-pointer px-3 py-2 text-sm text-muted-foreground hover:bg-accent"
+                        onClick={() => { setFormModel(''); setModelDropdownOpen(false); }}
+                      >
+                        （留空）跟随全局默认
+                      </div>
+                      {availableModels.map((m) => {
+                        const fullId = m.provider ? `${m.provider}/${m.id}` : m.id;
+                        return (
+                          <div
+                            key={fullId}
+                            className="cursor-pointer px-3 py-2 text-sm hover:bg-accent"
+                            onClick={() => { setFormModel(fullId); setModelDropdownOpen(false); }}
+                          >
+                            {fullId}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
               </div>
 
               <Separator />

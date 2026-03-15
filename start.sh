@@ -33,6 +33,10 @@ set +a
 GATEWAY_PORT="${GATEWAY_PORT:-18790}"
 ADMIN_PORT="${ADMIN_CONSOLE_PORT:-3001}"
 
+# 引擎 state 目录指向项目内（不使用 ~/.octopus/）
+export OCTOPUS_STATE_DIR="$ROOT_DIR/.octopus-state"
+export OCTOPUS_HOME="$ROOT_DIR/.octopus-state"
+
 mkdir -p "$LOG_DIR" "$PID_DIR"
 
 # ─── 杀掉一个服务（按进程组） ─────────────────────────────

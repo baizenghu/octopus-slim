@@ -212,7 +212,6 @@ export function createCronTool(opts?: CronToolOptions, deps?: CronToolDeps): Any
   return {
     label: "Cron",
     name: "cron",
-    ownerOnly: true,
     description: `Manage Gateway cron jobs (status/list/add/update/remove/run/runs) and send wake events.
 
 ACTIONS:

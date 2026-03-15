@@ -80,6 +80,7 @@ import {
   FileText,
   Clock,
   BellRing,
+  Square,
 } from 'lucide-react';
 import { OctopusIcon } from '@/components/OctopusIcon';
 
@@ -113,6 +114,31 @@ interface Attachment {
   content: string;  // 文本内容或 base64
   type: string;     // MIME type
   size: number;
+}
+
+/** 将后端附件格式还原为前端显示格式 */
+function restoreAttachmentDisplay(content: string): string {
+  // 匹配: [用户上传了 N 个文件，已保存到工作空间]\n- files/xxx.pdf\n- files/yyy.docx\n\n实际消息
+  const match = content.match(/^\[用户上传了 \d+ 个文件，已保存到工作空间\]\n((?:- .+\n?)+)\n?([\s\S]*)$/);
+  if (!match) return content;
+  const fileLines = match[1].trim().split('\n');
+  const userMsg = (match[2] || '').trim();
+  const attachmentTags = fileLines
+    .map(line => {
+      const filePath = line.replace(/^- /, '').trim();
+      const fileName = filePath.split('/').pop() || filePath;
+      return `[附件] ${fileName}`;
+    })
+    .join('\n');
+  return userMsg ? `${attachmentTags}\n${userMsg}` : attachmentTags;
+}
+
+/** 清理会话标题中的附件前缀 */
+function cleanSessionTitle(title: string): string {
+  return title
+    .replace(/^\[用户上传了 \d+ 个文件，已保存到工作空间\]\s*(?:- .+\s*)*/, '')
+    .replace(/^\[附件\]\s*.+\n?/gm, '')
+    .trim() || title;
 }
 
 /** 斜杠命令菜单项 */
@@ -165,6 +191,7 @@ export default function ChatPage() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const delegationPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const currentSessionRef = useRef<string>('');
+  const streamAbortRef = useRef<AbortController | null>(null);
   // 提醒
   const [activeReminder, setActiveReminder] = useState<{ id: string; title: string; text?: string } | null>(null);
 
@@ -231,7 +258,10 @@ export default function ChatPage() {
   const loadSessions = useCallback(async () => {
     try {
       const res = await adminApi.getSessions(currentAgentId);
-      setSessions(res.sessions);
+      setSessions(res.sessions.map(s => ({
+        ...s,
+        title: cleanSessionTitle(s.title),
+      })));
     } catch { /* ignore */ }
   }, [currentAgentId]);
 
@@ -244,26 +274,28 @@ export default function ChatPage() {
       const res = await adminApi.getChatHistory(sessionId, currentAgentId);
       setMessages(res.messages.map(m => ({
         role: m.role as 'user' | 'assistant',
-        content: m.content,
+        content: m.role === 'user' ? restoreAttachmentDisplay(m.content) : m.content,
         thinking: m.thinking,
         ts: m.ts,
       })));
     } catch { setMessages([]); }
   }, [currentAgentId]);
 
-  // 切换 Agent
+  // 切换 Agent（输出中禁止切换）
   const switchAgent = useCallback((agentId: string) => {
+    if (isStreaming) return;
     setCurrentAgentId(agentId);
     setCurrentSession('');
     setMessages([]);
-  }, []);
+  }, [isStreaming]);
 
-  // 切换会话
+  // 切换会话（输出中禁止切换）
   const switchSession = useCallback((sessionId: string) => {
+    if (isStreaming) return;
     setCurrentSession(sessionId);
     loadHistory(sessionId);
     setShowSearch(false);
-  }, [loadHistory]);
+  }, [loadHistory, isStreaming]);
 
   // 创建新会话
   const createSession = () => {
@@ -503,6 +535,9 @@ export default function ChatPage() {
       }));
     }
 
+    const abortController = new AbortController();
+    streamAbortRef.current = abortController;
+
     try {
       const res = await fetch('/api/chat/stream', {
         method: 'POST',
@@ -511,6 +546,7 @@ export default function ChatPage() {
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify(requestBody),
+        signal: abortController.signal,
       });
 
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -646,16 +682,50 @@ export default function ChatPage() {
         }
       }, 800);
     } catch (err: any) {
-      setMessages((prev) => {
-        const updated = [...prev];
-        const last = updated[updated.length - 1];
-        if (last.role === 'assistant') {
-          updated[updated.length - 1] = { ...last, content: `错误：${err.message}` };
-        }
-        return updated;
-      });
+      if (err.name === 'AbortError') {
+        // 用户主动终止，不显示错误
+        setMessages((prev) => {
+          const updated = [...prev];
+          const last = updated[updated.length - 1];
+          if (last.role === 'assistant' && !last.content) {
+            updated.pop(); // 移除空的 assistant 消息
+          }
+          return updated;
+        });
+      } else {
+        setMessages((prev) => {
+          const updated = [...prev];
+          const last = updated[updated.length - 1];
+          if (last.role === 'assistant') {
+            updated[updated.length - 1] = { ...last, content: `错误：${err.message}` };
+          }
+          return updated;
+        });
+      }
     } finally {
+      streamAbortRef.current = null;
       setIsStreaming(false);
+    }
+  };
+
+  /** 终止正在进行的对话 */
+  const abortChat = () => {
+    // 1. 中断前端 SSE 流（触发后端 res.on('close') → chatAbort）
+    streamAbortRef.current?.abort();
+
+    // 2. 显式调用后端 abort API（双保险）
+    if (currentSession) {
+      const token = localStorage.getItem('admin_token');
+      fetch(`/api/chat/sessions/${encodeURIComponent(currentSession)}/abort${currentAgentId ? `?agentId=${encodeURIComponent(currentAgentId)}` : ''}`, {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      }).catch(() => {});
+    }
+
+    // 3. 清理委派轮询
+    if (delegationPollRef.current) {
+      clearInterval(delegationPollRef.current);
+      delegationPollRef.current = null;
     }
   };
 
@@ -730,8 +800,9 @@ export default function ChatPage() {
               <Select
                 value={currentAgentId || ''}
                 onValueChange={(val) => switchAgent(val)}
+                disabled={isStreaming}
               >
-                <SelectTrigger className="w-full bg-white">
+                <SelectTrigger className="w-full bg-white" disabled={isStreaming}>
                   <SelectValue placeholder="选择 Agent" />
                 </SelectTrigger>
                 <SelectContent>
@@ -969,7 +1040,7 @@ export default function ChatPage() {
 
                       {/* Message bubble */}
                       <div className={cn('flex flex-col w-full max-w-[90%] lg:max-w-[88%] min-w-0', msg.role === 'user' ? 'items-end ml-auto' : 'items-start')}>
-                        <span className="text-xs text-muted-foreground mb-1">
+                        <span className="text-[17px] md:text-lg text-muted-foreground mb-1 font-medium">
                           {msg.role === 'user' ? (user?.username || '你') : agentName}
                         </span>
                         <div
@@ -1127,14 +1198,30 @@ export default function ChatPage() {
                     className="min-h-[36px] max-h-[200px] resize-none border-0 shadow-none focus-visible:ring-0 p-0 text-sm"
                   />
 
-                  <Button
-                    size="icon"
-                    className="h-8 w-8 shrink-0 rounded-lg"
-                    onClick={() => sendMessage()}
-                    disabled={isStreaming || (!input.trim() && attachments.length === 0)}
-                  >
-                    <Send className="h-4 w-4" />
-                  </Button>
+                  {isStreaming ? (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          size="icon"
+                          variant="destructive"
+                          className="h-8 w-8 shrink-0 rounded-lg"
+                          onClick={() => abortChat()}
+                        >
+                          <Square className="h-3.5 w-3.5" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>终止对话</TooltipContent>
+                    </Tooltip>
+                  ) : (
+                    <Button
+                      size="icon"
+                      className="h-8 w-8 shrink-0 rounded-lg"
+                      onClick={() => sendMessage()}
+                      disabled={!input.trim() && attachments.length === 0}
+                    >
+                      <Send className="h-4 w-4" />
+                    </Button>
+                  )}
                 </div>
                 <p className="text-[11px] text-muted-foreground mt-1.5 text-center">
                   AI 可能会犯错，请核实重要信息

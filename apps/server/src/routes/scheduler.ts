@@ -17,11 +17,6 @@ import { createAuthMiddleware, type AuthenticatedRequest } from '../middleware/a
 import { EngineAdapter } from '../services/EngineAdapter';
 import type { EngineAdapter as BridgeType } from '../services/EngineAdapter';
 
-// ---- 心跳模型配置 ----
-
-/** 心跳巡检使用的模型标识（native gateway heartbeat.model 字段） */
-const HEARTBEAT_MODEL = 'custom-api-deepseek-com/deepseek-chat';
-
 function normalizeHeartbeatContent(content: string): string {
   return content.trim();
 }
@@ -220,9 +215,9 @@ export function createSchedulerRouter(
         const agentsList: any[] = (config as any).agents?.list || [];
         const targetAgent = agentsList.find((a: any) => a.id === nativeAgentId);
         if (targetAgent) {
-          targetAgent.heartbeat = { every, prompt: 'HEARTBEAT.md', model: HEARTBEAT_MODEL };
+          targetAgent.heartbeat = { every, prompt: 'HEARTBEAT.md' };
         } else {
-          agentsList.push({ id: nativeAgentId, heartbeat: { every, prompt: 'HEARTBEAT.md', model: HEARTBEAT_MODEL } });
+          agentsList.push({ id: nativeAgentId, heartbeat: { every, prompt: 'HEARTBEAT.md' } });
         }
         (config as any).agents = { ...(config as any).agents, list: agentsList };
         await bridge.configApplyFull(config);
@@ -380,12 +375,12 @@ export function createSchedulerRouter(
               // 禁用：删除 heartbeat 字段（native gateway 不认识 'disabled'）
               delete nextTargetAgent.heartbeat;
             } else {
-              nextTargetAgent.heartbeat = { every: heartbeatEvery, prompt: 'HEARTBEAT.md', model: HEARTBEAT_MODEL };
+              nextTargetAgent.heartbeat = { every: heartbeatEvery, prompt: 'HEARTBEAT.md' };
             }
           } else if (heartbeatEvery !== 'disabled') {
             agentsList.push({
               id: nextNativeAgentId,
-              heartbeat: { every: heartbeatEvery, prompt: 'HEARTBEAT.md', model: HEARTBEAT_MODEL },
+              heartbeat: { every: heartbeatEvery, prompt: 'HEARTBEAT.md' },
             });
           }
           (config as any).agents = { ...(config as any).agents, list: agentsList };

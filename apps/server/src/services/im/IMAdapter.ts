@@ -26,4 +26,6 @@ export interface IMAdapter {
   onMessage(handler: (msg: IMIncomingMessage) => void): void;
   /** 尝试删除/撤回指定消息（可选实现，用于安全场景如删除含密码的消息） */
   deleteMessage?(messageId: string): Promise<void>;
+  /** 发送文件（可选实现，平台不支持时回退到 sendText 发文件名） */
+  sendFile?(imUserId: string, filePath: string, fileName: string): Promise<void>;
 }

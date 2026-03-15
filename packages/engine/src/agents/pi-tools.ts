@@ -63,10 +63,8 @@ function isOpenAIProvider(provider?: string) {
   return normalized === "openai" || normalized === "openai-codex";
 }
 
-const TOOL_DENY_BY_MESSAGE_PROVIDER: Readonly<Record<string, readonly string[]>> = {
-  voice: ["tts"],
-};
-const TOOL_DENY_FOR_XAI_PROVIDERS = new Set(["web_search"]);
+const TOOL_DENY_BY_MESSAGE_PROVIDER: Readonly<Record<string, readonly string[]>> = {};
+const TOOL_DENY_FOR_XAI_PROVIDERS = new Set<string>();
 
 function normalizeMessageProvider(messageProvider?: string): string | undefined {
   const normalized = messageProvider?.trim().toLowerCase();
@@ -473,8 +471,6 @@ export function createOctopusCodingTools(options?: {
     // Channel docking: include channel-defined agent tools (login, etc.).
     ...listChannelAgentTools({ cfg: options?.config }),
     ...createOctopusTools({
-      sandboxBrowserBridgeUrl: sandbox?.browser?.bridgeUrl,
-      allowHostBrowserControl: sandbox ? sandbox.browserAllowHostControl : true,
       agentSessionKey: options?.sessionKey,
       agentChannel: resolveGatewayMessageChannel(options?.messageProvider),
       agentAccountId: options?.agentAccountId,

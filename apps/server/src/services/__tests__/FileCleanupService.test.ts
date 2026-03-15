@@ -7,6 +7,7 @@ describe('FileCleanupService', () => {
       dataRoot: '/tmp/test',
       cleanup: {
         outputRetentionDays: 7,
+        filesRetentionDays: 30,
         tempRetentionHours: 1,
         cleanupIntervalMinutes: 30,
         orphanDetectionEnabled: false,

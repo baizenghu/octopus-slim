@@ -125,6 +125,62 @@ export function createAuthRouter(authService: AuthService, workspaceManager: Wor
   });
 
   /**
+   * 修改密码（当前用户）
+   */
+  router.put('/password', authMiddleware, async (req: AuthenticatedRequest, res) => {
+    try {
+      const user = req.user!;
+      const { oldPassword, newPassword } = req.body;
+
+      if (!oldPassword || !newPassword) {
+        res.status(400).json({ error: '请提供当前密码和新密码' });
+        return;
+      }
+
+      if (newPassword.length < 6) {
+        res.status(400).json({ error: '新密码长度至少 6 位' });
+        return;
+      }
+
+      // 验证旧密码
+      try {
+        await authService.login(user.username!, oldPassword);
+      } catch {
+        res.status(401).json({ error: '当前密码不正确' });
+        return;
+      }
+
+      // bcrypt 哈希新密码
+      const bcryptModule = await import('bcryptjs');
+      const bcrypt = (bcryptModule as any).default || bcryptModule;
+      const hashedPassword = await bcrypt.hash(newPassword, 12);
+
+      // 更新数据库
+      if (prisma) {
+        await prisma.user.update({
+          where: { userId: user.id },
+          data: { passwordHash: hashedPassword },
+        });
+      }
+
+      // 同步到 MockLDAP
+      authService.registerMockUser(
+        {
+          username: user.username!,
+          email: user.email || '',
+          displayName: user.username!,
+          department: user.department || '',
+        },
+        hashedPassword,
+      );
+
+      res.json({ message: '密码修改成功' });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || '密码修改失败' });
+    }
+  });
+
+  /**
    * 获取当前用户信息
    */
   router.get('/me', authMiddleware, async (req: AuthenticatedRequest, res) => {

@@ -31,6 +31,8 @@ export interface AgentCallParams {
   label?: string;
   deliver?: boolean;
   attachments?: Array<{ type?: string; mimeType?: string; fileName?: string; content?: unknown }>;
+  /** Whether the sender is an admin user (controls owner-only tools like gateway). */
+  isAdmin?: boolean;
 }
 
 export interface AgentStreamEvent {
@@ -232,10 +234,12 @@ export class EngineAdapter extends EventEmitter {
     this.on('_agent_async_error', asyncErrorHandler);
 
     try {
+      const { isAdmin, ...rpcParams } = params;
       const result = await this.call<{ runId?: string; accepted?: boolean }>('agent', {
-        ...params,
+        ...rpcParams,
         idempotencyKey,
         deliver: params.deliver ?? false,
+        senderIsOwner: isAdmin === true,
       });
 
       serverRunId = result.runId || idempotencyKey;

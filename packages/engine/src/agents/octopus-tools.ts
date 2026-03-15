@@ -6,14 +6,11 @@ import type { SandboxFsBridge } from "./sandbox/fs-bridge.js";
 import type { SpawnedToolContext } from "./spawned-context.js";
 import type { ToolFsPolicy } from "./tool-fs-policy.js";
 import { createAgentsListTool } from "./tools/agents-list-tool.js";
-import { createBrowserTool } from "./tools/browser-tool.js";
-import { createCanvasTool } from "./tools/canvas-tool.js";
 import type { AnyAgentTool } from "./tools/common.js";
 import { createCronTool } from "./tools/cron-tool.js";
 import { createGatewayTool } from "./tools/gateway-tool.js";
 import { createImageTool } from "./tools/image-tool.js";
 import { createMessageTool } from "./tools/message-tool.js";
-import { createNodesTool } from "./tools/nodes-tool.js";
 import { createPdfTool } from "./tools/pdf-tool.js";
 import { createSessionStatusTool } from "./tools/session-status-tool.js";
 import { createSessionsHistoryTool } from "./tools/sessions-history-tool.js";
@@ -21,14 +18,10 @@ import { createSessionsListTool } from "./tools/sessions-list-tool.js";
 import { createSessionsSendTool } from "./tools/sessions-send-tool.js";
 import { createSessionsSpawnTool } from "./tools/sessions-spawn-tool.js";
 import { createSubagentsTool } from "./tools/subagents-tool.js";
-import { createTtsTool } from "./tools/tts-tool.js";
-import { createWebFetchTool, createWebSearchTool } from "./tools/web-tools.js";
 import { resolveWorkspaceRoot } from "./workspace-dir.js";
 
 export function createOctopusTools(
   options?: {
-    sandboxBrowserBridgeUrl?: string;
-    allowHostBrowserControl?: boolean;
     agentSessionKey?: string;
     agentChannel?: GatewayMessageChannel;
     agentAccountId?: string;
@@ -55,8 +48,6 @@ export function createOctopusTools(
     hasRepliedRef?: { value: boolean };
     /** If true, the model has native vision capability */
     modelHasVision?: boolean;
-    /** If true, nodes action="invoke" can call media-returning commands directly. */
-    allowMediaInvokeCommands?: boolean;
     /** Explicit agent ID override for cron/hook sessions. */
     requesterAgentIdOverride?: string;
     /** Require explicit message targets (no implicit last-route sends). */
@@ -97,14 +88,6 @@ export function createOctopusTools(
         fsPolicy: options?.fsPolicy,
       })
     : null;
-  const webSearchTool = createWebSearchTool({
-    config: options?.config,
-    sandboxed: options?.sandboxed,
-  });
-  const webFetchTool = createWebFetchTool({
-    config: options?.config,
-    sandboxed: options?.sandboxed,
-  });
   const messageTool = options?.disableMessageTool
     ? null
     : createMessageTool({
@@ -122,30 +105,10 @@ export function createOctopusTools(
         requesterSenderId: options?.requesterSenderId ?? undefined,
       });
   const tools: AnyAgentTool[] = [
-    createBrowserTool({
-      sandboxBridgeUrl: options?.sandboxBrowserBridgeUrl,
-      allowHostControl: options?.allowHostBrowserControl,
-      agentSessionKey: options?.agentSessionKey,
-    }),
-    createCanvasTool({ config: options?.config }),
-    createNodesTool({
-      agentSessionKey: options?.agentSessionKey,
-      agentChannel: options?.agentChannel,
-      agentAccountId: options?.agentAccountId,
-      currentChannelId: options?.currentChannelId,
-      currentThreadTs: options?.currentThreadTs,
-      config: options?.config,
-      modelHasVision: options?.modelHasVision,
-      allowMediaInvokeCommands: options?.allowMediaInvokeCommands,
-    }),
     createCronTool({
       agentSessionKey: options?.agentSessionKey,
     }),
     ...(messageTool ? [messageTool] : []),
-    createTtsTool({
-      agentChannel: options?.agentChannel,
-      config: options?.config,
-    }),
     createGatewayTool({
       agentSessionKey: options?.agentSessionKey,
       config: options?.config,
@@ -187,8 +150,6 @@ export function createOctopusTools(
       agentSessionKey: options?.agentSessionKey,
       config: options?.config,
     }),
-    ...(webSearchTool ? [webSearchTool] : []),
-    ...(webFetchTool ? [webFetchTool] : []),
     ...(imageTool ? [imageTool] : []),
     ...(pdfTool ? [pdfTool] : []),
   ];

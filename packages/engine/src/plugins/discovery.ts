@@ -433,7 +433,7 @@ function discoverInDirectory(params: {
         workspaceDir: params.workspaceDir,
       });
     }
-    if (!entry.isDirectory()) {
+    if (!entry.isDirectory() && !entry.isSymbolicLink()) {
       continue;
     }
     if (shouldIgnoreScannedDirectory(entry.name)) {

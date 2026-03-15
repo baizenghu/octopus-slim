@@ -658,6 +658,10 @@ class AdminApi {
     return this.request<{ ok: boolean }>(`/agents/${id}`, { method: 'DELETE' });
   }
 
+  async getChatModels(): Promise<{ models: { id: string; provider?: string; name?: string }[] }> {
+    return this.request('/chat/models');
+  }
+
   async setDefaultAgent(id: string) {
     return this.request<{ agent: AgentInfo }>(`/agents/${id}/default`, { method: 'POST' });
   }

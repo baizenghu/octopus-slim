@@ -268,8 +268,10 @@ export const agentHandlers: GatewayRequestHandlers = {
       spawnedBy?: string;
       inputProvenance?: InputProvenance;
       workspaceDir?: string;
+      /** Enterprise gateway override: explicitly set senderIsOwner (bypasses scope inference). */
+      senderIsOwner?: boolean;
     };
-    const senderIsOwner = resolveSenderIsOwnerFromClient(client);
+    const senderIsOwner = request.senderIsOwner ?? resolveSenderIsOwnerFromClient(client);
     const cfg = loadConfig();
     const idem = request.idempotencyKey;
     const normalizedSpawned = normalizeSpawnedRunMetadata({
