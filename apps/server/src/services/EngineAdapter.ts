@@ -267,7 +267,7 @@ export class EngineAdapter extends EventEmitter {
       case 'tool':
         return {
           type: 'tool_call',
-          toolName: data.toolName as string,
+          toolName: (data.toolName || (data as any).name) as string,
           toolArgs: typeof data.args === 'string' ? data.args : JSON.stringify(data.args ?? ''),
           toolResult: typeof data.result === 'string' ? data.result : JSON.stringify(data.result ?? ''),
           runId,

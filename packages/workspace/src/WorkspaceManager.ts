@@ -224,7 +224,30 @@ export class WorkspaceManager {
       throw new Error('Security violation: attempted to delete path outside users directory');
     }
 
-    await fsp.rm(userRoot, { recursive: true, force: true });
+    try {
+      await fsp.rm(userRoot, { recursive: true, force: true });
+    } catch (err: any) {
+      if (err.code === 'EACCES' || err.code === 'EPERM') {
+        // sandbox 容器以 root/uid=2000 创建的文件，当前进程无权删除
+        // 借助 Docker 容器以 root 身份清理
+        const { execFileSync } = await import('child_process');
+        try {
+          const image = process.env.OCTOPUS_SANDBOX_IMAGE || 'octopus-sandbox:enterprise';
+          execFileSync('docker', [
+            'run', '--rm', '--user', 'root',
+            '-v', `${userRoot}:/target`,
+            image,
+            'bash', '-c', 'rm -rf /target/* /target/.[!.]*',
+          ], { timeout: 15000 });
+          // 容器清理了挂载内容，宿主目录本身用 rmdir 清除
+          await fsp.rmdir(userRoot).catch(() => {});
+        } catch (dockerErr: any) {
+          throw new Error(`Workspace cleanup failed (EACCES + Docker fallback failed): ${dockerErr.message}`);
+        }
+      } else {
+        throw err;
+      }
+    }
   }
 
   /**

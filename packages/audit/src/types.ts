@@ -31,6 +31,59 @@ export enum AuditAction {
   ADMIN_USER_UPDATE = 'admin:user:update',
   ADMIN_USER_DELETE = 'admin:user:delete',
   ADMIN_PERMISSION_GRANT = 'admin:permission:grant',
+  ADMIN_USER_UNLOCK = 'admin:user:unlock',
+  AUTH_PASSWORD_CHANGE = 'auth:password:change',
+
+  // Agent 管理
+  AGENT_CREATE = 'agent:create',
+  AGENT_UPDATE = 'agent:update',
+  AGENT_DELETE = 'agent:delete',
+  AGENT_CONFIG_UPDATE = 'agent:config:update',
+  AGENT_SET_DEFAULT = 'agent:set-default',
+
+  // MCP 管理
+  MCP_SERVER_CREATE = 'mcp:server:create',
+  MCP_SERVER_UPDATE = 'mcp:server:update',
+  MCP_SERVER_DELETE = 'mcp:server:delete',
+  MCP_SERVER_TEST = 'mcp:server:test',
+  MCP_PERSONAL_CREATE = 'mcp:personal:create',
+  MCP_PERSONAL_UPLOAD = 'mcp:personal:upload',
+  MCP_PERSONAL_UPDATE = 'mcp:personal:update',
+  MCP_PERSONAL_DELETE = 'mcp:personal:delete',
+
+  // Skill 管理
+  SKILL_UPLOAD = 'skill:upload',
+  SKILL_UPDATE = 'skill:update',
+  SKILL_DELETE = 'skill:delete',
+  SKILL_APPROVE = 'skill:approve',
+  SKILL_REJECT = 'skill:reject',
+  SKILL_ENABLE = 'skill:enable',
+  SKILL_PERSONAL_UPLOAD = 'skill:personal:upload',
+  SKILL_PERSONAL_DELETE = 'skill:personal:delete',
+
+  // 文件操作
+  FILE_UPLOAD = 'file:upload',
+  FILE_DELETE = 'file:delete',
+
+  // 定时任务
+  SCHEDULER_TASK_CREATE = 'scheduler:task:create',
+  SCHEDULER_TASK_UPDATE = 'scheduler:task:update',
+  SCHEDULER_TASK_DELETE = 'scheduler:task:delete',
+  SCHEDULER_TASK_EXECUTE = 'scheduler:task:execute',
+
+  // 配额管理
+  QUOTA_UPDATE = 'quota:update',
+
+  // 数据库连接
+  DB_CONNECTION_CREATE = 'db:connection:create',
+  DB_CONNECTION_UPDATE = 'db:connection:update',
+  DB_CONNECTION_DELETE = 'db:connection:delete',
+
+  // IM 操作
+  IM_BIND = 'im:bind',
+  IM_BIND_FAILED = 'im:bind:failed',
+  IM_UNBIND = 'im:unbind',
+  IM_AGENT_SWITCH = 'im:agent:switch',
 
   // 数据操作
   DATA_EXPORT = 'data:export',

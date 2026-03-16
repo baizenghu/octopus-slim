@@ -148,14 +148,15 @@ export function createAgentsRouter(
         }
       }
 
-      // toolsFilter → 引擎 tools.allow 硬限制
+      // toolsFilter → 引擎 tools.allow 硬限制（需映射企业工具名 → 引擎原生工具名）
       if (opts.toolsFilter !== undefined) {
         const tf = opts.toolsFilter;
-        // 构建 allow 列表：toolsFilter 白名单 + 始终允许 plugin 工具（run_skill 等）
+        // 构建 allow 列表：toolsFilter 白名单（映射后） + 始终允许 plugin 工具（run_skill 等）
         let newAllow: string[] | undefined;
         if (Array.isArray(tf) && tf.length > 0) {
-          // 白名单模式：只允许指定的工具 + plugin 工具组
-          newAllow = [...tf, 'group:plugins', 'memory_search', 'memory_get', 'sessions_list', 'sessions_history', 'sessions_send', 'sessions_spawn', 'agents_list', 'cron', 'image'];
+          // 白名单模式：映射为引擎原生工具名 + plugin 工具组
+          const engineTools = mapToolsToEngine(tf);
+          newAllow = [...engineTools, 'group:plugins', 'memory_search', 'memory_get', 'sessions_list', 'sessions_history', 'sessions_send', 'sessions_spawn', 'agents_list', 'cron', 'image'];
         } else {
           // 空数组 = 全部禁用工作空间工具，但保留 plugin/memory/session 等非文件工具
           newAllow = ['group:plugins', 'memory_search', 'memory_get', 'sessions_list', 'sessions_history', 'sessions_send', 'sessions_spawn', 'agents_list', 'cron', 'image'];
@@ -187,13 +188,30 @@ export function createAgentsRouter(
 
     // 专业 agent 使用独立工作空间，default agent 使用用户主 workspace
     const workspacePath = await workspaceManager.initAgentWorkspace(userId, agentName);
-    try {
-      await bridge.agentsCreate({ name: nativeAgentId, workspace: workspacePath });
-    } catch {
-      // 已存在时更新 workspace 路径（防止 ensureNativeAgent 用错默认路径）
+    // 创建 agent，带重试（引擎 config reload 可能需要时间）
+    let agentReady = false;
+    for (let attempt = 0; attempt < 3; attempt++) {
       try {
-        await bridge.agentsUpdate({ agentId: nativeAgentId, workspace: workspacePath });
-      } catch { /* ignore */ }
+        await bridge.agentsCreate({ name: nativeAgentId, workspace: workspacePath });
+        agentReady = true;
+        break;
+      } catch (createErr: any) {
+        const msg = createErr.message || '';
+        if (msg.includes('already exists')) {
+          // 已存在，更新 workspace 路径
+          try {
+            await bridge.agentsUpdate({ agentId: nativeAgentId, workspace: workspacePath });
+          } catch { /* ignore */ }
+          agentReady = true;
+          break;
+        }
+        console.warn(`[agents] agentsCreate attempt ${attempt + 1} failed for ${nativeAgentId}: ${msg}`);
+        if (attempt < 2) await new Promise(r => setTimeout(r, 2000));
+      }
+    }
+    if (!agentReady) {
+      console.error(`[agents] syncToNative: agent ${nativeAgentId} creation failed after 3 attempts, skipping file sync`);
+      return;
     }
 
     // agentFilesSet 带重试：原生 gateway 创建 agent 后异步初始化 workspace，立即调用会 "unknown agent id"
@@ -213,20 +231,71 @@ export function createAgentsRouter(
         console.error(`[agents] agentFilesSet IDENTITY.md ultimately failed for ${nativeAgentId}:`, e.message);
       });
     }
-    await setFileWithRetry('SOUL.md', systemPrompt || getSoulTemplate(dataRoot || '', agentName)).catch((e: any) => {
-      console.error(`[agents] agentFilesSet SOUL.md ultimately failed for ${nativeAgentId}:`, e.message);
-    });
-    // MEMORY.md 仅在创建时写入，更新时保留已有记忆（#19 修复）
-    if (!isUpdate) {
-      const memDisplayName = identity?.name || agentName;
-      await setFileWithRetry('MEMORY.md', getMemoryTemplate(dataRoot || '', memDisplayName)).catch((e: any) => {
-        console.error(`[agents] agentFilesSet MEMORY.md ultimately failed for ${nativeAgentId}:`, e.message);
+    // SOUL.md：有明确的 systemPrompt 时写入；否则仅在文件不存在时用模板填充
+    if (systemPrompt) {
+      await setFileWithRetry('SOUL.md', systemPrompt).catch((e: any) => {
+        console.error(`[agents] agentFilesSet SOUL.md ultimately failed for ${nativeAgentId}:`, e.message);
       });
+    } else if (!isUpdate) {
+      try {
+        const existing = await bridge.agentFilesGet(nativeAgentId, 'SOUL.md');
+        if (!existing?.content) {
+          await setFileWithRetry('SOUL.md', getSoulTemplate(dataRoot || '', agentName)).catch((e: any) => {
+            console.error(`[agents] agentFilesSet SOUL.md ultimately failed for ${nativeAgentId}:`, e.message);
+          });
+        }
+      } catch {
+        // 文件不存在，用模板填充
+        await setFileWithRetry('SOUL.md', getSoulTemplate(dataRoot || '', agentName)).catch((e: any) => {
+          console.error(`[agents] agentFilesSet SOUL.md ultimately failed for ${nativeAgentId}:`, e.message);
+        });
+      }
+    }
+    // MEMORY.md：仅在文件不存在时写入（保护已有记忆）
+    if (!isUpdate) {
+      try {
+        const existing = await bridge.agentFilesGet(nativeAgentId, 'MEMORY.md');
+        if (!existing?.content) {
+          const memDisplayName = identity?.name || agentName;
+          await setFileWithRetry('MEMORY.md', getMemoryTemplate(dataRoot || '', memDisplayName)).catch((e: any) => {
+            console.error(`[agents] agentFilesSet MEMORY.md ultimately failed for ${nativeAgentId}:`, e.message);
+          });
+        }
+      } catch {
+        const memDisplayName = identity?.name || agentName;
+        await setFileWithRetry('MEMORY.md', getMemoryTemplate(dataRoot || '', memDisplayName)).catch((e: any) => {
+          console.error(`[agents] agentFilesSet MEMORY.md ultimately failed for ${nativeAgentId}:`, e.message);
+        });
+      }
     }
     // memory-lancedb-pro 默认行为已提供 scope 隔离（agent:<id> + global），无需显式注册
   }
 
-  /** 原生工具描述映射 */
+  /**
+   * 企业工具名 → 引擎原生工具名映射
+   *
+   * DB 和前端使用语义化的工具名（list_files, read_file 等），
+   * 引擎原生工具名不同（read, write, exec 等）。
+   * syncAgentNativeConfig 写入 octopus.json 时需要转换。
+   */
+  const TOOL_NAME_TO_ENGINE: Record<string, string> = {
+    list_files: 'read',       // 引擎用 read 工具读目录
+    read_file: 'read',
+    write_file: 'write',
+    execute_command: 'exec',
+    search_files: 'exec',     // 搜索通过 exec 的 grep/find 实现
+  };
+
+  /** 将企业 toolsFilter 名称转换为引擎原生工具名（去重） */
+  function mapToolsToEngine(tools: string[]): string[] {
+    const mapped = new Set<string>();
+    for (const t of tools) {
+      mapped.add(TOOL_NAME_TO_ENGINE[t] || t);
+    }
+    return [...mapped];
+  }
+
+  /** 原生工具描述映射（用于 TOOLS.md 生成，面向 LLM 提示） */
   const NATIVE_TOOL_DESCRIPTIONS: Record<string, string> = {
     list_files: '列出工作空间中的文件和目录',
     read_file: '读取文件内容',
@@ -350,7 +419,7 @@ export function createAgentsRouter(
         enabled: true,
         isDefault: true,
         identity: { name: 'Octopus AI', emoji: '🐙' },
-        toolsFilter: ['list_files', 'read_file', 'write_file'],
+        toolsFilter: ['list_files', 'read_file', 'write_file', 'execute_command', 'search_files'],
         skillsFilter: skills.map((s: { name: string }) => s.name),
         mcpFilter: defaultMcpFilter,
         allowedConnections: connections.map((c: { name: string }) => c.name),
@@ -358,7 +427,7 @@ export function createAgentsRouter(
     });
 
     // 首次创建 default agent 时同步 TOOLS.md（包含原生工具 + MCP 工具）
-    const defaultToolsFilter = ['list_files', 'read_file', 'write_file'];
+    const defaultToolsFilter = ['list_files', 'read_file', 'write_file', 'execute_command', 'search_files'];
     syncToolsMd(userId, 'default', defaultMcpFilter, defaultToolsFilter).catch((e: any) =>
       console.error('[agents] syncToolsMd for new default agent failed:', e.message),
     );

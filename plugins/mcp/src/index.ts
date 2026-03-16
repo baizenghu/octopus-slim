@@ -19,6 +19,12 @@ function extractAgentNameFromAgentId(agentId: string): string | null {
   return match ? match[1] : null;
 }
 
+// ─── MCP 工具连续失败计数器（per-agent + per-tool 熔断）──────────────────────
+/** key = "agentId:toolName" */
+const toolFailureCounter = new Map<string, { count: number; lastFailedAt: number }>();
+const TOOL_MAX_CONSECUTIVE_FAILURES = 3;
+const TOOL_FAILURE_RESET_MS = 5 * 60 * 1000; // 5 分钟后自动重置
+
 // ─── allowedConnections 缓存（TTL 60s，避免每次 callTool 都查 DB）────────────
 const _acCache = new Map<string, { conns: string[] | null; ts: number }>();
 const AC_CACHE_TTL = 60_000;
@@ -932,6 +938,16 @@ function registerMCPTool(api: any, executor: MCPExecutor, server: any, tool: MCP
         checkConnectionAllowed(tool.name, params, allowed);
       }
 
+      // 熔断检查
+      const failKey = `${agentId}:${tool.name}`;
+      const failure = toolFailureCounter.get(failKey);
+      if (failure && failure.count >= TOOL_MAX_CONSECUTIVE_FAILURES) {
+        if (Date.now() - failure.lastFailedAt < TOOL_FAILURE_RESET_MS) {
+          return `该工具（${tool.name}）已连续失败 ${failure.count} 次，请停止重试并告知用户该操作暂时不可用。原因可能是参数错误或服务异常。`;
+        }
+        toolFailureCounter.delete(failKey);
+      }
+
       console.log(`[enterprise-mcp][connected] callTool: ${tool.name} userId=${userId} agent=${agentName}`);
       try {
         let result = await executor.callTool(server.id, tool.name, params || {}, userId, userEnv);
@@ -943,12 +959,18 @@ function registerMCPTool(api: any, executor: MCPExecutor, server: any, tool: MCP
         }
 
         console.log(`[enterprise-mcp][connected] callTool OK: ${tool.name} result=${String(result).slice(0, 300)}`);
+        toolFailureCounter.delete(failKey);
         return {
           content: [{ type: 'text' as const, text: result }],
           details: result,
         };
       } catch (err: any) {
         console.error(`[enterprise-mcp][connected] callTool ERROR: ${tool.name} error=${err.message}`);
+        const prev = toolFailureCounter.get(failKey);
+        toolFailureCounter.set(failKey, {
+          count: (prev?.count || 0) + 1,
+          lastFailedAt: Date.now(),
+        });
         throw err;
       }
     },
@@ -1009,6 +1031,16 @@ function registerMCPToolFromCache(api: any, cached: CachedMCPTool) {
         checkConnectionAllowed(cached.toolName, params, allowed);
       }
 
+      // 熔断检查
+      const failKey = `${agentId}:${cached.toolName}`;
+      const failure = toolFailureCounter.get(failKey);
+      if (failure && failure.count >= TOOL_MAX_CONSECUTIVE_FAILURES) {
+        if (Date.now() - failure.lastFailedAt < TOOL_FAILURE_RESET_MS) {
+          return `该工具（${cached.toolName}）已连续失败 ${failure.count} 次，请停止重试并告知用户该操作暂时不可用。原因可能是参数错误或服务异常。`;
+        }
+        toolFailureCounter.delete(failKey);
+      }
+
       console.log(`[enterprise-mcp] callTool: ${cached.toolName} userId=${userId} agent=${agentName}`);
       try {
         let result = await _executor.callTool(cached.serverId, cached.toolName, params || {}, userId, userEnv);
@@ -1020,12 +1052,18 @@ function registerMCPToolFromCache(api: any, cached: CachedMCPTool) {
         }
 
         console.log(`[enterprise-mcp] callTool OK: ${cached.toolName} result=${String(result).slice(0, 200)}`);
+        toolFailureCounter.delete(failKey);
         return {
           content: [{ type: 'text' as const, text: result }],
           details: result,
         };
       } catch (err: any) {
         console.error(`[enterprise-mcp] callTool ERROR: ${cached.toolName} error=${err.message}`);
+        const prev = toolFailureCounter.get(failKey);
+        toolFailureCounter.set(failKey, {
+          count: (prev?.count || 0) + 1,
+          lastFailedAt: Date.now(),
+        });
         throw err;
       }
     },
@@ -1055,16 +1093,32 @@ function registerPersonalMCPTool(
       async execute(_toolCallId: string, params: any) {
         const userEnv = await loadUserEnv(userId, _prisma);
 
+        // 熔断检查
+        const failKey = `${agentId}:${tool.name}`;
+        const failure = toolFailureCounter.get(failKey);
+        if (failure && failure.count >= TOOL_MAX_CONSECUTIVE_FAILURES) {
+          if (Date.now() - failure.lastFailedAt < TOOL_FAILURE_RESET_MS) {
+            return `该工具（${tool.name}）已连续失败 ${failure.count} 次，请停止重试并告知用户该操作暂时不可用。原因可能是参数错误或服务异常。`;
+          }
+          toolFailureCounter.delete(failKey);
+        }
+
         console.log(`[enterprise-mcp][personal] callTool: ${tool.name} userId=${userId} server=${server.name}`);
         try {
           const result = await executor.callTool(server.id, tool.name, params || {}, userId, userEnv);
           console.log(`[enterprise-mcp][personal] callTool OK: ${tool.name}`);
+          toolFailureCounter.delete(failKey);
           return {
             content: [{ type: 'text' as const, text: result }],
             details: result,
           };
         } catch (err: any) {
           console.error(`[enterprise-mcp][personal] callTool ERROR: ${tool.name} error=${err.message}`);
+          const prev = toolFailureCounter.get(failKey);
+          toolFailureCounter.set(failKey, {
+            count: (prev?.count || 0) + 1,
+            lastFailedAt: Date.now(),
+          });
           throw err;
         }
       },
@@ -1095,12 +1149,32 @@ function registerPersonalMCPToolFromCache(api: any, cached: CachedMCPTool) {
         if (!_executor || !_initDone) {
           throw new Error(`Personal MCP (${cached.serverName}) not ready, please retry`);
         }
+        // 熔断检查
+        const failKey = `${agentId}:${cached.toolName}`;
+        const failure = toolFailureCounter.get(failKey);
+        if (failure && failure.count >= TOOL_MAX_CONSECUTIVE_FAILURES) {
+          if (Date.now() - failure.lastFailedAt < TOOL_FAILURE_RESET_MS) {
+            return `该工具（${cached.toolName}）已连续失败 ${failure.count} 次，请停止重试并告知用户该操作暂时不可用。原因可能是参数错误或服务异常。`;
+          }
+          toolFailureCounter.delete(failKey);
+        }
+
         const userEnv = userId ? await loadUserEnv(userId, _prisma) : {};
-        const result = await _executor.callTool(cached.serverId, cached.toolName, params || {}, userId, userEnv);
-        return {
-          content: [{ type: 'text' as const, text: result }],
-          details: result,
-        };
+        try {
+          const result = await _executor.callTool(cached.serverId, cached.toolName, params || {}, userId, userEnv);
+          toolFailureCounter.delete(failKey);
+          return {
+            content: [{ type: 'text' as const, text: result }],
+            details: result,
+          };
+        } catch (err: any) {
+          const prev = toolFailureCounter.get(failKey);
+          toolFailureCounter.set(failKey, {
+            count: (prev?.count || 0) + 1,
+            lastFailedAt: Date.now(),
+          });
+          throw err;
+        }
       },
     };
   });

@@ -154,7 +154,7 @@ Start all: `./start.sh start` | Stop all: `./start.sh stop`
 
 **Native Gateway Config**
 - 唯一配置源: `.octopus-state/octopus.json`（项目内，随 git 版本控制）
-- `~/.octopus/` → `.octopus-state/` 软链接（向后兼容）
+- ~~`~/.octopus/` 软链接已删除~~（2026-03-16：vitest worker 通过软链接覆盖企业配置，导致 models 丢失）
 - `start.sh` 通过 `OCTOPUS_STATE_DIR` 环境变量指定 state 目录
 - Token 须与 `.env` 中 `OCTOPUS_GATEWAY_TOKEN` 一致
 
@@ -200,7 +200,8 @@ Start all: `./start.sh start` | Stop all: `./start.sh stop`
 | 2026-02-28 | `memory-lancedb-pro` 将 `<relevant-memories>` 块和时间戳注入用户消息后存入原生历史；工具调用把助手回复拆成多段，刷新后显示多个气泡 | `GET /history` 在返回前：① 从 user 消息剥离记忆块/时间戳前缀；② 合并相邻 assistant 消息；③ 前端 `filterInternalTags()` 渲染时再次兜底 |
 | 2026-03-02 | Prisma v7 移除 `datasource.url` 属性（P1012），plugin schema 不兼容 | Plugin 必须 pin `prisma@6` 和 `@prisma/client@6`，不能用 latest |
 | 2026-03-02 | Plugins 从 `~/.octopus/plugins/` 迁移到项目目录后，`octopus.json` 路径必须同步更新 | `plugins.load.paths` 指向 `./plugins/`（绝对路径），extensions 在 `.octopus-state/extensions/` |
-| 2026-03-02 | Native Gateway state 目录从 `~/.octopus/` 迁移到项目内 `.octopus-state/` | `start.sh` 使用 `OCTOPUS_STATE_DIR` 环境变量覆盖 `--profile enterprise` 默认路径；`~/.octopus` 保留为软链接 |
+| 2026-03-02 | Native Gateway state 目录从 `~/.octopus/` 迁移到项目内 `.octopus-state/` | `start.sh` 使用 `OCTOPUS_STATE_DIR` 环境变量覆盖 `--profile enterprise` 默认路径 |
+| 2026-03-16 | `~/.octopus` 软链接导致 vitest worker 覆盖企业 `octopus.json`（models 配置丢失） | **已删除 `~/.octopus` 软链接**；企业通过 `OCTOPUS_STATE_DIR` 直接指定路径，不再需要软链接 |
 | 2026-03-03 | `MCPRegistry.register()` 与路由各自 `prisma.create()` 导致主键冲突崩溃 | `MCPRegistry.register()` 改用 `upsert`（路由先写 DB，Registry 再同步时不报错） |
 | 2026-03-05 | Native Gateway 的 tool 事件（`stream: "tool"`）不广播给所有 WS 连接 | 连接握手必须传 `caps: ["tool-events"]` 才能收到 `sessions_spawn` 等工具事件 |
 | 2026-03-05 | SSE done 事件返回短 session ID，前端轮询 history API 返回 403 | SSE/非流式响应必须返回完整 sessionKey（`agent:ent_xxx:session:chat-xxx`），history API 增加短 ID 兜底转换 |
@@ -218,6 +219,11 @@ Start all: `./start.sh start` | Stop all: `./start.sh stop`
 | 2026-03-11 | 企业 Skill 在宿主机执行但 Python 脚本内 `pip install` 被 PEP 668 拦截（externally-managed-environment） | **不依赖脚本内自动 pip install**。在 `data/skills/.venv/` 创建共享虚拟环境预装依赖，`getInterpreter()` 优先使用 venv 的 python3。新增依赖：`data/skills/.venv/bin/pip install <pkg>` |
 | 2026-03-11 | `tools.sandbox.tools.allow` 不配置时 ToolFactory 注册的工具（run_skill 等）对 Agent 不可见 | 必须配置 `tools.sandbox.tools.allow: ["*"]`（数组，不能是字符串 `"*"`），否则 plugin 工具全部消失 |
 | 2026-03-11 | 多层 bug 叠加（Prisma schema→PEP 668→参数格式）互相掩盖，第一层修好才暴露第二层 | 按层级逐步验证：**数据层→环境层→参数层**，每层确认修好再进下一层 |
+| 2026-03-16 | `~/.octopus` 软链接导致 vitest worker 覆盖企业 `octopus.json`，models 配置丢失 | **已删除 `~/.octopus` 软链接**；企业通过 `OCTOPUS_STATE_DIR` 直接指定路径；`start.sh` 启动前自动备份 octopus.json |
+| 2026-03-16 | 企业工具名（`list_files`/`read_file`/`write_file`/`execute_command`）与引擎原生工具名（`read`/`write`/`exec`）不一致，导致 `tools.allow` 白名单中的原生工具被引擎标记为 unknown，agent 失去文件和命令执行能力 | `syncAgentNativeConfig` 中加 `TOOL_NAME_TO_ENGINE` 映射表：`list_files→read`、`read_file→read`、`write_file→write`、`execute_command→exec`、`search_files→exec`；DB 和前端继续用语义化名称，写入引擎配置时自动转换 |
+| 2026-03-16 | agent 工具调用失败后 LLM 反复换参数重试进入死循环，无法通过前端终止按钮停止 | 三层防护：① 引擎 `loopDetection` 配置启用（8 次警告/15 次阻断/25 次终止）；② MCP 工具层连续失败 3 次自动熔断；③ IM `/cancel` 命令 + 30 分钟兜底超时 |
+| 2026-03-16 | 引擎 tool 事件字段名是 `name` 不是 `toolName`，导致 `sessions_spawn` 检测失败，前端 delegation poll 不启动，子 agent 结果不自动显示 | `EngineAdapter.ts` 中 `data.toolName` 改为 `data.toolName \|\| data.name` |
+| 2026-03-16 | 删除用户时 workspace 清理失败（sandbox 容器创建的 root 文件，宿主机 uid 无权删除） | `deleteWorkspace` 失败时自动用 Docker `--user root` 清理 |
 
 ---
 

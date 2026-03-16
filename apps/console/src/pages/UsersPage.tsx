@@ -46,7 +46,6 @@ import { Skeleton } from '@/components/ui/skeleton';
 const ROLE_OPTIONS = [
   { label: '管理员', value: 'ADMIN' },
   { label: '高级用户', value: 'POWER_USER' },
-  { label: '普通用户', value: 'USER' },
 ];
 
 const QUOTA_LABELS: Record<string, string> = {
@@ -90,7 +89,7 @@ export default function UsersPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<UserInfo | null>(null);
   const [formValues, setFormValues] = useState<FormValues>({
-    username: '', password: '', email: '', displayName: '', department: '', roles: ['USER'], status: 'active',
+    username: '', password: '', email: '', displayName: '', department: '', roles: ['POWER_USER'], status: 'active',
   });
 
   // 配额弹窗
@@ -136,7 +135,7 @@ export default function UsersPage() {
 
   const openCreateModal = () => {
     setEditingUser(null);
-    setFormValues({ username: '', password: '', email: '', displayName: '', department: '', roles: ['USER'], status: 'active' });
+    setFormValues({ username: '', password: '', email: '', displayName: '', department: '', roles: ['POWER_USER'], status: 'active' });
     setModalOpen(true);
   };
 

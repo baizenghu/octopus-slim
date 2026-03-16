@@ -165,6 +165,17 @@ start_all() {
   stop_all
   sleep 1
 
+  # ─── 备份配置文件（防止意外覆盖导致配置丢失） ──────────────
+  CONFIG_FILE="$ROOT_DIR/.octopus-state/octopus.json"
+  BACKUP_DIR="$ROOT_DIR/.octopus-state/config-backups"
+  if [ -f "$CONFIG_FILE" ]; then
+    mkdir -p "$BACKUP_DIR"
+    cp "$CONFIG_FILE" "$BACKUP_DIR/octopus.json.$(date +%Y%m%d%H%M%S)"
+    # 保留最近 10 个备份
+    ls -t "$BACKUP_DIR"/octopus.json.* 2>/dev/null | tail -n +11 | xargs rm -f 2>/dev/null
+    echo -e "  ${GREEN}✓${NC} 配置已备份到 $BACKUP_DIR/"
+  fi
+
   echo ""
   echo -e "${CYAN}╔══════════════════════════════════════════╗${NC}"
   echo -e "${CYAN}║   🐾 Octopus Enterprise 开发环境        ║${NC}"

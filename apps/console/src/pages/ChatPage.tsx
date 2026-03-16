@@ -172,6 +172,7 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
+  const [isDelegating, setIsDelegating] = useState(false);
   // 搜索
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<any[]>([]);
@@ -614,6 +615,7 @@ export default function ChatPage() {
         let hasGrown = false;  // 是否检测到过内容增长
         const delegationSid = sid; // 固定委派 session ID
 
+        setIsDelegating(true);
         console.log('[chat] delegation poll: started, sid:', delegationSid);
         const pollTimer = setInterval(async () => {
           polls++;
@@ -622,6 +624,7 @@ export default function ChatPage() {
             console.log('[chat] session changed, stopping delegation poll');
             clearInterval(pollTimer);
             delegationPollRef.current = null;
+            setIsDelegating(false);
             return;
           }
           try {
@@ -653,6 +656,7 @@ export default function ChatPage() {
                 console.log('[chat] delegation result stabilized, done.');
                 clearInterval(pollTimer);
                 delegationPollRef.current = null;
+                setIsDelegating(false);
                 return;
               }
             }
@@ -665,6 +669,7 @@ export default function ChatPage() {
             console.log('[chat] delegation poll timeout');
             clearInterval(pollTimer);
             delegationPollRef.current = null;
+            setIsDelegating(false);
           }
         }, pollInterval);
         delegationPollRef.current = pollTimer;
@@ -708,12 +713,12 @@ export default function ChatPage() {
     }
   };
 
-  /** 终止正在进行的对话 */
+  /** 终止正在进行的对话（包括 SSE 流和子 agent 委派） */
   const abortChat = () => {
     // 1. 中断前端 SSE 流（触发后端 res.on('close') → chatAbort）
     streamAbortRef.current?.abort();
 
-    // 2. 显式调用后端 abort API（双保险）
+    // 2. 显式调用后端 abort API（双保险，对 SSE 流和子 agent 都有效）
     if (currentSession) {
       const token = localStorage.getItem('admin_token');
       fetch(`/api/chat/sessions/${encodeURIComponent(currentSession)}/abort${currentAgentId ? `?agentId=${encodeURIComponent(currentAgentId)}` : ''}`, {
@@ -727,6 +732,10 @@ export default function ChatPage() {
       clearInterval(delegationPollRef.current);
       delegationPollRef.current = null;
     }
+    setIsDelegating(false);
+
+    // 4. 移除等待提示
+    setMessages(prev => prev.filter(m => !m.content?.includes('\u23f3')));
   };
 
   /** 选中斜杠菜单项 */
@@ -1179,7 +1188,7 @@ export default function ChatPage() {
                         size="icon"
                         className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground"
                         onClick={() => fileInputRef.current?.click()}
-                        disabled={isStreaming}
+                        disabled={isStreaming || isDelegating}
                       >
                         <Paperclip className="h-4 w-4" />
                       </Button>
@@ -1194,11 +1203,11 @@ export default function ChatPage() {
                     onChange={(e) => setInput(e.target.value)}
                     onKeyDown={handleKeyDown}
                     rows={1}
-                    disabled={isStreaming}
+                    disabled={isStreaming || isDelegating}
                     className="min-h-[36px] max-h-[200px] resize-none border-0 shadow-none focus-visible:ring-0 p-0 text-sm"
                   />
 
-                  {isStreaming ? (
+                  {(isStreaming || isDelegating) ? (
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <Button

@@ -16,6 +16,7 @@ import type { AuditLogger } from '@octopus/audit';
 import type { WorkspaceManager } from '@octopus/workspace';
 import { createAuthMiddleware, type AuthenticatedRequest } from '../middleware/auth';
 import { EngineAdapter } from '../services/EngineAdapter';
+import { validatePassword } from '../utils/password';
 
 import type { AppPrismaClient } from '../types/prisma';
 
@@ -120,6 +121,11 @@ export function createAdminRouter(
         res.status(400).json({ error: '密码不能为空' });
         return;
       }
+      const pwError = validatePassword(password);
+      if (pwError) {
+        res.status(400).json({ error: pwError });
+        return;
+      }
       // 密码哈希存储（bcrypt, cost=12）
       const hashedPassword = await bcrypt.hash(password, 12);
       const user = await prisma.user.create({
@@ -158,9 +164,14 @@ export function createAdminRouter(
       const { id } = req.params;
       const { email, displayName, department, roles, status, password } = req.body;
 
-      // 如果有密码变更，先 bcrypt 哈希化
+      // 如果有密码变更，先校验强度再 bcrypt 哈希化
       let passwordUpdate: { passwordHash: string } | undefined;
       if (password) {
+        const pwError = validatePassword(password);
+        if (pwError) {
+          res.status(400).json({ error: pwError });
+          return;
+        }
         passwordUpdate = { passwordHash: await bcrypt.hash(password, 12) };
       }
 

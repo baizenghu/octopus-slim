@@ -228,6 +228,7 @@ async function main() {
           authService,
           dataRoot: config.workspace.dataRoot,
           workspaceManager,
+          auditLogger,
           ensureAgent: async (userId: string, agentName: string) => {
             const nativeAgentId = EngineAdapter.userAgentId(userId, agentName);
             const workspacePath = agentName === 'default'

@@ -15,6 +15,8 @@ import { EngineAdapter } from '../EngineAdapter';
 import type { AuthService } from '@octopus/auth';
 import type { AppPrismaClient } from '../../types/prisma';
 import type { WorkspaceManager } from '@octopus/workspace';
+import type { AuditLogger } from '@octopus/audit';
+import { AuditAction } from '@octopus/audit';
 import { randomUUID } from 'crypto';
 
 const FILE_SIZE_LIMIT = 10 * 1024 * 1024; // 10MB
@@ -36,10 +38,20 @@ export class IMRouter {
     private ensureAgent: (userId: string, agentName: string) => Promise<void>,
     private dataRoot?: string,
     private workspaceManager?: WorkspaceManager,
+    private auditLogger?: AuditLogger,
   ) {}
 
   /** IM 用户当前选中的 agent（进程级，重启回落 default） */
   private activeAgents = new Map<string, string>();
+
+  /** /bind 频率限制：key = imUserId, value = { count, firstAttempt } */
+  private bindAttempts = new Map<string, { count: number; firstAttempt: number }>();
+
+  /** 活跃的 agent 调用跟踪（用于 /cancel 取消） */
+  private activeRuns = new Map<string, { sessionKey: string; aborted: boolean }>();
+  private static readonly RUN_TIMEOUT_MS = 30 * 60 * 1000; // 30 分钟兜底超时
+  private static readonly BIND_MAX_ATTEMPTS = 5;
+  private static readonly BIND_WINDOW_MS = 15 * 60 * 1000; // 15 分钟窗口
 
   /** 注册 adapter 的消息回调 */
   attach(adapter: IMAdapter): void {
@@ -67,6 +79,9 @@ export class IMRouter {
           return;
         case '/status':
           await this.handleStatus(adapter, msg);
+          return;
+        case '/cancel':
+          await this.handleCancel(adapter, msg);
           return;
       }
     }
@@ -115,6 +130,21 @@ export class IMRouter {
       return;
     }
 
+    // 频率限制：防止暴力破解
+    const now = Date.now();
+    const attempts = this.bindAttempts.get(imUserId);
+    if (attempts) {
+      if (now - attempts.firstAttempt < IMRouter.BIND_WINDOW_MS) {
+        if (attempts.count >= IMRouter.BIND_MAX_ATTEMPTS) {
+          await adapter.sendText(imUserId, '绑定尝试过于频繁，请 15 分钟后重试。');
+          return;
+        }
+      } else {
+        // 窗口过期，重置
+        this.bindAttempts.delete(imUserId);
+      }
+    }
+
     const username = parts[1];
     const password = parts[2];
 
@@ -151,11 +181,40 @@ export class IMRouter {
         },
       });
 
+      // 绑定成功，清除频率限制记录
+      this.bindAttempts.delete(imUserId);
+
       // 安全：回复中不包含密码
       await adapter.sendText(imUserId, `绑定成功！你好，${user.displayName || username}。现在可以直接发消息和 AI 对话了。`);
+      // 审计记录
+      this.auditLogger?.log({
+        userId: user.userId,
+        username,
+        action: AuditAction.IM_BIND,
+        resource: `im:${channel}:${imUserId}`,
+        details: { channel, imUserId },
+        success: true,
+      }).catch(() => {});
     } catch (e: any) {
+      // 记录失败次数
+      const prev = this.bindAttempts.get(imUserId);
+      if (prev) {
+        prev.count++;
+      } else {
+        this.bindAttempts.set(imUserId, { count: 1, firstAttempt: Date.now() });
+      }
       // 安全：日志中不记录密码，仅记录用户名
       console.error(`[im-router] Bind error for user=${username}:`, e.message);
+      // 审计记录
+      this.auditLogger?.log({
+        userId: null,
+        username,
+        action: AuditAction.IM_BIND_FAILED,
+        resource: `im:${channel}:${imUserId}`,
+        details: { channel, imUserId },
+        success: false,
+        errorMessage: e.message,
+      }).catch(() => {});
       // 安全：错误回复不包含原始输入
       await adapter.sendText(imUserId, '绑定失败：用户名或密码错误');
     }
@@ -179,14 +238,29 @@ export class IMRouter {
     const { imUserId, channel } = msg;
 
     try {
+      // 先查询绑定信息（用于审计记录）
+      const binding = await this.prisma.iMUserBinding.findUnique({
+        where: { channel_imUserId: { channel, imUserId } },
+      });
+      if (!binding) {
+        await adapter.sendText(imUserId, '你当前没有绑定企业账户。');
+        return;
+      }
       await this.prisma.iMUserBinding.delete({
-        where: {
-          channel_imUserId: { channel, imUserId },
-        },
+        where: { channel_imUserId: { channel, imUserId } },
       });
       await adapter.sendText(imUserId, '已解除绑定。');
+      // 审计记录
+      this.auditLogger?.log({
+        userId: binding.userId,
+        username: 'im-user',
+        action: AuditAction.IM_UNBIND,
+        resource: `im:${channel}:${imUserId}`,
+        details: { channel, imUserId },
+        success: true,
+      }).catch(() => {});
     } catch {
-      await adapter.sendText(imUserId, '你当前没有绑定企业账户。');
+      await adapter.sendText(imUserId, '解除绑定失败，请稍后重试。');
     }
   }
 
@@ -209,6 +283,24 @@ export class IMRouter {
     } else {
       await adapter.sendText(imUserId, '未绑定。请发送：/bind 用户名 密码');
     }
+  }
+
+  /** /cancel → 取消当前正在执行的 agent 调用 */
+  private async handleCancel(adapter: IMAdapter, msg: IMIncomingMessage): Promise<void> {
+    const imKey = `${msg.channel}:${msg.imUserId}`;
+    const run = this.activeRuns.get(imKey);
+    if (!run) {
+      await adapter.sendText(msg.imUserId, '当前没有正在执行的任务。');
+      return;
+    }
+    run.aborted = true;
+    try {
+      await this.bridge.chatAbort(run.sessionKey);
+    } catch (e: any) {
+      console.warn(`[im-router] chatAbort failed for ${run.sessionKey}:`, e.message);
+    }
+    this.activeRuns.delete(imKey);
+    await adapter.sendText(msg.imUserId, '已取消当前任务。');
   }
 
   /** /agent [名称] → 切换当前 IM 会话的 agent */
@@ -265,6 +357,17 @@ export class IMRouter {
 
       // 更新 Map
       this.activeAgents.set(imKey, targetName);
+      console.log(`[im-router] agentSwitch: imKey=${imKey}, set to ${targetName}, map size=${this.activeAgents.size}`);
+
+      // 审计记录
+      this.auditLogger?.log({
+        userId,
+        username: 'im-user',
+        action: AuditAction.IM_AGENT_SWITCH,
+        resource: `agent:${targetName}`,
+        details: { channel: msg.channel, imUserId: msg.imUserId, to: targetName },
+        success: true,
+      }).catch(() => {});
 
       const displayName = (agent.identity as any)?.name || agent.name;
       await adapter.sendText(imUserId, `已切换到 ${displayName}。使用 /agent default 切回主助手。`);
@@ -328,6 +431,7 @@ export class IMRouter {
   ): Promise<void> {
     const imKey = `${msg.channel}:${msg.imUserId}`;
     const agentName = this.activeAgents.get(imKey) || 'default';
+    console.log(`[im-router] routeToAgent: imKey=${imKey}, agentName=${agentName}, activeAgents size=${this.activeAgents.size}`);
     const agentId = EngineAdapter.userAgentId(userId, agentName);
     const sessionId = `im-${msg.channel}-${msg.imUserId}`;
     const sessionKey = EngineAdapter.userSessionKey(userId, agentName, sessionId);
@@ -397,6 +501,26 @@ export class IMRouter {
         } catch { /* ignore */ }
       }
 
+      // 如果上一个调用还在进行，自动取消
+      const prevRun = this.activeRuns.get(imKey);
+      if (prevRun && !prevRun.aborted) {
+        prevRun.aborted = true;
+        this.bridge.chatAbort(prevRun.sessionKey).catch(() => {});
+      }
+
+      const runState = { sessionKey, aborted: false };
+      this.activeRuns.set(imKey, runState);
+
+      // 30 分钟兜底超时
+      const timeoutTimer = setTimeout(() => {
+        if (!runState.aborted) {
+          runState.aborted = true;
+          this.bridge.chatAbort(sessionKey).catch(() => {});
+          this.activeRuns.delete(imKey);
+          adapter.sendText(msg.imUserId, '任务执行超时（30分钟），已自动取消。').catch(() => {});
+        }
+      }, IMRouter.RUN_TIMEOUT_MS);
+
       // 调用 agent，等待 done 事件收集完整回复
       let finalContent = '';
 
@@ -411,6 +535,7 @@ export class IMRouter {
             isAdmin: false,
           },
           (event) => {
+            if (runState.aborted) { resolve(); return; }
             if (event.type === 'text_delta') {
               finalContent = event.content || '';
             }
@@ -419,6 +544,12 @@ export class IMRouter {
           },
         ).catch(reject);
       });
+
+      clearTimeout(timeoutTimer);
+      this.activeRuns.delete(imKey);
+
+      // 已取消的任务不发送回复
+      if (runState.aborted) return;
 
       if (finalContent) {
         const cleaned = stripThinkTags(finalContent);
@@ -432,6 +563,8 @@ export class IMRouter {
         await this.sendNewOutputFiles(adapter, msg.imUserId, outputsDir, filesBefore);
       }
     } catch (e: any) {
+      clearTimeout(timeoutTimer);
+      this.activeRuns.delete(imKey);
       console.error(`[im-router] Agent call error for ${userId}:`, e.message);
       await adapter.sendText(msg.imUserId, '处理消息时出错，请稍后重试。');
     }

@@ -215,9 +215,15 @@ export function createChatRouter(
     try {
       await bridge.agentsCreate({ name: nativeAgentId, workspace: workspacePath });
       isNewAgent = true;
-    } catch {
-      // 忽略"已存在"等错误
-      knownNativeAgents.add(nativeAgentId);
+    } catch (createErr: any) {
+      const msg = createErr.message || '';
+      if (msg.includes('already exists')) {
+        // 确实已存在，安全加入缓存
+        knownNativeAgents.add(nativeAgentId);
+      } else {
+        // 创建失败（非"已存在"），不加入缓存，下次对话会重试
+        console.error(`[chat] agentsCreate failed for ${nativeAgentId}: ${msg}`);
+      }
     }
     // 首次创建时等待 config reload 完成，再写入默认文件
     if (isNewAgent) {
@@ -1414,7 +1420,9 @@ export function createChatRouter(
         res.status(403).json({ error: 'Access denied' });
         return;
       }
+      console.log(`[chat] abort request: sessionId=${sessionId}, resolved sessionKey=${sessionKey}`);
       const result = await bridge.chatAbort(sessionKey);
+      console.log(`[chat] abort result:`, result);
       res.json({ success: true, result });
     } catch (err) {
       next(err);

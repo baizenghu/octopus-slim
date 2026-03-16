@@ -64,6 +64,255 @@ const ROUTE_ACTION_MAP: Array<{
     action: AuditAction.SESSION_DELETE,
     getResource: (req) => `session:${req.path.split('/').pop() || 'unknown'}`,
   },
+
+  // ─── Auth 补全 ───
+  {
+    method: 'PUT',
+    pattern: /^\/api\/auth\/password/,
+    action: AuditAction.AUTH_PASSWORD_CHANGE,
+  },
+
+  // ─── Admin 用户管理 ───
+  {
+    method: 'POST',
+    pattern: /^\/api\/admin\/users\/[^/]+\/unlock/,
+    action: AuditAction.ADMIN_USER_UNLOCK,
+    getResource: (req) => `user:${req.path.split('/')[4] || 'unknown'}`,
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/admin\/users\/?$/,
+    action: AuditAction.ADMIN_USER_CREATE,
+    getResource: (req) => `user:${req.body?.username || 'unknown'}`,
+  },
+  {
+    method: 'PUT',
+    pattern: /^\/api\/admin\/users\//,
+    action: AuditAction.ADMIN_USER_UPDATE,
+    getResource: (req) => `user:${req.path.split('/').pop() || 'unknown'}`,
+  },
+  {
+    method: 'DELETE',
+    pattern: /^\/api\/admin\/users\//,
+    action: AuditAction.ADMIN_USER_DELETE,
+    getResource: (req) => `user:${req.path.split('/').pop() || 'unknown'}`,
+  },
+
+  // ─── Agent 管理 ───
+  {
+    method: 'POST',
+    pattern: /^\/api\/agents\/[^/]+\/default/,
+    action: AuditAction.AGENT_SET_DEFAULT,
+    getResource: (req) => `agent:${req.path.split('/')[3] || 'unknown'}`,
+  },
+  {
+    method: 'PUT',
+    pattern: /^\/api\/agents\/[^/]+\/config/,
+    action: AuditAction.AGENT_CONFIG_UPDATE,
+    getResource: (req) => `agent:${req.path.split('/')[3] || 'unknown'}`,
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/agents\/?$/,
+    action: AuditAction.AGENT_CREATE,
+    getResource: (req) => `agent:${req.body?.name || 'unknown'}`,
+  },
+  {
+    method: 'PUT',
+    pattern: /^\/api\/agents\/[^/]+\/?$/,
+    action: AuditAction.AGENT_UPDATE,
+    getResource: (req) => `agent:${req.path.split('/')[3] || 'unknown'}`,
+  },
+  {
+    method: 'DELETE',
+    pattern: /^\/api\/agents\//,
+    action: AuditAction.AGENT_DELETE,
+    getResource: (req) => `agent:${req.path.split('/')[3] || 'unknown'}`,
+  },
+
+  // ─── MCP 个人（具体 pattern 排前面） ───
+  {
+    method: 'POST',
+    pattern: /^\/api\/mcp\/personal\/upload/,
+    action: AuditAction.MCP_PERSONAL_UPLOAD,
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/mcp\/personal\/?$/,
+    action: AuditAction.MCP_PERSONAL_CREATE,
+  },
+  {
+    method: 'PUT',
+    pattern: /^\/api\/mcp\/personal\//,
+    action: AuditAction.MCP_PERSONAL_UPDATE,
+    getResource: (req) => `mcp:personal:${req.path.split('/').pop() || 'unknown'}`,
+  },
+  {
+    method: 'DELETE',
+    pattern: /^\/api\/mcp\/personal\//,
+    action: AuditAction.MCP_PERSONAL_DELETE,
+    getResource: (req) => `mcp:personal:${req.path.split('/').pop() || 'unknown'}`,
+  },
+
+  // ─── MCP 企业级 ───
+  {
+    method: 'POST',
+    pattern: /^\/api\/mcp\/servers\/[^/]+\/test/,
+    action: AuditAction.MCP_SERVER_TEST,
+    getResource: (req) => `mcp:${req.path.split('/')[4] || 'unknown'}`,
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/mcp\/servers\/?$/,
+    action: AuditAction.MCP_SERVER_CREATE,
+    getResource: (req) => `mcp:${req.body?.name || 'unknown'}`,
+  },
+  {
+    method: 'PUT',
+    pattern: /^\/api\/mcp\/servers\//,
+    action: AuditAction.MCP_SERVER_UPDATE,
+    getResource: (req) => `mcp:${req.path.split('/')[4] || 'unknown'}`,
+  },
+  {
+    method: 'DELETE',
+    pattern: /^\/api\/mcp\/servers\//,
+    action: AuditAction.MCP_SERVER_DELETE,
+    getResource: (req) => `mcp:${req.path.split('/')[4] || 'unknown'}`,
+  },
+
+  // ─── Skill 个人（具体 pattern 排前面） ───
+  {
+    method: 'POST',
+    pattern: /^\/api\/skills\/personal\/upload/,
+    action: AuditAction.SKILL_PERSONAL_UPLOAD,
+  },
+  {
+    method: 'DELETE',
+    pattern: /^\/api\/skills\/personal\//,
+    action: AuditAction.SKILL_PERSONAL_DELETE,
+    getResource: (req) => `skill:personal:${req.path.split('/').pop() || 'unknown'}`,
+  },
+
+  // ─── Skill 企业级 ───
+  {
+    method: 'POST',
+    pattern: /^\/api\/skills\/[^/]+\/approve/,
+    action: AuditAction.SKILL_APPROVE,
+    getResource: (req) => `skill:${req.path.split('/')[3] || 'unknown'}`,
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/skills\/[^/]+\/reject/,
+    action: AuditAction.SKILL_REJECT,
+    getResource: (req) => `skill:${req.path.split('/')[3] || 'unknown'}`,
+  },
+  {
+    method: 'PUT',
+    pattern: /^\/api\/skills\/[^/]+\/enable/,
+    action: AuditAction.SKILL_ENABLE,
+    getResource: (req) => `skill:${req.path.split('/')[3] || 'unknown'}`,
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/skills\/upload/,
+    action: AuditAction.SKILL_UPLOAD,
+  },
+  {
+    method: 'PUT',
+    pattern: /^\/api\/skills\/[^/]+\/?$/,
+    action: AuditAction.SKILL_UPDATE,
+    getResource: (req) => `skill:${req.path.split('/')[3] || 'unknown'}`,
+  },
+  {
+    method: 'DELETE',
+    pattern: /^\/api\/skills\/[^/]+\/?$/,
+    action: AuditAction.SKILL_DELETE,
+    getResource: (req) => `skill:${req.path.split('/')[3] || 'unknown'}`,
+  },
+
+  // ─── 文件操作 ───
+  {
+    method: 'POST',
+    pattern: /^\/api\/files\/upload/,
+    action: AuditAction.FILE_UPLOAD,
+  },
+  {
+    method: 'DELETE',
+    pattern: /^\/api\/files\//,
+    action: AuditAction.FILE_DELETE,
+    getResource: (req) => `file:${req.path.replace('/api/files/', '')}`,
+  },
+
+  // ─── 定时任务 ───
+  {
+    method: 'POST',
+    pattern: /^\/api\/scheduler\/tasks\/[^/]+\/run/,
+    action: AuditAction.SCHEDULER_TASK_EXECUTE,
+    getResource: (req) => `scheduler:${req.path.split('/')[4] || 'unknown'}`,
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/scheduler\/tasks\/?$/,
+    action: AuditAction.SCHEDULER_TASK_CREATE,
+    getResource: (req) => `scheduler:${req.body?.name || 'unknown'}`,
+  },
+  {
+    method: 'PUT',
+    pattern: /^\/api\/scheduler\/tasks\//,
+    action: AuditAction.SCHEDULER_TASK_UPDATE,
+    getResource: (req) => `scheduler:${req.path.split('/').pop() || 'unknown'}`,
+  },
+  {
+    method: 'DELETE',
+    pattern: /^\/api\/scheduler\/tasks\//,
+    action: AuditAction.SCHEDULER_TASK_DELETE,
+    getResource: (req) => `scheduler:${req.path.split('/').pop() || 'unknown'}`,
+  },
+
+  // ─── 配额 ───
+  {
+    method: 'PUT',
+    pattern: /^\/api\/quotas\//,
+    action: AuditAction.QUOTA_UPDATE,
+    getResource: (req) => `quota:${req.path.split('/').pop() || 'unknown'}`,
+  },
+
+  // ─── 数据库连接 ───
+  {
+    method: 'POST',
+    pattern: /^\/api\/user\/db-connections\/?$/,
+    action: AuditAction.DB_CONNECTION_CREATE,
+    getResource: (req) => `db:${req.body?.name || 'unknown'}`,
+  },
+  {
+    method: 'PUT',
+    pattern: /^\/api\/user\/db-connections\//,
+    action: AuditAction.DB_CONNECTION_UPDATE,
+    getResource: (req) => `db:${req.path.split('/').pop() || 'unknown'}`,
+  },
+  {
+    method: 'DELETE',
+    pattern: /^\/api\/user\/db-connections\//,
+    action: AuditAction.DB_CONNECTION_DELETE,
+    getResource: (req) => `db:${req.path.split('/').pop() || 'unknown'}`,
+  },
+
+  // ─── 审计自身操作 ───
+  {
+    method: 'GET',
+    pattern: /^\/api\/audit\/export/,
+    action: AuditAction.AUDIT_EXPORT,
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/audit\/archive/,
+    action: AuditAction.AUDIT_ARCHIVE,
+  },
+  {
+    method: 'GET',
+    pattern: /^\/api\/audit\/logs/,
+    action: AuditAction.AUDIT_QUERY,
+  },
 ];
 
 /**

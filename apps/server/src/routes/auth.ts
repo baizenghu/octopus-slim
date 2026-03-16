@@ -12,6 +12,7 @@ import type { AuthService } from '@octopus/auth';
 import type { WorkspaceManager } from '@octopus/workspace';
 import { createAuthMiddleware, type AuthenticatedRequest } from '../middleware/auth';
 import { securityMonitor } from '../services/SecurityMonitor';
+import { validatePassword } from '../utils/password';
 
 export function createAuthRouter(authService: AuthService, workspaceManager: WorkspaceManager, prisma?: any): Router {
   const router = Router();
@@ -137,8 +138,9 @@ export function createAuthRouter(authService: AuthService, workspaceManager: Wor
         return;
       }
 
-      if (newPassword.length < 6) {
-        res.status(400).json({ error: '新密码长度至少 6 位' });
+      const pwError = validatePassword(newPassword);
+      if (pwError) {
+        res.status(400).json({ error: pwError });
         return;
       }
 

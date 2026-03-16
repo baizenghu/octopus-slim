@@ -12,6 +12,7 @@ import type { EngineAdapter } from '../EngineAdapter';
 import type { AuthService } from '@octopus/auth';
 import type { AppPrismaClient } from '../../types/prisma';
 import type { WorkspaceManager } from '@octopus/workspace';
+import type { AuditLogger } from '@octopus/audit';
 
 export class IMService {
   private adapters: IMAdapter[] = [];
@@ -25,6 +26,7 @@ export class IMService {
     ensureAgent: (userId: string, agentName: string) => Promise<void>;
     dataRoot?: string;
     workspaceManager?: WorkspaceManager;
+    auditLogger?: AuditLogger;
   }) {
     this.prisma = params.prisma;
     this.router = new IMRouter(
@@ -34,6 +36,7 @@ export class IMService {
       params.ensureAgent,
       params.dataRoot,
       params.workspaceManager,
+      params.auditLogger,
     );
   }
 
