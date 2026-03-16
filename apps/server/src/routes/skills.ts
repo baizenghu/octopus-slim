@@ -333,16 +333,20 @@ export function createSkillsRouter(
         return;
       }
 
-      // 引用完整性检查：检查是否有 agent 关联了此 Skill
-      const allAgents = await prisma.agent.findMany({ select: { name: true, ownerId: true, skillsFilter: true } });
+      // 自动清理关联此 Skill 的 agent skillsFilter（admin 可强制删除企业级技能）
+      const allAgents = await prisma.agent.findMany({ select: { id: true, name: true, ownerId: true, skillsFilter: true } });
       const referencingAgents = allAgents.filter((a: any) => {
         const filter = a.skillsFilter as string[] | null;
         return Array.isArray(filter) && (filter.includes(id) || filter.includes(existing.name));
       });
-      if (referencingAgents.length > 0) {
-        const names = referencingAgents.map((a: any) => `${a.ownerId}/${a.name}`).join(', ');
-        res.status(409).json({ error: `无法删除：以下 Agent 仍在使用此技能：${names}。请先取消关联后再删除。` });
-        return;
+      for (const agent of referencingAgents) {
+        const filter = (agent.skillsFilter as string[]).filter(
+          (s: string) => s !== id && s !== existing.name,
+        );
+        await prisma.agent.update({
+          where: { id: agent.id },
+          data: { skillsFilter: filter.length > 0 ? filter : null },
+        });
       }
 
       // 删除数据库记录

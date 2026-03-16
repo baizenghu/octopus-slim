@@ -203,13 +203,15 @@ export default function AgentsPage({ onConfigAgent }: AgentsPageProps) {
     refreshModels();
     // 新建 agent 权限默认全部禁用，仅加载可用选项列表
     try {
-      const [skillsRes, mcpRes] = await Promise.all([
+      const [skillsRes, mcpRes, connRes] = await Promise.all([
         adminApi.getSkills(),
         adminApi.getMcpServers(),
+        adminApi.getDbConnections(),
       ]);
       const SYSTEM_SKILLS = ['lesson'];
       setAvailableSkills((skillsRes.data || []).filter(s => s.enabled && !SYSTEM_SKILLS.includes(s.name)));
       setAvailableMcp((mcpRes.data || []).filter(s => s.enabled));
+      setAvailableConnections((connRes.data || []).filter((c: any) => c.enabled));
     } catch {
       // 保持空列表
     }

@@ -18,6 +18,7 @@ import type { WorkspaceManager } from '@octopus/workspace';
 import type { AuditLogger } from '@octopus/audit';
 import { AuditAction } from '@octopus/audit';
 import { randomUUID } from 'crypto';
+import { getSkillsForUser, buildSkillsSystemPromptSection } from '../SkillsInfo';
 
 const FILE_SIZE_LIMIT = 10 * 1024 * 1024; // 10MB
 
@@ -322,6 +323,25 @@ export class IMRouter {
 
     const targetName = parts[1];
 
+    // /agent list → 列出所有可用 agent
+    if (targetName === 'list') {
+      const current = this.activeAgents.get(imKey) || 'default';
+      const available = await this.prisma.agent.findMany({
+        where: { ownerId: userId, enabled: true, isDefault: false },
+        select: { name: true, description: true, identity: true },
+      });
+      const list = available.length > 0
+        ? available.map((a: any) => {
+            const displayName = a.identity?.name || a.name;
+            const marker = a.name === current ? ' ← 当前' : '';
+            const desc = a.description ? `：${a.description}` : '';
+            return `- ${displayName}（${a.name}）${desc}${marker}`;
+          }).join('\n')
+        : '（无可用专业 Agent）';
+      await adapter.sendText(imUserId, `可用 Agent：\n\n- 主助手（default）${current === 'default' ? ' ← 当前' : ''}\n${list}`);
+      return;
+    }
+
     // 切回 default 直接允许
     if (targetName === 'default') {
       this.activeAgents.delete(imKey);
@@ -499,6 +519,36 @@ export class IMRouter {
             `- 严禁访问其他用户的目录或系统敏感文件（如 /etc/passwd、~/.ssh 等）\n` +
             `- Shell 命令在沙箱容器内执行，可以使用 exec 工具运行命令`;
         } catch { /* ignore */ }
+      }
+
+      // 注入 Skill 操作指南（SKILL.md 内容），与 Web 聊天路径对齐
+      if (this.dataRoot) {
+        try {
+          let skills = await getSkillsForUser(userId, this.prisma, this.dataRoot);
+          // 非 default agent：按 skillsFilter 白名单过滤
+          if (agentName !== 'default' && skills.length > 0) {
+            const agentRow = await this.prisma.agent.findFirst({
+              where: { ownerId: userId, name: agentName, enabled: true },
+              select: { skillsFilter: true },
+            });
+            if (agentRow) {
+              const sf: string[] | null = agentRow.skillsFilter
+                ? (typeof agentRow.skillsFilter === 'string' ? JSON.parse(agentRow.skillsFilter) : agentRow.skillsFilter)
+                : null;
+              if (Array.isArray(sf) && sf.length > 0) {
+                skills = skills.filter(s => sf.includes(s.name) || sf.includes(s.id));
+              } else {
+                skills = []; // 未配置白名单的 agent 不提供 skill
+              }
+            }
+          }
+          const skillsSection = buildSkillsSystemPromptSection(skills);
+          if (skillsSection) {
+            extraSystemPrompt = (extraSystemPrompt || '') + '\n\n' + skillsSection;
+          }
+        } catch (e: any) {
+          console.warn('[im-router] Failed to inject skills info:', e.message);
+        }
       }
 
       // 如果上一个调用还在进行，自动取消

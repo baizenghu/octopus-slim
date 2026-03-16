@@ -568,8 +568,10 @@ export default function enterpriseMcpPlugin(api: any) {
             };
           }
 
-          // 5. 用户 workspace 和 outputs 目录
-          const userWorkspacePath = path.resolve(_dataRoot, 'users', userId, 'workspace');
+          // 5. 用户 workspace 和 outputs 目录（专业 agent 使用独立工作空间）
+          const userWorkspacePath = agentName && agentName !== 'default'
+            ? path.resolve(_dataRoot, 'users', userId, 'agents', agentName, 'workspace')
+            : path.resolve(_dataRoot, 'users', userId, 'workspace');
           const outputsPath = path.join(userWorkspacePath, 'outputs');
           if (!fs.existsSync(outputsPath)) {
             await fsp.mkdir(outputsPath, { recursive: true });
