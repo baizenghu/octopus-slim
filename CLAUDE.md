@@ -257,6 +257,17 @@ Enterprise Gateway 从独立 DeepSeek 调用者重构为原生代理层：
 - Plugins 迁移: `~/.octopus/plugins/` → `./plugins/`（版本控制 + 统一管理）
 - State 目录迁移: `~/.octopus/` → `.octopus-state/`（项目内版本控制，`OCTOPUS_STATE_DIR` 环境变量）
 
+### 阶段 1 整改 — 清理 + 安全 + 快速修复 (2026-03-17) ✅
+- 删除死代码约 1800 行（OctopusBridge、SkillTools、HeartbeatForwarder、McpPage、SkillsPage + 3 个测试文件）
+- 恢复 sandbox + skills.load.extraDirs 配置（vitest 覆盖丢失）
+- 企业 MCP spawn 环境变量过滤（不再继承完整 process.env）
+- HMAC 默认密钥启动警告
+- start.sh 配置完整性校验
+- chat.ts: loadAgent 去重（3→1）、标题生成去重、sleep→轮询、附件函数提取、sessionPrefs TTL、SSE 行缓冲区
+- agents.ts: 删除时清理 config entry、ensureDefaultAgent 只查一次、SOUL.md 按需加载、前端乐观更新
+- refreshToken DB fallback、Dashboard GROUP BY、MCP 路径统一、密码迁移优化、tools-cache.json 位置迁移
+- 前端禁用空转功能（导出/搜索 disabled + tooltip）
+
 ### 待做：系统加固
 - ~~启用 sandbox~~ ✅ 已改用 Docker sandbox（`tools.exec.host = "sandbox"`）
 - ~~提醒机制换 native `cron.add()` RPC~~ ✅ 已完成

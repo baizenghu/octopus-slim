@@ -6,6 +6,10 @@ import { todayDateStr } from './utils';
 // 审计日志 HMAC 签名密钥（生产环境必须通过环境变量设置）
 const AUDIT_HMAC_KEY = process.env.AUDIT_HMAC_KEY || 'default-audit-key-change-me';
 
+if (AUDIT_HMAC_KEY === 'default-audit-key-change-me') {
+  console.warn('[WARN] AUDIT_HMAC_KEY is using default value, audit signature chain is NOT secure. Set AUDIT_HMAC_KEY env var.');
+}
+
 /**
  * JSONL 文件审计写入器
  *

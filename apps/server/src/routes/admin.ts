@@ -426,22 +426,23 @@ export function createAdminRouter(
         prisma.scheduledTask.count({ where: { enabled: true } }).catch(() => 0),
       ]);
 
-      // 最近7天每日审计趋势
+      // 最近7天每日审计趋势（单次 GROUP BY 替代 7 次串行 COUNT）
+      const sevenDaysAgo = new Date(now.getTime() - 6 * 24 * 60 * 60 * 1000);
+      sevenDaysAgo.setHours(0, 0, 0, 0);
+      const rawTrend = await prisma.$queryRaw<Array<{ date: string; count: bigint }>>`
+        SELECT DATE(createdAt) as date, COUNT(*) as count
+        FROM AuditLog
+        WHERE createdAt >= ${sevenDaysAgo}
+        GROUP BY DATE(createdAt)
+        ORDER BY date ASC
+      `;
+      // 补齐缺失的日期（无审计记录的天数 count=0）
+      const trendMap = new Map(rawTrend.map(r => [r.date, Number(r.count)]));
       const dailyTrend: { date: string; count: number }[] = [];
       for (let i = 6; i >= 0; i--) {
-        const dayStart = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
-        dayStart.setHours(0, 0, 0, 0);
-        const dayEnd = new Date(dayStart);
-        dayEnd.setHours(23, 59, 59, 999);
-
-        const count = await prisma.auditLog.count({
-          where: { createdAt: { gte: dayStart, lte: dayEnd } },
-        });
-
-        dailyTrend.push({
-          date: dayStart.toISOString().slice(0, 10),
-          count,
-        });
+        const d = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
+        const dateStr = d.toISOString().slice(0, 10);
+        dailyTrend.push({ date: dateStr, count: trendMap.get(dateStr) || 0 });
       }
 
       // 操作类型分布

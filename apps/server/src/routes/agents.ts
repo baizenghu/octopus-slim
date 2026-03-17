@@ -396,7 +396,10 @@ export function createAgentsRouter(
    * 确保用户有一个 default agent（主 agent）记录
    * 首次查询时自动创建，保证主 agent 始终出现在列表中
    */
+  const defaultCheckedUsers = new Set<string>();
   async function ensureDefaultAgent(userId: string) {
+    if (defaultCheckedUsers.has(userId)) return;
+    defaultCheckedUsers.add(userId);
     const existing = await prisma.agent.findFirst({
       where: { ownerId: userId, name: 'default' },
     });
@@ -641,7 +644,22 @@ export function createAgentsRouter(
           console.error('[agents] Workspace cleanup failed:', e.message),
         );
       }
-      // 更新 allowAgents 配置（移除已删除的 agent）
+      // 清理 octopus.json 中 agents.list 的残留 entry + 更新 allowAgents
+      if (bridge?.isConnected) {
+        const { EngineAdapter: OCB2 } = await import('../services/EngineAdapter');
+        const nativeId = OCB2.userAgentId(user.id, existing.name);
+        try {
+          const config = await bridge.configGetParsed() as any;
+          const agentsList = config?.agents?.list || [];
+          const filtered = agentsList.filter((a: any) => a.id !== nativeId);
+          if (filtered.length !== agentsList.length) {
+            config.agents.list = filtered;
+            await bridge.configApplyFull(config);
+          }
+        } catch (e: any) {
+          console.warn('[agents] Failed to clean agents.list config entry:', e.message);
+        }
+      }
       syncAllowAgents(user.id).catch((e) =>
         console.error('[agents] syncAllowAgents after delete failed:', e.message),
       );
@@ -677,9 +695,15 @@ export function createAgentsRouter(
       const { EngineAdapter: OCB } = await import('../services/EngineAdapter');
       const nativeAgentId = OCB.userAgentId(user.id, existing.name);
 
-      // 并行读取所有配置文件，单个文件失败时 content 返回空字符串
+      // 支持 ?file=SOUL.md 按需加载单个文件
+      const requestedFile = req.query.file as string | undefined;
+      const filesToLoad = requestedFile
+        ? AGENT_CONFIG_FILES.filter(f => f === requestedFile)
+        : AGENT_CONFIG_FILES;
+
+      // 并行读取配置文件，单个文件失败时 content 返回空字符串
       const files = await Promise.all(
-        AGENT_CONFIG_FILES.map(async (fileName) => {
+        filesToLoad.map(async (fileName) => {
           try {
             const result = await bridge.agentFilesGet(nativeAgentId, fileName) as any;
             // RPC 返回 { agentId, workspace, file: { name, path, content, ... } }

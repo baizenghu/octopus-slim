@@ -191,7 +191,10 @@ interface CachedMCPTool {
   ownerId?: string | null;
 }
 
-const TOOLS_CACHE_PATH = path.join(__dirname, '..', 'tools-cache.json');
+const TOOLS_CACHE_PATH = path.join(
+  process.env.OCTOPUS_STATE_DIR || path.join(__dirname, '..', '..', '..', '.octopus-state'),
+  'tools-cache.json'
+);
 
 /** 在模块加载时同步读取磁盘缓存 — 保证即使模块被重新加载也能立即拿到工具列表 */
 let _cachedTools: CachedMCPTool[] = [];
@@ -718,7 +721,10 @@ export default function enterpriseMcpPlugin(api: any) {
   });
 
   // ── 个人 MCP 动态刷新（文件信号 + 定时轮询）──
-  const REFRESH_SIGNAL_PATH = path.join(__dirname, '..', '..', '..', '.octopus-state', 'mcp-refresh-signal');
+  const REFRESH_SIGNAL_PATH = path.join(
+    process.env.OCTOPUS_STATE_DIR || path.join(__dirname, '..', '..', '..', '.octopus-state'),
+    'mcp-refresh-signal'
+  );
   let _lastRefreshCheck = 0;
   const REFRESH_INTERVAL = 30_000; // 30s
 

@@ -1,15 +1,10 @@
 {
   "meta": {
     "lastTouchedVersion": "1.0.0",
-    "lastTouchedAt": "2026-03-15T11:37:39.456Z"
+    "lastTouchedAt": "2026-03-17T08:41:28.815Z"
   },
   "update": {
     "channel": "beta"
-  },
-  "tools": {
-    "fs": {
-      "workspaceOnly": true
-    }
   },
   "browser": {
     "profiles": {
@@ -35,19 +30,39 @@
             "name": "DeepSeek R2"
           }
         ]
+      },
+      "openai-codex": {
+        "baseUrl": "https://chatgpt.com/backend-api",
+        "api": "openai-codex-responses",
+        "models": [
+          {
+            "id": "gpt-5.2",
+            "name": "GPT-5.2"
+          }
+        ]
       }
+    }
+  },
+  "skills": {
+    "load": {
+      "extraDirs": ["/home/baizh/octopus/data/skills"]
     }
   },
   "agents": {
     "defaults": {
       "model": {
-        "primary": "openai-codex/gpt-5.2",
+        "primary": "deepseek/deepseek-chat",
         "fallbacks": [
-          "deepseek/deepseek-chat"
+          "deepseek/deepseek-reasoner"
         ]
       },
       "compaction": {
         "mode": "safeguard"
+      },
+      "sandbox": {
+        "mode": "all",
+        "scope": "agent",
+        "docker": { "image": "octopus-sandbox:enterprise" }
       }
     },
     "list": [
@@ -61,33 +76,36 @@
         "agentDir": "/home/baizh/octopus/.octopus-state/agents/ent_user-admin_default/agent"
       },
       {
-        "id": "ent_user-baizh_default",
-        "name": "ent_user-baizh_default",
-        "workspace": "/home/baizh/octopus/data/users/user-baizh/agents/default",
-        "agentDir": "/home/baizh/octopus/.octopus-state/agents/ent_user-baizh_default/agent",
-        "subagents": {
-          "allowAgents": [
-            "ent_user-baizh_think"
-          ]
-        }
-      },
-      {
         "id": "ent_user-admin_____",
         "name": "ent_user-admin_____",
         "workspace": "/home/baizh/octopus/data/users/user-admin/agents/财务助手",
         "agentDir": "/home/baizh/octopus/.octopus-state/agents/ent_user-admin_____/agent"
       },
       {
-        "id": "ent_user-baizh_think",
-        "name": "ent_user-baizh_think",
-        "workspace": "/home/baizh/octopus/data/users/user-baizh/agents/think/workspace",
-        "agentDir": "/home/baizh/octopus/.octopus-state/agents/ent_user-baizh_think/agent",
+        "id": "ent_user-test_default",
+        "name": "ent_user-test_default",
+        "workspace": "/home/baizh/octopus/data/users/user-test/workspace",
+        "agentDir": "/home/baizh/octopus/.octopus-state/agents/ent_user-test_default/agent",
+        "subagents": {
+          "allowAgents": [
+            "ent_user-test_shuju"
+          ]
+        }
+      },
+      {
+        "id": "ent_user-test_shuju",
+        "name": "ent_user-test_shuju",
+        "workspace": "/home/baizh/octopus/data/users/user-test/agents/shuju/workspace",
+        "agentDir": "/home/baizh/octopus/.octopus-state/agents/ent_user-test_shuju/agent",
         "model": "deepseek/deepseek-chat",
         "subagents": {
           "allowAgents": []
         },
         "tools": {
           "allow": [
+            "read",
+            "write",
+            "exec",
             "group:plugins",
             "memory_search",
             "memory_get",
@@ -100,8 +118,34 @@
             "image"
           ]
         }
+      },
+      {
+        "id": "ent_user-baizh_default",
+        "name": "ent_user-baizh_default",
+        "workspace": "/home/baizh/octopus/data/users/user-baizh/workspace",
+        "agentDir": "/home/baizh/octopus/.octopus-state/agents/ent_user-baizh_default/agent",
+        "model": "openai-codex/gpt-5.2"
       }
     ]
+  },
+  "tools": {
+    "exec": { "host": "sandbox" },
+    "loopDetection": {
+      "enabled": true,
+      "warningThreshold": 8,
+      "criticalThreshold": 15,
+      "globalCircuitBreakerThreshold": 25
+    },
+    "fs": {
+      "workspaceOnly": true
+    },
+    "sandbox": {
+      "tools": {
+        "allow": [
+          "*"
+        ]
+      }
+    }
   },
   "commands": {
     "native": "auto",
@@ -182,6 +226,14 @@
           "databaseUrl": "mysql://octopus:YOUR_DB_PASSWORD_URLENCODED@localhost:3306/octopus_enterprise",
           "dataRoot": "/home/baizh/octopus/data"
         }
+      }
+    }
+  },
+  "auth": {
+    "profiles": {
+      "openai-codex:default": {
+        "provider": "openai-codex",
+        "mode": "oauth"
       }
     }
   }

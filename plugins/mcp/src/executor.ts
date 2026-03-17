@@ -144,9 +144,16 @@ export class MCPExecutor {
       });
     } else {
       // 企业 MCP: 宿主机直接执行（管理员配置的受信基础设施）
+      // 安全：不继承完整 process.env，只传递必要变量 + 管理员显式配置的变量
       child = spawn(cfg.command!, cfg.args || [], {
         stdio: ['pipe', 'pipe', 'pipe'],
-        env: { ...process.env, ...mergedEnv },
+        env: {
+          PATH: process.env.PATH,
+          HOME: process.env.HOME || '/tmp',
+          NODE_ENV: process.env.NODE_ENV,
+          LANG: process.env.LANG,
+          ...mergedEnv,
+        },
       });
     }
 

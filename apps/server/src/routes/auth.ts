@@ -104,6 +104,14 @@ export function createAuthRouter(authService: AuthService, workspaceManager: Wor
       }
 
       const result = await authService.refreshToken(refreshToken);
+      // DB fallback：验证用户是否仍然有效（防止已禁用用户用旧 refresh token 获取新 access token）
+      if (prisma && (result as any).user?.id) {
+        const dbUser = await prisma.user.findUnique({ where: { userId: (result as any).user.id } });
+        if (!dbUser || dbUser.status !== 'active') {
+          res.status(401).json({ error: 'User disabled' });
+          return;
+        }
+      }
       res.json(result);
     } catch (err: any) {
       res.status(401).json({ error: err.message || 'Token refresh failed' });

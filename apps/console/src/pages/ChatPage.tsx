@@ -556,12 +556,14 @@ export default function ChatPage() {
 
       const decoder = new TextDecoder();
       let delegated = false;
+      let sseBuffer = '';
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        const chunk = decoder.decode(value, { stream: true });
-        const lines = chunk.split('\n');
-        for (const line of lines) {
+        sseBuffer += decoder.decode(value, { stream: true });
+        const parts = sseBuffer.split('\n');
+        sseBuffer = parts.pop() || ''; // 最后一个不完整的片段留到下次
+        for (const line of parts) {
           if (line.startsWith('data: ')) {
             const data = line.slice(6);
             if (data === '[DONE]') continue;
@@ -676,16 +678,8 @@ export default function ChatPage() {
       }
 
       // 发送完成后稍作延迟（等待 native gateway 持久化会话），再刷新列表
-      setTimeout(async () => {
-        await loadSessions();
-        // 若是新会话，自动生成标题（取第一条用户消息截断）
-        if (isNewSession) {
-          try {
-            await adminApi.generateTitle(sid, currentAgentId);
-            loadSessions();
-          } catch { /* ignore */ }
-        }
-      }, 800);
+      // 标题由后端 autoGenerateTitle 自动生成，前端不再重复调用
+      setTimeout(() => loadSessions(), 800);
     } catch (err: any) {
       if (err.name === 'AbortError') {
         // 用户主动终止，不显示错误
@@ -846,13 +840,13 @@ export default function ChatPage() {
                 <Button
                   variant="ghost"
                   size="icon"
-                  onClick={() => setShowSearch(!showSearch)}
-                  className={cn(showSearch && 'bg-accent')}
+                  disabled
+                  title="功能开发中"
                 >
                   <Search className="h-4 w-4" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>搜索历史消息</TooltipContent>
+              <TooltipContent>功能开发中</TooltipContent>
             </Tooltip>
           </div>
 
@@ -861,10 +855,8 @@ export default function ChatPage() {
             <div className="px-3 pb-2 space-y-2">
               <div className="flex gap-1">
                 <Input
-                  placeholder="搜索历史消息..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+                  placeholder="功能开发中"
+                  disabled
                   className="h-8 text-sm"
                 />
                 <Button size="sm" variant="secondary" onClick={handleSearch} className="h-8 px-2">
@@ -950,11 +942,11 @@ export default function ChatPage() {
                             AI 生成标题
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
-                          <DropdownMenuItem onClick={() => handleExport(s.sessionId, 'md')}>
+                          <DropdownMenuItem disabled title="功能开发中">
                             <FileText className="mr-2 h-3.5 w-3.5" />
                             导出 Markdown
                           </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => handleExport(s.sessionId, 'json')}>
+                          <DropdownMenuItem disabled title="功能开发中">
                             <Download className="mr-2 h-3.5 w-3.5" />
                             导出 JSON
                           </DropdownMenuItem>

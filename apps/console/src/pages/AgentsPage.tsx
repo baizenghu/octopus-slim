@@ -282,15 +282,17 @@ export default function AgentsPage({ onConfigAgent }: AgentsPageProps) {
       }
 
       if (editingAgent) {
-        await adminApi.updateAgent(editingAgent.id, data);
+        const res = await adminApi.updateAgent(editingAgent.id, data);
         toast.success('Agent 已更新');
+        setAgents(prev => prev.map(a => a.id === editingAgent.id ? { ...a, ...res.agent } : a));
       } else {
-        await adminApi.createAgent(data);
+        const res = await adminApi.createAgent(data);
         toast.success('Agent 已创建');
+        if (res.agent) setAgents(prev => [...prev, res.agent]);
+        else loadData(); // fallback
       }
 
       setModalOpen(false);
-      loadData();
     } catch (err: any) {
       toast.error(err.message || '操作失败');
     }
@@ -301,7 +303,7 @@ export default function AgentsPage({ onConfigAgent }: AgentsPageProps) {
     try {
       await adminApi.deleteAgent(id);
       toast.success('Agent 已删除');
-      loadData();
+      setAgents(prev => prev.filter(a => a.id !== id));
     } catch (err: any) {
       toast.error(err.message || '删除失败');
     }
@@ -311,7 +313,7 @@ export default function AgentsPage({ onConfigAgent }: AgentsPageProps) {
     try {
       await adminApi.setDefaultAgent(id);
       toast.success('已设为默认 Agent');
-      loadData();
+      setAgents(prev => prev.map(a => ({ ...a, isDefault: a.id === id })));
     } catch (err: any) {
       toast.error(err.message || '设置失败');
     }

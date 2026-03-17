@@ -31,8 +31,16 @@ import type { QuotaManager } from '@octopus/quota';
 import { validateSessionOwnership } from '../utils/ownership';
 import { getSkillsForUser, buildSkillsSystemPromptSection } from '../services/SkillsInfo';
 
-/** Session 级偏好存储（进程级，重启清空） */
-const sessionPrefs = new Map<string, { mcpId?: string; skillId?: string }>();
+/** Session 级偏好存储（进程级，重启清空，30 分钟 TTL） */
+const sessionPrefs = new Map<string, { mcpId?: string; skillId?: string; updatedAt: number }>();
+
+// 清理过期条目（30 分钟 TTL）
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, val] of sessionPrefs) {
+    if (now - val.updatedAt > 30 * 60 * 1000) sessionPrefs.delete(key);
+  }
+}, 5 * 60 * 1000);
 
 /** Session 级已计量 Token 总数缓存（用于增量计费，重启归零，上限 2000 条） */
 const sessionTokens = new Map<string, number>();
@@ -118,8 +126,9 @@ export function createChatRouter(
         if (!Array.isArray(mcpAllow) || mcpAllow.length === 0 || (!mcpAllow.includes(mcpId) && !mcpAllow.includes(mcpName))) {
           return { reply: `当前 Agent 不允许使用 MCP 工具 \`${mcpName}\`` };
         }
-        const prefs = sessionPrefs.get(sessionId) || {};
+        const prefs = sessionPrefs.get(sessionId) || { updatedAt: Date.now() };
         prefs.mcpId = mcpId;
+        prefs.updatedAt = Date.now();
         sessionPrefs.set(sessionId, prefs);
         // 提取附带问题
         const mcpQuestion = mcpParts.slice(1).join(' ').trim();
@@ -159,8 +168,9 @@ export function createChatRouter(
         if (!Array.isArray(skillAllow) || skillAllow.length === 0 || (!skillAllow.includes(skillId) && !skillAllow.includes(skillName))) {
           return { reply: `当前 Agent 不允许使用 Skill \`${skillName}\`，请联系管理员授权` };
         }
-        const prefs = sessionPrefs.get(sessionId) || {};
+        const prefs = sessionPrefs.get(sessionId) || { updatedAt: Date.now() };
         prefs.skillId = skillId;
+        prefs.updatedAt = Date.now();
         sessionPrefs.set(sessionId, prefs);
         // 提取附带问题
         const skillQuestion = skillParts.slice(1).join(' ').trim();
@@ -225,10 +235,17 @@ export function createChatRouter(
         console.error(`[chat] agentsCreate failed for ${nativeAgentId}: ${msg}`);
       }
     }
-    // 首次创建时等待 config reload 完成，再写入默认文件
+    // 首次创建时等待 agent 就绪，再写入默认文件
     if (isNewAgent) {
-      // agents.create 触发 config 重写 → native gateway 需要 ~1s reload，等待 agent 就绪
-      await new Promise(r => setTimeout(r, 2000));
+      // agents.create 触发 config 重写 → 轮询等待 agent 可见（替代固定 sleep）
+      for (let i = 0; i < 5; i++) {
+        try {
+          const result = await bridge.agentsList() as any;
+          const agents: any[] = result?.agents || [];
+          if (agents.some((a: any) => a.id === nativeAgentId || a.name === nativeAgentId)) break;
+        } catch { /* retry */ }
+        await new Promise(r => setTimeout(r, 500));
+      }
       const setFileWithRetry = async (fileName: string, content: string) => {
         try {
           await bridge.agentFilesSet(nativeAgentId, fileName, content);
@@ -246,6 +263,39 @@ export function createChatRouter(
       });
     }
     // memory-lancedb-pro 默认行为已提供 scope 隔离，无需显式注册
+  }
+
+  /** 附件处理：保存到 agent workspace 并返回相对路径列表 */
+  const MAX_ATTACHMENT_SIZE = 10 * 1024 * 1024; // 10MB base64 (~7.5MB 实际文件)
+  async function processAttachments(
+    attachments: Array<{ name: string; content: string; type?: string }>,
+    wsRoot: string,
+  ): Promise<{ savedPaths: string[]; error?: string }> {
+    const filesDir = path.join(wsRoot, 'files');
+    await fs.promises.mkdir(filesDir, { recursive: true });
+
+    const savedPaths: string[] = [];
+    for (const att of attachments) {
+      if (!att.name || !att.content) continue;
+      if (att.content.length > MAX_ATTACHMENT_SIZE) {
+        return { savedPaths: [], error: `附件 "${att.name}" 超过大小限制（最大 10MB）` };
+      }
+      const safeName = att.name.replace(/[^a-zA-Z0-9._\u4e00-\u9fa5-]/g, '_');
+      let targetPath = path.join(filesDir, safeName);
+      if (fs.existsSync(targetPath)) {
+        const ext = path.extname(safeName);
+        const base = path.basename(safeName, ext);
+        targetPath = path.join(filesDir, `${base}_${Date.now()}${ext}`);
+      }
+      const isText = att.type?.startsWith('text/') || /\.(txt|md|csv|json|xml|yaml|yml|js|ts|py|sql|sh|log|html|css)$/i.test(att.name);
+      if (isText) {
+        await fs.promises.writeFile(targetPath, att.content, 'utf-8');
+      } else {
+        await fs.promises.writeFile(targetPath, Buffer.from(att.content, 'base64'));
+      }
+      savedPaths.push(path.relative(wsRoot, targetPath));
+    }
+    return { savedPaths };
   }
 
   /** 加载用户的 Agent 配置 */
@@ -503,45 +553,18 @@ export function createChatRouter(
       return;
     }
 
-    // 处理附件：保存到 agent workspace 的 files/ 目录，并将路径信息附加到消息
-    const MAX_ATTACHMENT_SIZE = 10 * 1024 * 1024; // 10MB base64 (~7.5MB 实际文件)
+    // 入口统一加载 Agent 配置（避免后续重复查询）
+    const agent = await loadAgent(user.id, reqAgentId);
+    const agentName = agent?.name || 'default';
+
+    // 处理附件
     let finalMessage = message?.trim() || '';
     if (Array.isArray(attachments) && attachments.length > 0) {
-      const agent = await loadAgent(user.id, reqAgentId);
-      const agentName = agent?.name || 'default';
-      // 使用与 agent 一致的 workspace（default agent 用用户主 workspace，专业 agent 用独立 workspace）
       const wsRoot = agentName === 'default'
         ? workspaceManager.getSubPath(user.id, 'WORKSPACE')
         : workspaceManager.getAgentWorkspacePath(user.id, agentName);
-      const filesDir = path.join(wsRoot, 'files');
-      await fs.promises.mkdir(filesDir, { recursive: true });
-
-      const savedPaths: string[] = [];
-      for (const att of attachments) {
-        if (!att.name || !att.content) continue;
-        if (att.content.length > MAX_ATTACHMENT_SIZE) {
-          res.status(413).json({ error: `附件 "${att.name}" 超过大小限制（最大 10MB）` });
-          return;
-        }
-        const safeName = att.name.replace(/[^a-zA-Z0-9._\u4e00-\u9fa5-]/g, '_');
-        let targetPath = path.join(filesDir, safeName);
-        // 防重名
-        if (fs.existsSync(targetPath)) {
-          const ext = path.extname(safeName);
-          const base = path.basename(safeName, ext);
-          targetPath = path.join(filesDir, `${base}_${Date.now()}${ext}`);
-        }
-        // 判断是文本还是 base64
-        const isText = att.type?.startsWith('text/') || /\.(txt|md|csv|json|xml|yaml|yml|js|ts|py|sql|sh|log|html|css)$/i.test(att.name);
-        if (isText) {
-          await fs.promises.writeFile(targetPath, att.content, 'utf-8');
-        } else {
-          await fs.promises.writeFile(targetPath, Buffer.from(att.content, 'base64'));
-        }
-        // 返回相对于 workspace 的路径（agent 只能看到 workspace 内的文件）
-        savedPaths.push(path.relative(wsRoot, targetPath));
-      }
-
+      const { savedPaths, error } = await processAttachments(attachments, wsRoot);
+      if (error) { res.status(413).json({ error }); return; }
       if (savedPaths.length > 0) {
         const fileList = savedPaths.map(p => `- ${p}`).join('\n');
         finalMessage = `[用户上传了 ${savedPaths.length} 个文件，已保存到工作空间]\n${fileList}\n\n${finalMessage}`;
@@ -550,8 +573,7 @@ export function createChatRouter(
 
     // 斜杠命令拦截
     const sid0 = rawSessionId || 'tmp';
-    const slashAgent = await loadAgent(user.id, reqAgentId);
-    const slashResult = await handleSlashCommand(message.trim(), user.id, sid0, slashAgent);
+    const slashResult = await handleSlashCommand(message.trim(), user.id, sid0, agent);
     if (slashResult !== null) {
       if (slashResult.passthrough) {
         // 有附带问题：先发偏好提示，再用剩余文本继续走正常对话流程
@@ -573,9 +595,6 @@ export function createChatRouter(
       return;
     }
 
-    // 加载 Agent 配置
-    const agent = await loadAgent(user.id, reqAgentId);
-    const agentName = agent?.name || 'default';
     const nativeAgentId = EngineAdapter.userAgentId(user.id, agentName);
     // 若前端传来的 sessionId 已经是完整 native session key（历史会话继续聊天），直接使用
     let sessionKey: string;
@@ -821,50 +840,27 @@ export function createChatRouter(
       return;
     }
 
-    // 处理附件（与流式端点逻辑一致）
-    const MAX_ATTACHMENT_SIZE_NS = 10 * 1024 * 1024; // 10MB base64 (~7.5MB 实际文件)
+    // 入口统一加载 Agent 配置（避免后续重复查询）
+    const agentNS = await loadAgent(user.id, reqAgentId);
+    const agentNameNS = agentNS?.name || 'default';
+
+    // 处理附件
     let finalMsgNonStream = message?.trim() || '';
     if (Array.isArray(attNonStream) && attNonStream.length > 0) {
-      const agentNS = await loadAgent(user.id, reqAgentId);
-      const agentNameNS = agentNS?.name || 'default';
       const wsRootNS = agentNameNS === 'default'
         ? workspaceManager.getSubPath(user.id, 'WORKSPACE')
         : workspaceManager.getAgentWorkspacePath(user.id, agentNameNS);
-      const filesDirNS = path.join(wsRootNS, 'files');
-      await fs.promises.mkdir(filesDirNS, { recursive: true });
-
-      const savedPathsNS: string[] = [];
-      for (const att of attNonStream) {
-        if (!att.name || !att.content) continue;
-        if (att.content.length > MAX_ATTACHMENT_SIZE_NS) {
-          res.status(413).json({ error: `附件 "${att.name}" 超过大小限制（最大 10MB）` });
-          return;
-        }
-        const safeName = att.name.replace(/[^a-zA-Z0-9._\u4e00-\u9fa5-]/g, '_');
-        let targetPath = path.join(filesDirNS, safeName);
-        if (fs.existsSync(targetPath)) {
-          const ext = path.extname(safeName);
-          const base = path.basename(safeName, ext);
-          targetPath = path.join(filesDirNS, `${base}_${Date.now()}${ext}`);
-        }
-        const isText = att.type?.startsWith('text/') || /\.(txt|md|csv|json|xml|yaml|yml|js|ts|py|sql|sh|log|html|css)$/i.test(att.name);
-        if (isText) {
-          await fs.promises.writeFile(targetPath, att.content, 'utf-8');
-        } else {
-          await fs.promises.writeFile(targetPath, Buffer.from(att.content, 'base64'));
-        }
-        savedPathsNS.push(path.relative(wsRootNS, targetPath));
-      }
-      if (savedPathsNS.length > 0) {
-        const fileList = savedPathsNS.map(p => `- ${p}`).join('\n');
-        finalMsgNonStream = `[用户上传了 ${savedPathsNS.length} 个文件，已保存到工作空间]\n${fileList}\n\n${finalMsgNonStream}`;
+      const { savedPaths, error } = await processAttachments(attNonStream, wsRootNS);
+      if (error) { res.status(413).json({ error }); return; }
+      if (savedPaths.length > 0) {
+        const fileList = savedPaths.map(p => `- ${p}`).join('\n');
+        finalMsgNonStream = `[用户上传了 ${savedPaths.length} 个文件，已保存到工作空间]\n${fileList}\n\n${finalMsgNonStream}`;
       }
     }
 
     // 斜杠命令拦截
     const sid0 = rawSessionId || 'tmp';
-    const slashAgentNS = await loadAgent(user.id, reqAgentId);
-    const slashResult = await handleSlashCommand(message?.trim() || '', user.id, sid0, slashAgentNS);
+    const slashResult = await handleSlashCommand(message?.trim() || '', user.id, sid0, agentNS);
     if (slashResult !== null) {
       if (slashResult.passthrough) {
         finalMsgNonStream = slashResult.passthrough;
@@ -879,9 +875,7 @@ export function createChatRouter(
       return;
     }
 
-    const agent = await loadAgent(user.id, reqAgentId);
-    const agentName = agent?.name || 'default';
-    const nativeAgentId = EngineAdapter.userAgentId(user.id, agentName);
+    const nativeAgentId = EngineAdapter.userAgentId(user.id, agentNameNS);
     let sessionKey: string;
     let sid: string;
     if (rawSessionId && rawSessionId.startsWith('agent:')) {
@@ -893,10 +887,10 @@ export function createChatRouter(
       sid = rawSessionId;
     } else {
       sid = rawSessionId || randomUUID().replace(/-/g, '').slice(0, 16);
-      sessionKey = EngineAdapter.userSessionKey(user.id, agentName, sid);
+      sessionKey = EngineAdapter.userSessionKey(user.id, agentNameNS, sid);
     }
-    await ensureNativeAgent(user.id, agentName);
-    const extraPrompt = await buildEnterpriseSystemPrompt(user, agent);
+    await ensureNativeAgent(user.id, agentNameNS);
+    const extraPrompt = await buildEnterpriseSystemPrompt(user, agentNS);
 
     // 注入 session 级 skill/mcp 偏好
     const prefsNS = sessionPrefs.get(sid0);

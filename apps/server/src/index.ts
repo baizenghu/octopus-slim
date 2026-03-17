@@ -52,7 +52,6 @@ import { createQuotaMiddleware } from './middleware/quota';
 import { EngineAdapter } from './services/EngineAdapter';
 import { ensureAgentTemplates } from './services/SoulTemplate';
 import { IMService } from './services/im';
-import { HeartbeatForwarder } from './services/HeartbeatForwarder';
 import { globalErrorHandler } from './middleware/error-handler';
 import { securityMonitor } from './services/SecurityMonitor';
 import type { AppPrismaClient } from './types/prisma';
@@ -100,8 +99,9 @@ async function main() {
     prismaClient = getPrismaClient();
     console.log('   Database: connected');
 
-    // 迁移明文密码为 bcrypt 哈希（兼容旧数据）
-    if (prismaClient) {
+    // 迁移明文密码为 bcrypt 哈希（兼容旧数据，只执行一次）
+    if (prismaClient && !(globalThis as any).__passwordMigrationDone) {
+      (globalThis as any).__passwordMigrationDone = true;
       try {
         const bcryptMigrate = await import('bcryptjs');
         const usersToMigrate = await prismaClient.user.findMany({
@@ -243,9 +243,6 @@ async function main() {
         });
         await imService.start();
 
-        // 心跳巡检结果自动转发到飞书
-        const heartbeatForwarder = new HeartbeatForwarder(imBridge, imService, prismaClient);
-        heartbeatForwarder.start();
       }
     } catch (err: any) {
       console.warn('   Native Gateway: connection failed -', err.message);

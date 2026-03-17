@@ -174,6 +174,16 @@ start_all() {
     # 保留最近 10 个备份
     ls -t "$BACKUP_DIR"/octopus.json.* 2>/dev/null | tail -n +11 | xargs rm -f 2>/dev/null
     echo -e "  ${GREEN}✓${NC} 配置已备份到 $BACKUP_DIR/"
+
+    # ─── 配置完整性校验（防止 vitest 覆盖丢失关键字段） ──────────────
+    local missing_fields=""
+    grep -q '"host".*"sandbox"' "$CONFIG_FILE" || missing_fields="${missing_fields} tools.exec.host"
+    grep -q '"extraDirs"' "$CONFIG_FILE" || missing_fields="${missing_fields} skills.load.extraDirs"
+    grep -q '"mode".*"all"' "$CONFIG_FILE" || missing_fields="${missing_fields} agents.defaults.sandbox.mode"
+    if [ -n "$missing_fields" ]; then
+      echo -e "  ${RED}⚠ octopus.json 缺少关键配置:${missing_fields}${NC}"
+      echo -e "  ${RED}  请检查 config-backups/ 并恢复配置${NC}"
+    fi
   fi
 
   echo ""
