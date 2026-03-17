@@ -43,15 +43,15 @@ export class WorkspaceManager {
       return this.getWorkspacePath(userId);
     }
 
-    // 创建所有子目录（mode 0o755: Docker sandbox uid=2000 通过同组获取写权限）
+    // 创建所有子目录（mode 0o777: Docker sandbox uid=2000 需要写权限）
     const dirs = Object.values(WORKSPACE_DIRS);
     for (const dir of dirs) {
       const dirPath = path.join(userRoot, dir);
       await fsp.mkdir(dirPath, { recursive: true });
-      await fsp.chmod(dirPath, 0o755);
+      await fsp.chmod(dirPath, 0o777);
     }
-    // 用户根目录也需要可进入权限
-    await fsp.chmod(userRoot, 0o755);
+    // 用户根目录也需要可写（sandbox 需要在此创建文件）
+    await fsp.chmod(userRoot, 0o777);
 
     // 写入元数据
     const metadata: UserMetadata = {
@@ -329,13 +329,13 @@ export class WorkspaceManager {
 
     const agentWorkspace = this.getAgentWorkspacePath(userId, agentName);
     if (!fs.existsSync(agentWorkspace)) {
-      await fsp.mkdir(agentWorkspace, { recursive: true, mode: 0o755 });
+      await fsp.mkdir(agentWorkspace, { recursive: true, mode: 0o777 });
     }
 
     // 创建 outputs 子目录
     const outputsDir = path.join(agentWorkspace, 'outputs');
     if (!fs.existsSync(outputsDir)) {
-      await fsp.mkdir(outputsDir, { recursive: true, mode: 0o755 });
+      await fsp.mkdir(outputsDir, { recursive: true, mode: 0o777 });
     }
 
     return agentWorkspace;
