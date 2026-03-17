@@ -257,6 +257,17 @@ Enterprise Gateway 从独立 DeepSeek 调用者重构为原生代理层：
 - Plugins 迁移: `~/.octopus/plugins/` → `./plugins/`（版本控制 + 统一管理）
 - State 目录迁移: `~/.octopus/` → `.octopus-state/`（项目内版本控制，`OCTOPUS_STATE_DIR` 环境变量）
 
+### 阶段 2 整改 — 消除重复代码 + 性能优化 (2026-03-17) ✅
+- chat.ts 瘦身拆分：1432→722 行（减 710 行），提取 sessions.ts(573)、SystemPromptBuilder.ts(277)、ContentSanitizer.ts(59)
+- SystemPromptBuilder 添加 (userId, agentId) 缓存（TTL 5min），消除 MCP 双重注入
+- 内容净化统一为 ContentSanitizer（替代 4 处分散正则）
+- AgentConfigSync.ts 合并 3 处 config RMW 模式（6 RPC→2），消除并发竞争风险
+- enterprise-mcp 插件去重：4 个 execute 函数→工厂模式，合并 getMcpFilter/getAllowedConnections 缓存
+- 前端 PersonalMcpManager 组件提取，消除 McpSettingsPage/PersonalSettingsPage ~500 行重复
+- 中文 agentName 冲突修复：userAgentId() 使用 md5 hash 后缀
+- 启动优化：agent 创建 Promise.allSettled 并发，恢复完整 model/tools/allowAgents 配置
+- 委派轮询优化：新增轻量 GET /sessions/:id/status，前端先检查再决定是否拉全量
+
 ### 阶段 1 整改 — 清理 + 安全 + 快速修复 (2026-03-17) ✅
 - 删除死代码约 1800 行（OctopusBridge、SkillTools、HeartbeatForwarder、McpPage、SkillsPage + 3 个测试文件）
 - 恢复 sandbox + skills.load.extraDirs 配置（vitest 覆盖丢失）

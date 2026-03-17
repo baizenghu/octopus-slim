@@ -401,6 +401,15 @@ class AdminApi {
     );
   }
 
+  async getSessionStatus(sessionId: string, agentId?: string) {
+    const params = new URLSearchParams();
+    if (agentId) params.set('agentId', agentId);
+    const qs = params.toString() ? `?${params.toString()}` : '';
+    return this.request<{ completed: boolean; messageCount: number }>(
+      `/chat/sessions/${encodeURIComponent(sessionId)}/status${qs}`,
+    );
+  }
+
   async deleteSession(sessionId: string, agentId?: string) {
     const qs = agentId ? `?agentId=${encodeURIComponent(agentId)}` : '';
     return this.request<{ message: string }>(`/chat/history/${encodeURIComponent(sessionId)}${qs}`, {

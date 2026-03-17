@@ -1,15 +1,16 @@
 /**
- * 个人 MCP 设置页面
+ * MCP 设置页面
  *
  * 功能：
- * - 查看企业级 MCP 工具（只读）
- * - 管理个人 MCP Server（CRUD）
+ * - 查看/管理企业级 MCP 工具（管理员可 CRUD）
+ * - 管理个人 MCP Server（通过 PersonalMcpManager 共享组件）
  */
 import { useState, useEffect, useCallback } from 'react';
 import { toast } from 'sonner';
 import { Plus, Trash2, Pencil, Zap, Loader2, Wrench } from 'lucide-react';
 import { adminApi, type McpServerInfo, type McpToolInfo } from '../api';
 import { useAuthStore } from '../store';
+import PersonalMcpManager from '@/components/PersonalMcpManager';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -33,13 +34,11 @@ export default function McpSettingsPage() {
   const user = useAuthStore((s) => s.user);
   const isAdmin = user?.roles?.some((r: string) => r.toLowerCase() === 'admin');
   const [enterpriseServers, setEnterpriseServers] = useState<McpServerInfo[]>([]);
-  const [personalServers, setPersonalServers] = useState<McpServerInfo[]>([]);
   const [loading, setLoading] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingServer, setEditingServer] = useState<McpServerInfo | null>(null);
-  const [editingScope, setEditingScope] = useState<'enterprise' | 'personal'>('personal');
 
-  // 表单状态
+  // 企业 MCP 表单状态
   const [formName, setFormName] = useState('');
   const [formDescription, setFormDescription] = useState('');
   const [formTransport, setFormTransport] = useState('stdio');
@@ -49,25 +48,22 @@ export default function McpSettingsPage() {
   const [formEnv, setFormEnv] = useState('');
   const [formEnabled, setFormEnabled] = useState(true);
 
+  // 企业 MCP 测试连接
   const [testModalOpen, setTestModalOpen] = useState(false);
   const [testLoading, setTestLoading] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string; tools: McpToolInfo[] } | null>(null);
   const [testServerName, setTestServerName] = useState('');
 
-  const loadData = useCallback(async () => {
+  const loadEnterpriseData = useCallback(async () => {
     setLoading(true);
     try {
-      const [allRes, personalRes] = await Promise.all([
-        adminApi.getMcpServers(),
-        adminApi.getPersonalMcpServers(),
-      ]);
-      setEnterpriseServers(allRes.data.filter(s => s.scope === 'enterprise'));
-      setPersonalServers(personalRes.data);
+      const res = await adminApi.getMcpServers();
+      setEnterpriseServers(res.data.filter(s => s.scope === 'enterprise'));
     } catch { /* ignore */ }
     setLoading(false);
   }, []);
 
-  useEffect(() => { loadData(); }, [loadData]);
+  useEffect(() => { loadEnterpriseData(); }, [loadEnterpriseData]);
 
   const resetForm = () => {
     setFormName('');
@@ -80,16 +76,14 @@ export default function McpSettingsPage() {
     setFormEnabled(true);
   };
 
-  const openCreateModal = (scope: 'enterprise' | 'personal' = 'personal') => {
+  const openCreateModal = () => {
     setEditingServer(null);
-    setEditingScope(scope);
     resetForm();
     setModalOpen(true);
   };
 
   const openEditModal = (server: McpServerInfo) => {
     setEditingServer(server);
-    setEditingScope(server.scope);
     setFormName(server.name);
     setFormDescription(server.description || '');
     setFormTransport(server.transport);
@@ -116,11 +110,12 @@ export default function McpSettingsPage() {
     }
 
     try {
-      const data: any = {
+      const data: Record<string, unknown> = {
         name: formName,
         description: formDescription || undefined,
         transport: formTransport,
         enabled: formEnabled,
+        scope: 'enterprise',
       };
 
       if (formTransport === 'stdio') {
@@ -141,44 +136,31 @@ export default function McpSettingsPage() {
         data.env = envObj;
       }
 
-      if (editingScope === 'enterprise') {
-        data.scope = 'enterprise';
-        if (editingServer) {
-          await adminApi.updateMcpServer(editingServer.id, data);
-          toast.success('企业 MCP 已更新');
-        } else {
-          await adminApi.createMcpServer(data);
-          toast.success('企业 MCP 已创建');
-        }
+      if (editingServer) {
+        await adminApi.updateMcpServer(editingServer.id, data as Partial<McpServerInfo>);
+        toast.success('企业 MCP 已更新');
       } else {
-        if (editingServer) {
-          await adminApi.updatePersonalMcpServer(editingServer.id, data);
-          toast.success('已更新');
-        } else {
-          await adminApi.createPersonalMcpServer(data);
-          toast.success('已创建');
-        }
+        await adminApi.createMcpServer(data as Partial<McpServerInfo>);
+        toast.success('企业 MCP 已创建');
       }
 
       setModalOpen(false);
-      loadData();
-    } catch (err: any) {
-      if (err.message) toast.error(err.message);
+      loadEnterpriseData();
+    } catch (err: unknown) {
+      const error = err as Error;
+      if (error.message) toast.error(error.message);
     }
   };
 
-  const handleDelete = async (id: string, scope: 'enterprise' | 'personal' = 'personal') => {
+  const handleDelete = async (id: string) => {
     if (!confirm('确定删除？')) return;
     try {
-      if (scope === 'enterprise') {
-        await adminApi.deleteMcpServer(id);
-      } else {
-        await adminApi.deletePersonalMcpServer(id);
-      }
+      await adminApi.deleteMcpServer(id);
       toast.success('已删除');
-      loadData();
-    } catch (err: any) {
-      toast.error(err.message);
+      loadEnterpriseData();
+    } catch (err: unknown) {
+      const error = err as Error;
+      toast.error(error.message);
     }
   };
 
@@ -190,13 +172,14 @@ export default function McpSettingsPage() {
     try {
       const result = await adminApi.testMcpServer(server.id);
       setTestResult(result);
-    } catch (err: any) {
-      setTestResult({ success: false, message: err.message, tools: [] });
+    } catch (err: unknown) {
+      const error = err as Error;
+      setTestResult({ success: false, message: error.message, tools: [] });
     }
     setTestLoading(false);
   };
 
-  const renderServerTable = (servers: McpServerInfo[], scope: 'enterprise' | 'personal') => (
+  const renderEnterpriseTable = () => (
     <div className="rounded-md border">
       <Table>
         <TableHeader>
@@ -215,14 +198,14 @@ export default function McpSettingsPage() {
                 <Loader2 className="h-5 w-5 animate-spin mx-auto text-muted-foreground" />
               </TableCell>
             </TableRow>
-          ) : servers.length === 0 ? (
+          ) : enterpriseServers.length === 0 ? (
             <TableRow>
               <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
-                {scope === 'enterprise' ? '暂无企业级 MCP 工具' : '暂无个人 MCP 工具'}
+                暂无企业级 MCP 工具
               </TableCell>
             </TableRow>
           ) : (
-            servers.map((server) => (
+            enterpriseServers.map((server) => (
               <TableRow key={server.id}>
                 <TableCell>
                   <div className="font-medium">{server.name}</div>
@@ -249,12 +232,12 @@ export default function McpSettingsPage() {
                       <Zap className="h-3.5 w-3.5 mr-1" />
                       测试
                     </Button>
-                    {(scope === 'personal' || isAdmin) && (
+                    {isAdmin && (
                       <>
                         <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEditModal(server)}>
                           <Pencil className="h-3.5 w-3.5" />
                         </Button>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => handleDelete(server.id, scope)}>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => handleDelete(server.id)}>
                           <Trash2 className="h-3.5 w-3.5" />
                         </Button>
                       </>
@@ -279,40 +262,32 @@ export default function McpSettingsPage() {
       <Tabs defaultValue="enterprise">
         <TabsList>
           <TabsTrigger value="enterprise">企业级工具 ({enterpriseServers.length})</TabsTrigger>
-          <TabsTrigger value="personal">我的工具 ({personalServers.length})</TabsTrigger>
+          <TabsTrigger value="personal">我的工具</TabsTrigger>
         </TabsList>
 
         <TabsContent value="enterprise">
           {isAdmin && (
             <div className="flex justify-end mb-4">
-              <Button onClick={() => openCreateModal('enterprise')}>
+              <Button onClick={openCreateModal}>
                 <Plus className="h-4 w-4 mr-1" />
                 注册企业 MCP
               </Button>
             </div>
           )}
-          {renderServerTable(enterpriseServers, 'enterprise')}
+          {renderEnterpriseTable()}
         </TabsContent>
 
         <TabsContent value="personal">
-          <div className="flex justify-end mb-4">
-            <Button onClick={() => openCreateModal('personal')}>
-              <Plus className="h-4 w-4 mr-1" />
-              添加个人 MCP
-            </Button>
-          </div>
-          {renderServerTable(personalServers, 'personal')}
+          <PersonalMcpManager />
         </TabsContent>
       </Tabs>
 
-      {/* 新建/编辑 Dialog */}
+      {/* 企业 MCP 新建/编辑 Dialog */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
         <DialogContent className="max-w-[600px]">
           <DialogHeader>
             <DialogTitle>
-              {editingScope === 'enterprise'
-                ? (editingServer ? '编辑企业 MCP' : '注册企业 MCP')
-                : (editingServer ? '编辑个人 MCP' : '添加个人 MCP')}
+              {editingServer ? '编辑企业 MCP' : '注册企业 MCP'}
             </DialogTitle>
             <DialogDescription>配置 MCP Server 的连接信息</DialogDescription>
           </DialogHeader>
@@ -321,7 +296,7 @@ export default function McpSettingsPage() {
             <div className="space-y-2">
               <Label>名称 <span className="text-destructive">*</span></Label>
               <Input
-                placeholder={editingScope === 'enterprise' ? '例如: 数据库连接器' : '例如: 我的数据分析工具'}
+                placeholder="例如: 数据库连接器"
                 value={formName}
                 onChange={(e) => setFormName(e.target.value)}
               />
@@ -344,9 +319,7 @@ export default function McpSettingsPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="stdio">stdio（本地进程）</SelectItem>
-                  {editingScope === 'enterprise' && (
-                    <SelectItem value="http">http（远程服务）</SelectItem>
-                  )}
+                  <SelectItem value="http">http（远程服务）</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -360,9 +333,6 @@ export default function McpSettingsPage() {
                     value={formCommand}
                     onChange={(e) => setFormCommand(e.target.value)}
                   />
-                  {editingScope === 'personal' && (
-                    <p className="text-xs text-muted-foreground">仅允许: node, python3, npx, tsx, ts-node</p>
-                  )}
                 </div>
                 <div className="space-y-2">
                   <Label>命令参数（每行一个）</Label>
@@ -408,7 +378,7 @@ export default function McpSettingsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* 测试结果 Dialog */}
+      {/* 企业 MCP 测试结果 Dialog */}
       <Dialog open={testModalOpen} onOpenChange={setTestModalOpen}>
         <DialogContent className="max-w-[700px]">
           <DialogHeader>

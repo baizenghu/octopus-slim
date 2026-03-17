@@ -25,37 +25,43 @@ const toolFailureCounter = new Map<string, { count: number; lastFailedAt: number
 const TOOL_MAX_CONSECUTIVE_FAILURES = 3;
 const TOOL_FAILURE_RESET_MS = 5 * 60 * 1000; // 5 分钟后自动重置
 
-// ─── allowedConnections 缓存（TTL 60s，避免每次 callTool 都查 DB）────────────
-const _acCache = new Map<string, { conns: string[] | null; ts: number }>();
-const AC_CACHE_TTL = 60_000;
+// ─── 通用 agent 字段缓存（mcpFilter / allowedConnections，TTL 60s）─────────
+type AgentFilterField = 'mcpFilter' | 'allowedConnections';
+const _filterCache = new Map<string, { data: string[] | null; ts: number }>();
+const FILTER_CACHE_TTL = 60_000;
 
-// ─── mcpFilter 缓存（TTL 60s）──────────────────────────────────────────
-const _mcpFilterCache = new Map<string, { filter: string[] | null; ts: number }>();
+/** DB column name for each AgentFilterField */
+const FIELD_TO_COLUMN: Record<AgentFilterField, string> = {
+  mcpFilter: 'mcp_filter',
+  allowedConnections: 'allowed_connections',
+};
 
-/** 查 DB 获取 agent 的 mcpFilter，带缓存 */
-async function getMcpFilter(
-  prisma: PrismaClient,
+/** 查 DB 获取 agent 的指定字段，带缓存 */
+async function getAgentFilter(
+  field: AgentFilterField,
   userId: string,
   agentName: string,
 ): Promise<string[] | null> {
-  const cacheKey = `${userId}__${agentName}`;
-  const cached = _mcpFilterCache.get(cacheKey);
-  if (cached && Date.now() - cached.ts < AC_CACHE_TTL) return cached.filter;
+  const key = `${field}:${userId}:${agentName}`;
+  const cached = _filterCache.get(key);
+  if (cached && Date.now() - cached.ts < FILTER_CACHE_TTL) return cached.data;
 
+  const col = FIELD_TO_COLUMN[field];
   try {
-    const agent = await prisma.$queryRaw<Array<{ mcp_filter: string | null }>>`
-      SELECT mcp_filter FROM agents
-      WHERE owner_id = ${userId} AND name = ${agentName} AND enabled = 1
-      LIMIT 1
-    `;
-    let filter: string[] | null = null;
-    if (agent.length > 0 && agent[0].mcp_filter) {
-      const raw = agent[0].mcp_filter;
+    // $queryRaw with tagged template doesn't support dynamic column names,
+    // so we use $queryRawUnsafe with parameterized values for the WHERE clause
+    const agent = await _prisma!.$queryRawUnsafe<Array<Record<string, string | null>>>(
+      `SELECT ${col} FROM agents WHERE owner_id = ? AND name = ? AND enabled = 1 LIMIT 1`,
+      userId, agentName,
+    );
+    let data: string[] | null = null;
+    if (agent.length > 0 && agent[0][col]) {
+      const raw = agent[0][col];
       const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
-      if (Array.isArray(parsed) && parsed.length > 0) filter = parsed;
+      if (Array.isArray(parsed) && parsed.length > 0) data = parsed;
     }
-    _mcpFilterCache.set(cacheKey, { filter, ts: Date.now() });
-    return filter;
+    _filterCache.set(key, { data, ts: Date.now() });
+    return data;
   } catch {
     return null; // DB 查询失败不阻塞，降级为不限制
   }
@@ -67,33 +73,31 @@ function isMcpServerAllowed(serverNameOrId: string, filter: string[] | null): bo
   return filter.includes(serverNameOrId);
 }
 
-/** 查 DB 获取 agent 的 allowedConnections，带缓存 */
-async function getAllowedConnections(
-  prisma: PrismaClient,
-  userId: string,
-  agentName: string,
-): Promise<string[] | null> {
-  const cacheKey = `${userId}__${agentName}`;
-  const cached = _acCache.get(cacheKey);
-  if (cached && Date.now() - cached.ts < AC_CACHE_TTL) return cached.conns;
-
-  try {
-    const agent = await prisma.$queryRaw<Array<{ allowed_connections: string | null }>>`
-      SELECT allowed_connections FROM agents
-      WHERE owner_id = ${userId} AND name = ${agentName} AND enabled = 1
-      LIMIT 1
-    `;
-    let conns: string[] | null = null;
-    if (agent.length > 0 && agent[0].allowed_connections) {
-      const raw = agent[0].allowed_connections;
-      const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
-      if (Array.isArray(parsed) && parsed.length > 0) conns = parsed;
+/** 熔断检查：连续失败次数超限时返回拒绝消息，否则返回 null */
+function checkCircuitBreaker(agentId: string, toolName: string): string | null {
+  const failKey = `${agentId}:${toolName}`;
+  const failure = toolFailureCounter.get(failKey);
+  if (failure && failure.count >= TOOL_MAX_CONSECUTIVE_FAILURES) {
+    if (Date.now() - failure.lastFailedAt < TOOL_FAILURE_RESET_MS) {
+      return `该工具（${toolName}）已连续失败 ${failure.count} 次，请停止重试并告知用户该操作暂时不可用。原因可能是参数错误或服务异常。`;
     }
-    _acCache.set(cacheKey, { conns, ts: Date.now() });
-    return conns;
-  } catch {
-    return null; // DB 查询失败不阻塞，降级为不限制
+    toolFailureCounter.delete(failKey);
   }
+  return null;
+}
+
+/** 记录工具调用失败（熔断计数器 +1） */
+function recordToolFailure(agentId: string, toolName: string) {
+  const failKey = `${agentId}:${toolName}`;
+  const f = toolFailureCounter.get(failKey) || { count: 0, lastFailedAt: 0 };
+  f.count++;
+  f.lastFailedAt = Date.now();
+  toolFailureCounter.set(failKey, f);
+}
+
+/** 清除工具调用失败记录（成功后重置） */
+function clearToolFailure(agentId: string, toolName: string) {
+  toolFailureCounter.delete(`${agentId}:${toolName}`);
 }
 
 /** 需要校验 connection_name 的 MCP 工具名列表 */
@@ -136,6 +140,99 @@ function filterListConnectionsResult(resultText: string, allowed: string[] | nul
   }
 }
 
+
+/**
+ * 共享 MCP 工具执行逻辑（企业/个人、直连/缓存 4 种 execute 的统一入口）
+ *
+ * @param executor   MCPExecutor 实例（缓存模式下可能为 null，需等待 _initDone）
+ * @param agentId    原生 agentId（如 ent_user-baizh_default）
+ * @param serverId   MCP server ID
+ * @param serverName MCP server 显示名
+ * @param toolName   原始 MCP 工具名（如 list_tables）
+ * @param params     工具参数
+ * @param opts.scope enterprise / personal
+ * @param opts.waitForReady 缓存模式需等待 executor 就绪
+ * @param opts.ownerId 个人 MCP 所有者 ID（用于 callTool 的 userId 参数）
+ */
+async function executeMCPTool(
+  executor: MCPExecutor | null,
+  agentId: string,
+  serverId: string,
+  serverName: string,
+  toolName: string,
+  params: any,
+  opts: { scope: 'enterprise' | 'personal'; waitForReady: boolean; ownerId?: string | null },
+): Promise<{ content: Array<{ type: 'text'; text: string }>; details?: any } | string> {
+  // 1. 熔断检查
+  const breakerMsg = checkCircuitBreaker(agentId, toolName);
+  if (breakerMsg) return breakerMsg;
+
+  // 2. 提取 userId / agentName
+  const userId = extractUserIdFromAgentId(agentId) || undefined;
+  const agentName = extractAgentNameFromAgentId(agentId);
+
+  // 3. 企业 scope: mcpFilter + allowedConnections 校验
+  if (opts.scope === 'enterprise') {
+    if (userId && agentName && _prisma) {
+      const filter = await getAgentFilter('mcpFilter', userId, agentName);
+      if (!isMcpServerAllowed(serverName, filter) && !isMcpServerAllowed(serverId, filter)) {
+        throw new Error(`Access denied: agent "${agentName}" is not allowed to use MCP server "${serverName}"`);
+      }
+    }
+
+    if (userId && agentName && _prisma && CONN_TOOLS.has(toolName)) {
+      const allowed = await getAgentFilter('allowedConnections', userId, agentName);
+      checkConnectionAllowed(toolName, params, allowed);
+    }
+  }
+
+  // 4. 加载用户环境变量
+  const userEnv = userId ? await loadUserEnv(userId, _prisma) : {};
+  if (CONN_TOOLS.has(toolName)) {
+    const dbEnvKeys = Object.keys(userEnv).filter((k) => /^DB_.+_(TYPE|HOST|PORT|USER|PASSWORD|DATABASE)$/.test(k)).sort();
+    console.log(`[enterprise-mcp][env] tool=${toolName} userId=${userId} dbEnvKeys=${dbEnvKeys.join(',') || '(none)'}`);
+  }
+
+  // 5. waitForReady: 等待 executor 就绪（缓存模式）
+  if (opts.waitForReady) {
+    const deadline = Date.now() + 15_000;
+    while (!_initDone && Date.now() < deadline) {
+      await new Promise(r => setTimeout(r, 200));
+    }
+    if (!_executor || !_initDone) {
+      throw new Error(`MCP server (${serverName}) not ready yet, please retry`);
+    }
+    executor = _executor;
+  }
+
+  if (!executor) {
+    throw new Error(`MCP executor not available for server "${serverName}"`);
+  }
+
+  // 6. callTool + 结果处理
+  const logTag = opts.scope === 'personal' ? '[personal]' : opts.waitForReady ? '' : '[connected]';
+  console.log(`[enterprise-mcp]${logTag} callTool: ${toolName} userId=${userId} agent=${agentName}`);
+  try {
+    let result = await executor.callTool(serverId, toolName, params || {}, userId, userEnv);
+
+    // list_connections 结果过滤（仅企业 scope）
+    if (opts.scope === 'enterprise' && toolName === 'list_connections' && userId && agentName && _prisma) {
+      const allowed = await getAgentFilter('allowedConnections', userId, agentName);
+      result = filterListConnectionsResult(result, allowed);
+    }
+
+    console.log(`[enterprise-mcp]${logTag} callTool OK: ${toolName} result=${String(result).slice(0, 300)}`);
+    clearToolFailure(agentId, toolName);
+    return {
+      content: [{ type: 'text' as const, text: result }],
+      details: result,
+    };
+  } catch (err: any) {
+    console.error(`[enterprise-mcp]${logTag} callTool ERROR: ${toolName} error=${err.message}`);
+    recordToolFailure(agentId, toolName);
+    throw err;
+  }
+}
 
 /** 解密 AES-256-GCM 加密的密码（格式 iv:tag:encrypted），兼容明文旧数据 */
 function decryptDbPassword(ciphertext: string): string {
@@ -893,7 +990,7 @@ async function initMCPServers(api: any, executor: MCPExecutor, prisma: PrismaCli
         const parsed = typeof a.mcp_filter === 'string' ? JSON.parse(a.mcp_filter) : a.mcp_filter;
         if (Array.isArray(parsed) && parsed.length > 0) filter = parsed;
       }
-      _mcpFilterCache.set(`${a.owner_id}__${a.name}`, { filter, ts: Date.now() });
+      _filterCache.set(`mcpFilter:${a.owner_id}:${a.name}`, { data: filter, ts: Date.now() });
     }
     api.logger.info(`enterprise-mcp: preloaded mcpFilter cache for ${allAgents.length} agent(s)`);
   } catch (err: any) {
@@ -901,181 +998,56 @@ async function initMCPServers(api: any, executor: MCPExecutor, prisma: PrismaCli
   }
 }
 
-/** 注册已连接 executor 上的 MCP 工具（直接透传 inputSchema，模型可直接传参） */
-function registerMCPTool(api: any, executor: MCPExecutor, server: any, tool: MCPTool, toolName: string) {
-  api.registerTool(function (ctx: any) {
-    // mcpFilter 检查：对未授权 agent 隐藏此工具（null/[] = 全部禁用）
-    const agentId = ctx?.agentId || '';
-    const userId = extractUserIdFromAgentId(agentId);
-    const agentName = extractAgentNameFromAgentId(agentId);
-    if (userId && agentName && _mcpFilterCache.has(`${userId}__${agentName}`)) {
-      const cached = _mcpFilterCache.get(`${userId}__${agentName}`)!;
-      // ToolFactory 可见性过滤不检查 TTL（execute 时会做实时校验）
-      if (!isMcpServerAllowed(server.name, cached.filter) && !isMcpServerAllowed(server.id, cached.filter)) {
-        return null;
-      }
-    }
-
-    return {
-    name: toolName,
-    label: `[MCP] ${server.name}: ${tool.name}`,
-    description: `${tool.description || tool.name} (来自企业 MCP Server: ${server.name})`,
-    parameters: Type.Unsafe((tool.inputSchema as any) || { type: 'object', properties: {} }),
-    async execute(_toolCallId: string, params: any) {
-      const agentId = ctx?.agentId || '';
-      const userId = extractUserIdFromAgentId(agentId) || undefined;
-      const agentName = extractAgentNameFromAgentId(agentId);
-
-      // mcpFilter 硬校验（异步查询 + 缓存，null/[] = 全部禁用）
-      if (userId && agentName && _prisma) {
-        const filter = await getMcpFilter(_prisma, userId, agentName);
-        if (!isMcpServerAllowed(server.name, filter) && !isMcpServerAllowed(server.id, filter)) {
-          throw new Error(`Access denied: agent "${agentName}" is not allowed to use MCP server "${server.name}"`);
-        }
-      }
-
-      const userEnv = userId ? await loadUserEnv(userId, _prisma) : {};
-      if (CONN_TOOLS.has(tool.name)) {
-        const dbEnvKeys = Object.keys(userEnv).filter((k) => /^DB_.+_(TYPE|HOST|PORT|USER|PASSWORD|DATABASE)$/.test(k)).sort();
-        console.log(`[enterprise-mcp][env] tool=${tool.name} userId=${userId} dbEnvKeys=${dbEnvKeys.join(',') || '(none)'}`);
-      }
-
-      // allowedConnections 硬校验
-      if (userId && agentName && _prisma && CONN_TOOLS.has(tool.name)) {
-        const allowed = await getAllowedConnections(_prisma, userId, agentName);
-        checkConnectionAllowed(tool.name, params, allowed);
-      }
-
-      // 熔断检查
-      const failKey = `${agentId}:${tool.name}`;
-      const failure = toolFailureCounter.get(failKey);
-      if (failure && failure.count >= TOOL_MAX_CONSECUTIVE_FAILURES) {
-        if (Date.now() - failure.lastFailedAt < TOOL_FAILURE_RESET_MS) {
-          return `该工具（${tool.name}）已连续失败 ${failure.count} 次，请停止重试并告知用户该操作暂时不可用。原因可能是参数错误或服务异常。`;
-        }
-        toolFailureCounter.delete(failKey);
-      }
-
-      console.log(`[enterprise-mcp][connected] callTool: ${tool.name} userId=${userId} agent=${agentName}`);
-      try {
-        let result = await executor.callTool(server.id, tool.name, params || {}, userId, userEnv);
-
-        // list_connections 结果过滤
-        if (tool.name === 'list_connections' && userId && agentName && _prisma) {
-          const allowed = await getAllowedConnections(_prisma, userId, agentName);
-          result = filterListConnectionsResult(result, allowed);
-        }
-
-        console.log(`[enterprise-mcp][connected] callTool OK: ${tool.name} result=${String(result).slice(0, 300)}`);
-        toolFailureCounter.delete(failKey);
-        return {
-          content: [{ type: 'text' as const, text: result }],
-          details: result,
-        };
-      } catch (err: any) {
-        console.error(`[enterprise-mcp][connected] callTool ERROR: ${tool.name} error=${err.message}`);
-        const prev = toolFailureCounter.get(failKey);
-        toolFailureCounter.set(failKey, {
-          count: (prev?.count || 0) + 1,
-          lastFailedAt: Date.now(),
-        });
-        throw err;
-      }
-    },
-  }; });
+/** ToolFactory 可见性检查（同步，基于缓存）：企业 MCP 工具仅对 mcpFilter 白名单内 agent 可见 */
+function isMcpToolVisibleToAgent(agentId: string, serverName: string, serverId: string): boolean {
+  const userId = extractUserIdFromAgentId(agentId);
+  const agentName = extractAgentNameFromAgentId(agentId);
+  if (!userId || !agentName) return true; // 无法判断时放行（execute 时会做硬校验）
+  const cacheKey = `mcpFilter:${userId}:${agentName}`;
+  const cached = _filterCache.get(cacheKey);
+  if (!cached) return true; // 无缓存时放行
+  // ToolFactory 可见性过滤不检查 TTL（execute 时会做实时校验）
+  return isMcpServerAllowed(serverName, cached.data) || isMcpServerAllowed(serverId, cached.data);
 }
 
-/** 从磁盘缓存注册工具（executor 尚未就绪时的同步注册，execute 里等待 executor 就绪）*/
-function registerMCPToolFromCache(api: any, cached: CachedMCPTool) {
+/** 注册已连接 executor 上的企业 MCP 工具 */
+function registerMCPTool(api: any, executor: MCPExecutor, server: any, tool: MCPTool, toolName: string) {
   api.registerTool(function (ctx: any) {
-    // mcpFilter 检查：对未授权 agent 隐藏此工具（null/[] = 全部禁用）
     const agentId = ctx?.agentId || '';
-    const userId = extractUserIdFromAgentId(agentId);
-    const agentName = extractAgentNameFromAgentId(agentId);
-    if (userId && agentName && _mcpFilterCache.has(`${userId}__${agentName}`)) {
-      const mcpCached = _mcpFilterCache.get(`${userId}__${agentName}`)!;
-      // ToolFactory 可见性过滤不检查 TTL（execute 时会做实时校验）
-      if (!isMcpServerAllowed(cached.serverName, mcpCached.filter) && !isMcpServerAllowed(cached.serverId, mcpCached.filter)) {
-        return null;
-      }
-    }
+    if (!isMcpToolVisibleToAgent(agentId, server.name, server.id)) return null;
 
     return {
-    name: cached.nativeToolName,
-    label: `[MCP] ${cached.serverName}: ${cached.toolName}`,
-    description: `${cached.description} (来自企业 MCP Server: ${cached.serverName})`,
-    parameters: Type.Unsafe((cached.inputSchema as any) || { type: 'object', properties: {} }),
-    async execute(_toolCallId: string, params: any) {
-      // 等待 executor 就绪（最多等 15 秒）
-      const deadline = Date.now() + 15_000;
-      while (!_initDone && Date.now() < deadline) {
-        await new Promise(r => setTimeout(r, 200));
-      }
-      if (!_executor || !_initDone) {
-        throw new Error(`MCP server (${cached.serverName}) not ready yet, please retry`);
-      }
-
-      const agentId = ctx?.agentId || '';
-      const userId = extractUserIdFromAgentId(agentId) || undefined;
-      const agentName = extractAgentNameFromAgentId(agentId);
-
-      // mcpFilter 硬校验（异步查询 + 缓存，null/[] = 全部禁用）
-      if (userId && agentName && _prisma) {
-        const filter = await getMcpFilter(_prisma, userId, agentName);
-        if (!isMcpServerAllowed(cached.serverName, filter) && !isMcpServerAllowed(cached.serverId, filter)) {
-          throw new Error(`Access denied: agent "${agentName}" is not allowed to use MCP server "${cached.serverName}"`);
-        }
-      }
-
-      const userEnv = userId ? await loadUserEnv(userId, _prisma) : {};
-      if (CONN_TOOLS.has(cached.toolName)) {
-        const dbEnvKeys = Object.keys(userEnv).filter((k) => /^DB_.+_(TYPE|HOST|PORT|USER|PASSWORD|DATABASE)$/.test(k)).sort();
-        console.log(`[enterprise-mcp][env] tool=${cached.toolName} userId=${userId} dbEnvKeys=${dbEnvKeys.join(',') || '(none)'}`);
-      }
-
-      // allowedConnections 硬校验
-      if (userId && agentName && _prisma && CONN_TOOLS.has(cached.toolName)) {
-        const allowed = await getAllowedConnections(_prisma, userId, agentName);
-        checkConnectionAllowed(cached.toolName, params, allowed);
-      }
-
-      // 熔断检查
-      const failKey = `${agentId}:${cached.toolName}`;
-      const failure = toolFailureCounter.get(failKey);
-      if (failure && failure.count >= TOOL_MAX_CONSECUTIVE_FAILURES) {
-        if (Date.now() - failure.lastFailedAt < TOOL_FAILURE_RESET_MS) {
-          return `该工具（${cached.toolName}）已连续失败 ${failure.count} 次，请停止重试并告知用户该操作暂时不可用。原因可能是参数错误或服务异常。`;
-        }
-        toolFailureCounter.delete(failKey);
-      }
-
-      console.log(`[enterprise-mcp] callTool: ${cached.toolName} userId=${userId} agent=${agentName}`);
-      try {
-        let result = await _executor.callTool(cached.serverId, cached.toolName, params || {}, userId, userEnv);
-
-        // list_connections 结果过滤
-        if (cached.toolName === 'list_connections' && userId && agentName && _prisma) {
-          const allowed = await getAllowedConnections(_prisma, userId, agentName);
-          result = filterListConnectionsResult(result, allowed);
-        }
-
-        console.log(`[enterprise-mcp] callTool OK: ${cached.toolName} result=${String(result).slice(0, 200)}`);
-        toolFailureCounter.delete(failKey);
-        return {
-          content: [{ type: 'text' as const, text: result }],
-          details: result,
-        };
-      } catch (err: any) {
-        console.error(`[enterprise-mcp] callTool ERROR: ${cached.toolName} error=${err.message}`);
-        const prev = toolFailureCounter.get(failKey);
-        toolFailureCounter.set(failKey, {
-          count: (prev?.count || 0) + 1,
-          lastFailedAt: Date.now(),
+      name: toolName,
+      label: `[MCP] ${server.name}: ${tool.name}`,
+      description: `${tool.description || tool.name} (来自企业 MCP Server: ${server.name})`,
+      parameters: Type.Unsafe((tool.inputSchema as any) || { type: 'object', properties: {} }),
+      async execute(_toolCallId: string, params: any) {
+        return executeMCPTool(executor, ctx?.agentId || '', server.id, server.name, tool.name, params, {
+          scope: 'enterprise', waitForReady: false,
         });
-        throw err;
-      }
-    },
-  }; });
+      },
+    };
+  });
+}
+
+/** 从磁盘缓存注册企业 MCP 工具（executor 尚未就绪时的同步注册，execute 里等待 executor 就绪）*/
+function registerMCPToolFromCache(api: any, cached: CachedMCPTool) {
+  api.registerTool(function (ctx: any) {
+    const agentId = ctx?.agentId || '';
+    if (!isMcpToolVisibleToAgent(agentId, cached.serverName, cached.serverId)) return null;
+
+    return {
+      name: cached.nativeToolName,
+      label: `[MCP] ${cached.serverName}: ${cached.toolName}`,
+      description: `${cached.description} (来自企业 MCP Server: ${cached.serverName})`,
+      parameters: Type.Unsafe((cached.inputSchema as any) || { type: 'object', properties: {} }),
+      async execute(_toolCallId: string, params: any) {
+        return executeMCPTool(null, ctx?.agentId || '', cached.serverId, cached.serverName, cached.toolName, params, {
+          scope: 'enterprise', waitForReady: true,
+        });
+      },
+    };
+  });
 }
 
 /** 注册个人 MCP 工具（ToolFactory：仅对所有者可见） */
@@ -1089,8 +1061,6 @@ function registerPersonalMCPTool(
   api.registerTool(function (ctx: any) {
     const agentId = ctx?.agentId || '';
     const userId = extractUserIdFromAgentId(agentId);
-
-    // 所有权隔离：仅对 MCP 所有者可见
     if (!userId || userId !== server.ownerId) return null;
 
     return {
@@ -1099,36 +1069,9 @@ function registerPersonalMCPTool(
       description: `${tool.description || tool.name} (个人 MCP: ${server.name})`,
       parameters: Type.Unsafe((tool.inputSchema as any) || { type: 'object', properties: {} }),
       async execute(_toolCallId: string, params: any) {
-        const userEnv = await loadUserEnv(userId, _prisma);
-
-        // 熔断检查
-        const failKey = `${agentId}:${tool.name}`;
-        const failure = toolFailureCounter.get(failKey);
-        if (failure && failure.count >= TOOL_MAX_CONSECUTIVE_FAILURES) {
-          if (Date.now() - failure.lastFailedAt < TOOL_FAILURE_RESET_MS) {
-            return `该工具（${tool.name}）已连续失败 ${failure.count} 次，请停止重试并告知用户该操作暂时不可用。原因可能是参数错误或服务异常。`;
-          }
-          toolFailureCounter.delete(failKey);
-        }
-
-        console.log(`[enterprise-mcp][personal] callTool: ${tool.name} userId=${userId} server=${server.name}`);
-        try {
-          const result = await executor.callTool(server.id, tool.name, params || {}, userId, userEnv);
-          console.log(`[enterprise-mcp][personal] callTool OK: ${tool.name}`);
-          toolFailureCounter.delete(failKey);
-          return {
-            content: [{ type: 'text' as const, text: result }],
-            details: result,
-          };
-        } catch (err: any) {
-          console.error(`[enterprise-mcp][personal] callTool ERROR: ${tool.name} error=${err.message}`);
-          const prev = toolFailureCounter.get(failKey);
-          toolFailureCounter.set(failKey, {
-            count: (prev?.count || 0) + 1,
-            lastFailedAt: Date.now(),
-          });
-          throw err;
-        }
+        return executeMCPTool(executor, agentId, server.id, server.name, tool.name, params, {
+          scope: 'personal', waitForReady: false, ownerId: server.ownerId,
+        });
       },
     };
   });
@@ -1139,8 +1082,6 @@ function registerPersonalMCPToolFromCache(api: any, cached: CachedMCPTool) {
   api.registerTool(function (ctx: any) {
     const agentId = ctx?.agentId || '';
     const userId = extractUserIdFromAgentId(agentId);
-
-    // 所有权隔离
     if (!userId || userId !== cached.ownerId) return null;
 
     return {
@@ -1149,40 +1090,9 @@ function registerPersonalMCPToolFromCache(api: any, cached: CachedMCPTool) {
       description: `${cached.description} (个人 MCP: ${cached.serverName})`,
       parameters: Type.Unsafe((cached.inputSchema as any) || { type: 'object', properties: {} }),
       async execute(_toolCallId: string, params: any) {
-        // 等待 executor 就绪
-        const deadline = Date.now() + 15_000;
-        while (!_initDone && Date.now() < deadline) {
-          await new Promise(r => setTimeout(r, 200));
-        }
-        if (!_executor || !_initDone) {
-          throw new Error(`Personal MCP (${cached.serverName}) not ready, please retry`);
-        }
-        // 熔断检查
-        const failKey = `${agentId}:${cached.toolName}`;
-        const failure = toolFailureCounter.get(failKey);
-        if (failure && failure.count >= TOOL_MAX_CONSECUTIVE_FAILURES) {
-          if (Date.now() - failure.lastFailedAt < TOOL_FAILURE_RESET_MS) {
-            return `该工具（${cached.toolName}）已连续失败 ${failure.count} 次，请停止重试并告知用户该操作暂时不可用。原因可能是参数错误或服务异常。`;
-          }
-          toolFailureCounter.delete(failKey);
-        }
-
-        const userEnv = userId ? await loadUserEnv(userId, _prisma) : {};
-        try {
-          const result = await _executor.callTool(cached.serverId, cached.toolName, params || {}, userId, userEnv);
-          toolFailureCounter.delete(failKey);
-          return {
-            content: [{ type: 'text' as const, text: result }],
-            details: result,
-          };
-        } catch (err: any) {
-          const prev = toolFailureCounter.get(failKey);
-          toolFailureCounter.set(failKey, {
-            count: (prev?.count || 0) + 1,
-            lastFailedAt: Date.now(),
-          });
-          throw err;
-        }
+        return executeMCPTool(null, agentId, cached.serverId, cached.serverName, cached.toolName, params, {
+          scope: 'personal', waitForReady: true, ownerId: cached.ownerId,
+        });
       },
     };
   });

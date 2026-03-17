@@ -17,6 +17,8 @@ import type { WorkspaceManager } from '@octopus/workspace';
 import { createAuthMiddleware, type AuthenticatedRequest } from '../middleware/auth';
 import type { EngineAdapter } from '../services/EngineAdapter';
 import { getSoulTemplate, getMemoryTemplate } from '../services/SoulTemplate';
+import { syncAgentToEngine } from '../services/AgentConfigSync';
+import { invalidatePromptCache } from '../services/SystemPromptBuilder';
 
 import type { AppPrismaClient } from '../types/prisma';
 import { resolve as pathResolve } from 'path';
@@ -37,145 +39,6 @@ export function createAgentsRouter(
 ): Router {
   const router = Router();
   const authMiddleware = createAuthMiddleware(authService, prisma);
-
-  /**
-   * 更新 default agent 的 subagents.allowAgents，使其可以 spawn 专业 agent
-   * 同时配置专业 agent 可以回调 default agent
-   */
-  /**
-   * 同步 default agent 的 subagents.allowAgents 配置。
-   *
-   * ⚠️ config.apply 对数组是整体替换（不是合并），因此必须先读取完整的 agents.list，
-   * 修改需要更新的 agent 的 subagents 字段，然后发送完整的 agents.list。
-   * 不能走 configApplyBatched，因为多个用户的 syncAllowAgents 合并会导致数组覆盖。
-   */
-  async function syncAllowAgents(userId: string) {
-    if (!bridge?.isConnected) return;
-    const { EngineAdapter: OCB } = await import('../services/EngineAdapter');
-    try {
-      // 查询该用户的所有 agent
-      const agents = await prisma.agent.findMany({
-        where: { ownerId: userId, enabled: true },
-        select: { name: true },
-      });
-      const defaultAgentId = OCB.userAgentId(userId, 'default');
-      const specialistIds = agents
-        .filter((a: { name: string }) => a.name !== 'default')
-        .map((a: { name: string }) => OCB.userAgentId(userId, a.name));
-
-      // 读取当前完整配置（config.apply 是全量替换，必须发送完整配置）
-      const { config } = await bridge.configGetParsed();
-      const currentList: any[] = (config as any)?.agents?.list || [];
-
-      // 更新 default agent 的 allowAgents，但仅在实际变化时才调用 configApplyFull
-      let found = false;
-      let changed = false;
-      for (const item of currentList) {
-        if (item.id === defaultAgentId) {
-          const newAllow = specialistIds.length > 0 ? specialistIds : undefined;
-          const oldAllow = item.subagents?.allowAgents;
-          if (JSON.stringify(newAllow) !== JSON.stringify(oldAllow)) {
-            changed = true;
-          }
-          item.subagents = { ...item.subagents, allowAgents: newAllow };
-          found = true;
-        } else if (specialistIds.includes(item.id)) {
-          const oldAllow = item.subagents?.allowAgents;
-          if (JSON.stringify(oldAllow) !== JSON.stringify([])) {
-            changed = true;
-          }
-          item.subagents = { ...item.subagents, allowAgents: [] };
-        }
-      }
-
-      if (!found) {
-        console.warn(`[agents] default agent ${defaultAgentId} not found in native config, skipping syncAllowAgents`);
-        return;
-      }
-
-      if (!changed) {
-        console.log('[agents] syncAllowAgents skipped: allowAgents unchanged for', userId);
-        return;
-      }
-
-      // config.apply 是全量替换，发送完整配置（只修改了 agents.list 部分）
-      (config as any).agents.list = currentList;
-      await bridge.configApplyFull(config);
-      console.log('[agents] syncAllowAgents success for', userId, 'specialists:', specialistIds);
-    } catch (e: any) {
-      console.error('[agents] syncAllowAgents failed:', e.message);
-      // 限流时延迟重试
-      if (e.message?.includes('rate limit')) {
-        const delaySec = parseInt(e.message.match(/retry after (\d+)s/)?.[1] || '60', 10);
-        console.log(`[agents] syncAllowAgents will retry in ${delaySec}s`);
-        setTimeout(() => syncAllowAgents(userId), delaySec * 1000);
-      }
-    }
-  }
-
-  /**
-   * 同步 agent 的 model + tools 配置到原生 gateway 的 agents.list
-   * - model: "provider/modelId" 格式，写入后引擎使用对应模型
-   * - toolsFilter: 转换为引擎的 tools.allow 硬限制（引擎级别拦截，工具不可见）
-   */
-  async function syncAgentNativeConfig(userId: string, agentName: string, opts: {
-    model?: string | null;
-    toolsFilter?: string[] | null;
-  }) {
-    if (!bridge?.isConnected) return;
-    const { EngineAdapter: OCB } = await import('../services/EngineAdapter');
-    const nativeAgentId = OCB.userAgentId(userId, agentName);
-    try {
-      const { config } = await bridge.configGetParsed();
-      const currentList: any[] = (config as any)?.agents?.list || [];
-      const target = currentList.find((a: any) => a.id === nativeAgentId);
-      if (!target) return;
-
-      let changed = false;
-
-      // model 同步
-      if (opts.model !== undefined) {
-        const oldModel = target.model ?? null;
-        const newModel = opts.model || null;
-        if (JSON.stringify(oldModel) !== JSON.stringify(newModel)) {
-          if (newModel) {
-            target.model = newModel;
-          } else {
-            delete target.model;
-          }
-          changed = true;
-          console.log(`[agents] syncNativeConfig model: ${nativeAgentId} → ${newModel || '(global default)'}`);
-        }
-      }
-
-      // toolsFilter → 引擎 tools.allow 硬限制（需映射企业工具名 → 引擎原生工具名）
-      if (opts.toolsFilter !== undefined) {
-        const tf = opts.toolsFilter;
-        // 构建 allow 列表：toolsFilter 白名单（映射后） + 始终允许 plugin 工具（run_skill 等）
-        let newAllow: string[] | undefined;
-        if (Array.isArray(tf) && tf.length > 0) {
-          // 白名单模式：映射为引擎原生工具名 + plugin 工具组
-          const engineTools = mapToolsToEngine(tf);
-          newAllow = [...engineTools, 'group:plugins', 'memory_search', 'memory_get', 'sessions_list', 'sessions_history', 'sessions_send', 'sessions_spawn', 'agents_list', 'cron', 'image'];
-        } else {
-          // 空数组 = 全部禁用工作空间工具，但保留 plugin/memory/session 等非文件工具
-          newAllow = ['group:plugins', 'memory_search', 'memory_get', 'sessions_list', 'sessions_history', 'sessions_send', 'sessions_spawn', 'agents_list', 'cron', 'image'];
-        }
-        const oldAllow = target.tools?.allow;
-        if (JSON.stringify(oldAllow) !== JSON.stringify(newAllow)) {
-          target.tools = { ...target.tools, allow: newAllow };
-          changed = true;
-          console.log(`[agents] syncNativeConfig tools.allow: ${nativeAgentId} → [${newAllow.join(', ')}]`);
-        }
-      }
-
-      if (!changed) return;
-      (config as any).agents.list = currentList;
-      await bridge.configApplyFull(config);
-    } catch (e: any) {
-      console.error(`[agents] syncAgentNativeConfig failed for ${nativeAgentId}:`, e.message);
-    }
-  }
 
   /**
    * 同步 agent 到原生 gateway，并自动配置 memory scope 隔离 + 独立工作空间
@@ -269,30 +132,6 @@ export function createAgentsRouter(
       }
     }
     // memory-lancedb-pro 默认行为已提供 scope 隔离（agent:<id> + global），无需显式注册
-  }
-
-  /**
-   * 企业工具名 → 引擎原生工具名映射
-   *
-   * DB 和前端使用语义化的工具名（list_files, read_file 等），
-   * 引擎原生工具名不同（read, write, exec 等）。
-   * syncAgentNativeConfig 写入 octopus.json 时需要转换。
-   */
-  const TOOL_NAME_TO_ENGINE: Record<string, string> = {
-    list_files: 'read',       // 引擎用 read 工具读目录
-    read_file: 'read',
-    write_file: 'write',
-    execute_command: 'exec',
-    search_files: 'exec',     // 搜索通过 exec 的 grep/find 实现
-  };
-
-  /** 将企业 toolsFilter 名称转换为引擎原生工具名（去重） */
-  function mapToolsToEngine(tools: string[]): string[] {
-    const mapped = new Set<string>();
-    for (const t of tools) {
-      mapped.add(TOOL_NAME_TO_ENGINE[t] || t);
-    }
-    return [...mapped];
   }
 
   /** 原生工具描述映射（用于 TOOLS.md 生成，面向 LLM 提示） */
@@ -488,11 +327,13 @@ export function createAgentsRouter(
       // 同步到原生 Gateway（await 确保同步完成后再响应，#20 修复）
       try {
         await syncToNative(user.id, agent.name, null, agent.identity, false);
-        await syncAllowAgents(user.id);
-        // 创建时同步 model + tools 硬限制到 native agents.list
-        await syncAgentNativeConfig(user.id, agent.name, {
+        // 统一同步 allowAgents + model + tools 到 native agents.list（单次 config read/write）
+        const enabledAgents = await prisma.agent.findMany({ where: { ownerId: user.id, enabled: true }, select: { name: true } });
+        await syncAgentToEngine(bridge!, user.id, {
+          agentName: agent.name,
           model: model?.trim() || null,
           toolsFilter: toolsFilter ?? [],
+          enabledAgentNames: enabledAgents.map(a => a.name),
         });
         // 创建时同步 TOOLS.md（原生工具 + MCP 工具）
         await syncToolsMd(user.id, agent.name, mcpFilter || [], toolsFilter || []);
@@ -553,25 +394,29 @@ export function createAgentsRouter(
       if (identityChanged || enabledChanged) {
         try {
           await syncToNative(user.id, agent.name, null, agent.identity, true);
-          if (enabledChanged) {
-            await syncAllowAgents(user.id);
-          }
         } catch (e: any) {
           console.error('[agents] Native sync failed:', e.message);
         }
       }
 
-      // model 或 toolsFilter 变化时同步到 native agents.list（硬限制）
+      // model / toolsFilter / enabled 变化时统一同步到 native agents.list
       const modelChanged = model !== undefined &&
         (model?.trim() || null) !== (existing.model || null);
       const toolsFilterChanged = toolsFilter !== undefined &&
         JSON.stringify(toolsFilter) !== JSON.stringify(existing.toolsFilter);
-      if (modelChanged || toolsFilterChanged) {
-        const syncOpts: { model?: string | null; toolsFilter?: string[] | null } = {};
-        if (modelChanged) syncOpts.model = model?.trim() || null;
-        if (toolsFilterChanged) syncOpts.toolsFilter = toolsFilter ?? [];
-        syncAgentNativeConfig(user.id, agent.name, syncOpts).catch((e: any) =>
-          console.error('[agents] syncAgentNativeConfig failed:', e.message),
+      if (modelChanged || toolsFilterChanged || enabledChanged) {
+        const syncOpts: Parameters<typeof syncAgentToEngine>[2] = {};
+        if (modelChanged || toolsFilterChanged) {
+          syncOpts.agentName = agent.name;
+          if (modelChanged) syncOpts.model = model?.trim() || null;
+          if (toolsFilterChanged) syncOpts.toolsFilter = toolsFilter ?? [];
+        }
+        if (enabledChanged) {
+          const enabledAgents = await prisma.agent.findMany({ where: { ownerId: user.id, enabled: true }, select: { name: true } });
+          syncOpts.enabledAgentNames = enabledAgents.map(a => a.name);
+        }
+        syncAgentToEngine(bridge!, user.id, syncOpts).catch((e: any) =>
+          console.error('[agents] syncAgentToEngine failed:', e.message),
         );
       }
 
@@ -585,6 +430,9 @@ export function createAgentsRouter(
           console.error('[agents] syncToolsMd failed:', e.message),
         );
       }
+
+      // Agent 配置变更后清除 prompt 缓存，下次对话重新构建
+      invalidatePromptCache(user.id);
 
       res.json({ agent });
     } catch (err) {
@@ -644,25 +492,16 @@ export function createAgentsRouter(
           console.error('[agents] Workspace cleanup failed:', e.message),
         );
       }
-      // 清理 octopus.json 中 agents.list 的残留 entry + 更新 allowAgents
+      // 清理 octopus.json 中 agents.list 的残留 entry + 更新 allowAgents（单次 config read/write）
       if (bridge?.isConnected) {
-        const { EngineAdapter: OCB2 } = await import('../services/EngineAdapter');
-        const nativeId = OCB2.userAgentId(user.id, existing.name);
-        try {
-          const config = await bridge.configGetParsed() as any;
-          const agentsList = config?.agents?.list || [];
-          const filtered = agentsList.filter((a: any) => a.id !== nativeId);
-          if (filtered.length !== agentsList.length) {
-            config.agents.list = filtered;
-            await bridge.configApplyFull(config);
-          }
-        } catch (e: any) {
-          console.warn('[agents] Failed to clean agents.list config entry:', e.message);
-        }
+        const enabledAgents = await prisma.agent.findMany({ where: { ownerId: user.id, enabled: true }, select: { name: true } });
+        syncAgentToEngine(bridge!, user.id, {
+          deleteAgentName: existing.name,
+          enabledAgentNames: enabledAgents.map(a => a.name),
+        }).catch((e) =>
+          console.error('[agents] syncAgentToEngine after delete failed:', e.message),
+        );
       }
-      syncAllowAgents(user.id).catch((e) =>
-        console.error('[agents] syncAllowAgents after delete failed:', e.message),
-      );
 
       res.json({ ok: true });
     } catch (err) {

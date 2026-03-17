@@ -6,7 +6,7 @@
  * 路由文件只需替换类名即可完成迁移。
  */
 
-import { randomUUID } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import { EventEmitter } from 'events';
 import { ConfigBatcher } from '../utils/config-batcher';
 
@@ -473,7 +473,14 @@ export class EngineAdapter extends EventEmitter {
   // ---- 用户命名空间（与 OctopusBridge 完全一致）----
 
   static userAgentId(userId: string, agentName: string): string {
-    return `ent_${userId}_${agentName}`.toLowerCase().replace(/[^a-z0-9_-]/g, '_');
+    const raw = `ent_${userId}_${agentName}`.toLowerCase();
+    const ascii = raw.replace(/[^a-z0-9_-]/g, '');
+    // 如果替换后丢失了字符（含非 ASCII），加 hash 后缀保证唯一性
+    if (ascii.length < raw.length) {
+      const hash = createHash('md5').update(raw).digest('hex').slice(0, 8);
+      return `ent_${userId}_${hash}`;
+    }
+    return ascii;
   }
 
   static userSessionKey(userId: string, agentName: string, sessionId: string): string {

@@ -1,0 +1,165 @@
+/**
+ * AgentConfigSync — 统一 agent 原生配置同步
+ *
+ * 合并 syncAllowAgents + syncAgentNativeConfig + 删除清理，
+ * 只做 1 次 config read + 1 次 config write，减少竞态和 rate limit 风险。
+ */
+
+import type { EngineAdapter } from './EngineAdapter';
+
+// 引擎 tools.allow 映射：企业语义名 → 引擎原生名
+const TOOL_NAME_TO_ENGINE: Record<string, string> = {
+  list_files: 'read',       // 引擎用 read 工具读目录
+  read_file: 'read',
+  write_file: 'write',
+  execute_command: 'exec',
+  search_files: 'exec',     // 搜索通过 exec 的 grep/find 实现
+};
+
+/** 始终允许的非文件类工具（plugin / memory / session / misc） */
+const ALWAYS_ALLOW_TOOLS = [
+  'group:plugins', 'memory_search', 'memory_get',
+  'sessions_list', 'sessions_history', 'sessions_send', 'sessions_spawn',
+  'agents_list', 'cron', 'image',
+];
+
+/** 将企业 toolsFilter 名称转换为引擎原生工具名（去重） */
+function mapToolsToEngine(tools: string[]): string[] {
+  const mapped = new Set<string>();
+  for (const t of tools) {
+    mapped.add(TOOL_NAME_TO_ENGINE[t] || t);
+  }
+  return [...mapped];
+}
+
+/**
+ * 统一 agent 原生配置同步。
+ *
+ * 合并以下三个操作到 1 次 config read + 1 次 config write：
+ * - syncAllowAgents: 更新 default agent 的 subagents.allowAgents
+ * - syncAgentNativeConfig: 更新指定 agent 的 model + tools.allow
+ * - 删除 agent entry: 从 agents.list 中移除
+ *
+ * @param bridge - EngineAdapter 实例
+ * @param userId - 用户 ID
+ * @param opts - 同步选项
+ *   - agentName: 要更新 model/tools 的 agent 名称
+ *   - model: 模型配置（"provider/modelId" 格式），null 表示清除
+ *   - toolsFilter: 工具白名单（企业语义名），null 表示不改变
+ *   - enabledAgentNames: 该用户所有 enabled 的 agent 名称列表（用于 allowAgents 同步）
+ *   - deleteAgentName: 要从 agents.list 中删除的 agent 名称
+ */
+export async function syncAgentToEngine(
+  bridge: EngineAdapter,
+  userId: string,
+  opts: {
+    agentName?: string;
+    model?: string | null;
+    toolsFilter?: string[] | null;
+    enabledAgentNames?: string[];
+    deleteAgentName?: string;
+  },
+): Promise<void> {
+  if (!bridge.isConnected) return;
+
+  const { config } = await bridge.configGetParsed();
+  const agentsList: any[] = (config as any)?.agents?.list || [];
+  let changed = false;
+
+  // 延迟导入 EngineAdapter 类以获取静态方法（避免循环依赖）
+  const { EngineAdapter: EA } = await import('./EngineAdapter');
+
+  // 1. 删除 agent entry
+  if (opts.deleteAgentName) {
+    const deleteId = EA.userAgentId(userId, opts.deleteAgentName);
+    const before = agentsList.length;
+    (config as any).agents.list = agentsList.filter((a: any) => a.id !== deleteId);
+    if ((config as any).agents.list.length !== before) {
+      changed = true;
+      console.log(`[AgentConfigSync] deleted agent entry: ${deleteId}`);
+    }
+  }
+
+  // 当前 agents.list（可能已被步骤 1 修改）
+  const currentList: any[] = (config as any)?.agents?.list || [];
+
+  // 2. 更新 model + tools.allow
+  if (opts.agentName && (opts.model !== undefined || opts.toolsFilter !== undefined)) {
+    const targetId = EA.userAgentId(userId, opts.agentName);
+    const entry = currentList.find((a: any) => a.id === targetId);
+    if (entry) {
+      // model 同步
+      if (opts.model !== undefined) {
+        const oldModel = entry.model ?? null;
+        const newModel = opts.model || null;
+        if (JSON.stringify(oldModel) !== JSON.stringify(newModel)) {
+          if (newModel) {
+            entry.model = newModel;
+          } else {
+            delete entry.model;
+          }
+          changed = true;
+          console.log(`[AgentConfigSync] model: ${targetId} → ${newModel || '(global default)'}`);
+        }
+      }
+
+      // toolsFilter → 引擎 tools.allow 硬限制
+      if (opts.toolsFilter !== undefined) {
+        const tf = opts.toolsFilter;
+        let newAllow: string[];
+        if (Array.isArray(tf) && tf.length > 0) {
+          // 白名单模式：映射为引擎原生工具名 + 始终允许的工具
+          const engineTools = mapToolsToEngine(tf);
+          newAllow = [...engineTools, ...ALWAYS_ALLOW_TOOLS];
+        } else {
+          // 空数组 / null = 全部禁用工作空间工具，但保留非文件工具
+          newAllow = [...ALWAYS_ALLOW_TOOLS];
+        }
+        const oldAllow = JSON.stringify(entry.tools?.allow);
+        if (oldAllow !== JSON.stringify(newAllow)) {
+          entry.tools = { ...entry.tools, allow: newAllow };
+          changed = true;
+          console.log(`[AgentConfigSync] tools.allow: ${targetId} → [${newAllow.join(', ')}]`);
+        }
+      }
+    }
+  }
+
+  // 3. 更新 allowAgents（default agent 可 spawn 专业 agent，专业 agent 不可 spawn 子 agent）
+  if (opts.enabledAgentNames) {
+    const defaultId = EA.userAgentId(userId, 'default');
+    const specialistIds = opts.enabledAgentNames
+      .filter(n => n !== 'default')
+      .map(n => EA.userAgentId(userId, n));
+
+    for (const entry of currentList) {
+      if (entry.id === defaultId) {
+        // default agent: allowAgents = 专业 agent ID 列表
+        const newAllow = specialistIds.length > 0 ? specialistIds : undefined;
+        const oldAllow = entry.subagents?.allowAgents;
+        if (JSON.stringify(oldAllow) !== JSON.stringify(newAllow)) {
+          entry.subagents = { ...entry.subagents, allowAgents: newAllow };
+          changed = true;
+        }
+      } else if (specialistIds.includes(entry.id)) {
+        // 专业 agent: 不可 spawn 子 agent（与现有行为一致）
+        const oldAllow = entry.subagents?.allowAgents;
+        if (JSON.stringify(oldAllow) !== JSON.stringify([])) {
+          entry.subagents = { ...entry.subagents, allowAgents: [] };
+          changed = true;
+        }
+      }
+    }
+
+    if (changed) {
+      console.log(`[AgentConfigSync] allowAgents updated for user ${userId}, specialists: [${specialistIds.join(', ')}]`);
+    }
+  }
+
+  if (changed) {
+    await bridge.configApplyFull(config as Record<string, unknown>);
+    console.log(`[AgentConfigSync] config applied for user ${userId}`);
+  } else {
+    console.log(`[AgentConfigSync] no changes needed for user ${userId}`);
+  }
+}

@@ -36,6 +36,7 @@ import { AuditLogger, createAuditMiddleware } from '@octopus/audit';
 import { loadConfig } from './config';
 import { createAuthRouter } from './routes/auth';
 import { createChatRouter } from './routes/chat';
+import { createSessionsRouter } from './routes/sessions';
 import { createAuditRouter } from './routes/audit';
 import { createAdminRouter } from './routes/admin';
 import { createFilesRouter } from './routes/files';
@@ -126,27 +127,32 @@ async function main() {
       }
     }
 
-    // 从数据库同步用户到 MockLDAP（使 Admin Console 创建的用户在重启后仍可登录）
+    // 从数据库批量同步用户到 MockLDAP（使 Admin Console 创建的用户在重启后仍可登录）
     if (config.mockLdap && prismaClient) {
       try {
         const dbUsers = await prismaClient.user.findMany({
           select: { username: true, email: true, displayName: true, department: true, passwordHash: true },
         });
         let synced = 0;
+        const failed: string[] = [];
         for (const u of dbUsers) {
-          const ok = authService.registerMockUser(
-            {
-              username: u.username,
-              email: u.email || '',
-              displayName: u.displayName || u.username,
-              department: u.department || '',
-            },
-            u.passwordHash || undefined,
-          );
-          if (ok) synced++;
+          try {
+            const ok = authService.registerMockUser(
+              {
+                username: u.username,
+                email: u.email || '',
+                displayName: u.displayName || u.username,
+                department: u.department || '',
+              },
+              u.passwordHash || undefined,
+            );
+            if (ok) synced++;
+          } catch {
+            failed.push(u.username);
+          }
         }
-        if (synced > 0) {
-          console.log(`   MockLDAP: synced ${synced} users from database`);
+        if (synced > 0 || failed.length > 0) {
+          console.log(`   MockLDAP: synced ${synced}/${dbUsers.length} users from database${failed.length > 0 ? ` (${failed.length} failed: ${failed.join(', ')})` : ''}`);
         }
       } catch (syncErr: any) {
         console.warn('   MockLDAP sync warning:', syncErr.message);
@@ -188,24 +194,30 @@ async function main() {
       await bridge.initialize(19791);
       console.log('   Engine: initialized (single-process)');
 
-      // 启动时将数据库中所有已启用的 Agent 同步到原生 Gateway
+      // 启动时将数据库中所有已启用的 Agent 并发同步到原生 Gateway
       if (prismaClient) {
         try {
           const agents = await prismaClient.agent.findMany({ where: { enabled: true } });
-          for (const agent of agents) {
-            const nativeId = EngineAdapter.userAgentId(agent.ownerId, agent.name);
-            const workspacePath = path.join(
-              config.workspace.dataRoot,
-              'users', agent.ownerId, 'agents', agent.name,
-            );
-            try {
-              await bridge.agentsCreate({ name: nativeId, workspace: workspacePath });
-            } catch {
-              // 忽略已存在的错误
+          const createResults = await Promise.allSettled(
+            agents.map(async (agent) => {
+              const nativeId = EngineAdapter.userAgentId(agent.ownerId, agent.name);
+              const workspacePath = workspaceManager.getAgentWorkspacePath(agent.ownerId, agent.name);
+              try {
+                await bridge!.agentsCreate({ name: nativeId, workspace: workspacePath });
+              } catch { /* 已存在则忽略 */ }
+              return { agent, nativeId };
+            })
+          );
+          let failCount = 0;
+          for (const r of createResults) {
+            if (r.status === 'rejected') {
+              failCount++;
+              console.error('[startup] Agent create failed:', r.reason);
             }
           }
           if (agents.length > 0) {
-            console.log(`   Native Gateway: synced ${agents.length} agents`);
+            const successCount = agents.length - failCount;
+            console.log(`   Native Gateway: synced ${successCount}/${agents.length} agents (concurrent)`);
           }
         } catch (syncErr: any) {
           console.warn('   Native Gateway agent sync warning:', syncErr.message);
@@ -376,6 +388,7 @@ async function main() {
   app.use('/api/auth', createAuthRouter(authService, workspaceManager, prismaClient));
   // 配额中间件覆盖高频 API 路由（#17 修复：不仅限于 chat）
   app.use('/api/chat', quotaMiddleware, createChatRouter(config, authService, workspaceManager, bridge, prismaClient, auditLogger, undefined, quotaManager));
+  app.use('/api/chat', quotaMiddleware, createSessionsRouter(config, authService, workspaceManager, bridge, prismaClient, auditLogger, undefined, quotaManager));
   app.use('/api/audit', createAuditRouter(authService, auditLogger));
   app.use('/api/admin', createAdminRouter(authService, auditLogger, prismaClient!, workspaceManager, bridge));
   app.use('/api/files', quotaMiddleware, createFilesRouter(config, authService, workspaceManager, prismaClient));
