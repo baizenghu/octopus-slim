@@ -44,7 +44,7 @@ export function createAgentsRouter(
    * 同步 agent 到原生 gateway，并自动配置 memory scope 隔离 + 独立工作空间
    * @param isUpdate 是否为更新操作（更新时不覆盖 MEMORY.md，保留已有记忆 #19 修复）
    */
-  async function syncToNative(userId: string, agentName: string, systemPrompt?: string | null, identity?: any, isUpdate = false) {
+  async function syncToNative(userId: string, agentName: string, systemPrompt?: string | null, identity?: any, isUpdate = false, description?: string | null) {
     if (!bridge?.isConnected || !workspaceManager) return;
     const { EngineAdapter: OCB } = await import('../services/EngineAdapter');
     const nativeAgentId = OCB.userAgentId(userId, agentName);
@@ -88,9 +88,20 @@ export function createAgentsRouter(
       }
     };
 
-    if (identity?.name || identity?.emoji) {
-      const parts = [identity.name ? `name: ${identity.name}` : '', identity.emoji ? `emoji: ${identity.emoji}` : ''].filter(Boolean);
-      await setFileWithRetry('IDENTITY.md', parts.join('\n')).catch((e: any) => {
+    // IDENTITY.md：name, emoji, creature（来自 description）, vibe
+    const identityParts = [
+      identity?.name ? `name: ${identity.name}` : '',
+      identity?.emoji ? `emoji: ${identity.emoji}` : '',
+    ].filter(Boolean);
+    // description → creature（原生引擎人设描述字段）
+    if (description) {
+      identityParts.push(`creature: ${description}`);
+    }
+    if (identity?.vibe) {
+      identityParts.push(`vibe: ${identity.vibe}`);
+    }
+    if (identityParts.length > 0) {
+      await setFileWithRetry('IDENTITY.md', identityParts.join('\n')).catch((e: any) => {
         console.error(`[agents] agentFilesSet IDENTITY.md ultimately failed for ${nativeAgentId}:`, e.message);
       });
     }
@@ -326,7 +337,7 @@ export function createAgentsRouter(
 
       // 同步到原生 Gateway（await 确保同步完成后再响应，#20 修复）
       try {
-        await syncToNative(user.id, agent.name, null, agent.identity, false);
+        await syncToNative(user.id, agent.name, null, agent.identity, false, agent.description);
         // 统一同步 allowAgents + model + tools 到 native agents.list（单次 config read/write）
         const enabledAgents = await prisma.agent.findMany({ where: { ownerId: user.id, enabled: true }, select: { name: true } });
         await syncAgentToEngine(bridge!, user.id, {
@@ -390,10 +401,12 @@ export function createAgentsRouter(
       // 仅在影响原生 gateway 的字段实际变化时同步，避免不必要的 config.apply 导致 native gateway 重启
       const identityChanged = identity !== undefined &&
         JSON.stringify(identity) !== JSON.stringify(existing.identity);
+      const descriptionChanged = description !== undefined &&
+        (description?.trim() || null) !== (existing.description || null);
       const enabledChanged = enabled !== undefined && enabled !== existing.enabled;
-      if (identityChanged || enabledChanged) {
+      if (identityChanged || descriptionChanged || enabledChanged) {
         try {
-          await syncToNative(user.id, agent.name, null, agent.identity, true);
+          await syncToNative(user.id, agent.name, null, agent.identity, true, agent.description);
         } catch (e: any) {
           console.error('[agents] Native sync failed:', e.message);
         }

@@ -4,7 +4,7 @@ import * as path from 'path';
 import * as crypto from 'crypto';
 import { spawn, type ChildProcess } from 'child_process';
 import { PrismaClient } from '@prisma/client';
-import { MCPExecutor, type MCPTool } from './executor';
+import { MCPExecutor, type MCPTool, setSandboxConfig, sandboxConfig } from './executor';
 import { Type } from '@sinclair/typebox';
 
 /** 从 native agentId（如 ent_user-baizh_xxx）提取企业 userId */
@@ -341,6 +341,19 @@ export default function enterpriseMcpPlugin(api: any) {
   if (!databaseUrl) {
     api.logger.warn('databaseUrl not configured, enterprise MCP disabled');
     return;
+  }
+
+  // ── 从 octopus.json 读取 sandbox.personal 配置，覆盖默认沙箱参数 ──────
+  try {
+    const stateDir = process.env.OCTOPUS_STATE_DIR || path.join(__dirname, '..', '..', '..', '.octopus-state');
+    const octopusJsonPath = path.join(stateDir, 'octopus.json');
+    const octopusCfg = JSON.parse(fs.readFileSync(octopusJsonPath, 'utf-8'));
+    if (octopusCfg.sandbox?.personal) {
+      setSandboxConfig(octopusCfg.sandbox.personal);
+      api.logger.info('enterprise-mcp: sandbox config loaded from octopus.json');
+    }
+  } catch (err: any) {
+    api.logger.warn(`enterprise-mcp: failed to read sandbox config, using defaults: ${err.message}`);
   }
 
   // ── 从磁盘缓存立即注册工具（同步，覆盖所有 workspace 缓存 miss 的情况）──────
@@ -1369,8 +1382,8 @@ function executeSkillInDocker(
 
   const dockerArgs = [
     'run', '--rm',
-    '--memory=512m', '--cpus=1',
-    '--network=none',
+    `--memory=${sandboxConfig.skill.memory}`, `--cpus=${sandboxConfig.skill.cpus}`,
+    `--network=${sandboxConfig.skill.network}`,
     '-v', `${skillPath}:/skill:ro`,
     '-v', `${userWorkspacePath}:/workspace`,
     '-w', '/workspace',

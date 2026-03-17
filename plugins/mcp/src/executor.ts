@@ -6,6 +6,17 @@
 import * as path from 'path';
 import { spawn, type ChildProcess } from 'child_process';
 
+// ── 沙箱参数配置（从 octopus.json sandbox.personal 读取，可被 setSandboxConfig 覆盖）──
+export let sandboxConfig = {
+  mcp: { memory: '256m', cpus: '0.5', network: 'octopus-internal' },
+  skill: { memory: '512m', cpus: '1', network: 'none' },
+};
+
+export function setSandboxConfig(cfg: Partial<typeof sandboxConfig>) {
+  if (cfg.mcp) sandboxConfig.mcp = { ...sandboxConfig.mcp, ...cfg.mcp };
+  if (cfg.skill) sandboxConfig.skill = { ...sandboxConfig.skill, ...cfg.skill };
+}
+
 export interface MCPServerConfig {
   id: string;
   name: string;
@@ -122,10 +133,10 @@ export class MCPExecutor {
       // 个人 MCP: Docker 沙箱执行
       const dockerArgs = [
         'run', '-i', '--rm',
-        '--network', 'octopus-internal',
+        '--network', sandboxConfig.mcp.network,
         '--user', '2000:2000',
-        '--memory', '256m',
-        '--cpus', '0.5',
+        '--memory', sandboxConfig.mcp.memory,
+        '--cpus', sandboxConfig.mcp.cpus,
       ];
       // 挂载用户工作空间（Docker -v 需要绝对路径）
       const dataRoot = process.env['DATA_ROOT'] || './data';

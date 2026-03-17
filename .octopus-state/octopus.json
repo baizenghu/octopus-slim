@@ -1,7 +1,7 @@
 {
   "meta": {
     "lastTouchedVersion": "1.0.0",
-    "lastTouchedAt": "2026-03-17T08:41:28.815Z"
+    "lastTouchedAt": "2026-03-17T14:49:59.883Z"
   },
   "update": {
     "channel": "beta"
@@ -11,6 +11,14 @@
       "remote": {
         "cdpUrl": "http://10.0.0.42:9222",
         "color": "#0066CC"
+      }
+    }
+  },
+  "auth": {
+    "profiles": {
+      "openai-codex:default": {
+        "provider": "openai-codex",
+        "mode": "oauth"
       }
     }
   },
@@ -43,11 +51,6 @@
       }
     }
   },
-  "skills": {
-    "load": {
-      "extraDirs": ["/home/baizh/octopus/data/skills"]
-    }
-  },
   "agents": {
     "defaults": {
       "model": {
@@ -62,7 +65,9 @@
       "sandbox": {
         "mode": "all",
         "scope": "agent",
-        "docker": { "image": "octopus-sandbox:enterprise" }
+        "docker": {
+          "image": "octopus-sandbox:enterprise"
+        }
       }
     },
     "list": [
@@ -125,16 +130,30 @@
         "workspace": "/home/baizh/octopus/data/users/user-baizh/workspace",
         "agentDir": "/home/baizh/octopus/.octopus-state/agents/ent_user-baizh_default/agent",
         "model": "openai-codex/gpt-5.2"
+      },
+      {
+        "id": "ent_user-admin_b8644b95",
+        "name": "ent_user-admin_b8644b95",
+        "workspace": "/home/baizh/octopus/data/users/user-admin/agents/财务助手/workspace",
+        "agentDir": "/home/baizh/octopus/.octopus-state/agents/ent_user-admin_b8644b95/agent"
       }
     ]
   },
+  "sandbox": {
+    "personal": {
+      "mcp": { "memory": "256m", "cpus": "0.5", "network": "octopus-internal" },
+      "skill": { "memory": "512m", "cpus": "1", "network": "none" }
+    }
+  },
   "tools": {
-    "exec": { "host": "sandbox" },
     "loopDetection": {
       "enabled": true,
       "warningThreshold": 8,
       "criticalThreshold": 15,
       "globalCircuitBreakerThreshold": 25
+    },
+    "exec": {
+      "host": "sandbox"
     },
     "fs": {
       "workspaceOnly": true
@@ -152,6 +171,13 @@
     "nativeSkills": "auto",
     "restart": true,
     "ownerDisplay": "raw"
+  },
+  "skills": {
+    "load": {
+      "extraDirs": [
+        "/home/baizh/octopus/data/skills"
+      ]
+    }
   },
   "plugins": {
     "allow": [
@@ -226,14 +252,6 @@
           "databaseUrl": "mysql://octopus:YOUR_DB_PASSWORD_URLENCODED@localhost:3306/octopus_enterprise",
           "dataRoot": "/home/baizh/octopus/data"
         }
-      }
-    }
-  },
-  "auth": {
-    "profiles": {
-      "openai-codex:default": {
-        "provider": "openai-codex",
-        "mode": "oauth"
       }
     }
   }

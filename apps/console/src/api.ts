@@ -147,7 +147,7 @@ export interface AgentInfo {
   description?: string;
   model?: string;
   systemPrompt?: string;
-  identity?: { name?: string; emoji?: string; avatar?: string };
+  identity?: { name?: string; emoji?: string; avatar?: string; vibe?: string };
   skillsFilter?: string[] | null;
   mcpFilter?: string[] | null;
   toolsFilter?: string[] | null;

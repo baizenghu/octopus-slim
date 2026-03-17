@@ -156,6 +156,43 @@ export async function syncAgentToEngine(
     }
   }
 
+  // 4. 同步 memory-lancedb-pro agentAccess（记忆隔离）
+  if (opts.enabledAgentNames) {
+    const memoryPlugin = (config as any).plugins?.entries?.['memory-lancedb-pro'];
+    if (memoryPlugin?.config?.scopes) {
+      const scopes = memoryPlugin.config.scopes;
+      const defaultId = EA.userAgentId(userId, 'default');
+      const specialistIds = opts.enabledAgentNames
+        .filter((n: string) => n !== 'default')
+        .map((n: string) => EA.userAgentId(userId, n));
+
+      const allUserAgentIds = [defaultId, ...specialistIds];
+      scopes.agentAccess = scopes.agentAccess || {};
+
+      // default agent 可访问所有该用户 agent 的记忆
+      const oldDefault = JSON.stringify(scopes.agentAccess[defaultId]);
+      scopes.agentAccess[defaultId] = allUserAgentIds;
+      if (JSON.stringify(scopes.agentAccess[defaultId]) !== oldDefault) changed = true;
+
+      // 每个专业 agent 只能访问自己和 default 的记忆
+      for (const sid of specialistIds) {
+        const oldSpec = JSON.stringify(scopes.agentAccess[sid]);
+        scopes.agentAccess[sid] = [sid, defaultId];
+        if (JSON.stringify(scopes.agentAccess[sid]) !== oldSpec) changed = true;
+      }
+    }
+  }
+
+  // 删除 agent 时清理 agentAccess
+  if (opts.deleteAgentName) {
+    const deleteId = EA.userAgentId(userId, opts.deleteAgentName);
+    const memoryPlugin = (config as any).plugins?.entries?.['memory-lancedb-pro'];
+    if (memoryPlugin?.config?.scopes?.agentAccess?.[deleteId]) {
+      delete memoryPlugin.config.scopes.agentAccess[deleteId];
+      changed = true;
+    }
+  }
+
   if (changed) {
     await bridge.configApplyFull(config as Record<string, unknown>);
     console.log(`[AgentConfigSync] config applied for user ${userId}`);

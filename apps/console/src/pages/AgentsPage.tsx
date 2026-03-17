@@ -56,12 +56,17 @@ const EMOJI_OPTIONS = [
 ];
 
 const WORKSPACE_TOOLS = [
-  { value: 'list_files', label: 'list_files (列出文件)' },
-  { value: 'read_file', label: 'read_file (读取文件)' },
-  { value: 'write_file', label: 'write_file (写入文件)' },
-  { value: 'execute_command', label: 'execute_command (执行命令)' },
-  { value: 'search_files', label: 'search_files (搜索文件)' },
+  { value: 'read', label: '文件读取 (list_files + read_file)', engines: ['list_files', 'read_file'] },
+  { value: 'write', label: '文件写入 (write_file)', engines: ['write_file'] },
+  { value: 'exec', label: '命令执行 (execute_command + search_files)', engines: ['execute_command', 'search_files'] },
 ];
+
+/** 原始工具名 → 引擎组映射（加载时将原始工具名折叠为组） */
+const TOOL_TO_GROUP: Record<string, string> = {
+  list_files: 'read', read_file: 'read',
+  write_file: 'write',
+  execute_command: 'exec', search_files: 'exec',
+};
 
 interface AgentsPageProps {
   onConfigAgent?: (agent: AgentInfo) => void;
@@ -118,6 +123,7 @@ export default function AgentsPage({ onConfigAgent }: AgentsPageProps) {
   const [formModel, setFormModel] = useState('');
   const [availableModels, setAvailableModels] = useState<{ id: string; provider?: string }[]>([]);
   const [modelDropdownOpen, setModelDropdownOpen] = useState(false);
+  const [formVibe, setFormVibe] = useState('');
   const [formEnabled, setFormEnabled] = useState(true);
   const [formToolsFilterEnabled, setFormToolsFilterEnabled] = useState(true);
   const [formToolsFilter, setFormToolsFilter] = useState<string[]>([]);
@@ -185,6 +191,7 @@ export default function AgentsPage({ onConfigAgent }: AgentsPageProps) {
     setFormName('');
     setFormIdentityName('');
     setFormIdentityEmoji('');
+    setFormVibe('');
     setFormModel('');
     setFormEnabled(true);
     setFormToolsFilterEnabled(false);
@@ -224,10 +231,13 @@ export default function AgentsPage({ onConfigAgent }: AgentsPageProps) {
     setFormName(agent.name);
     setFormIdentityName(agent.identity?.name || '');
     setFormIdentityEmoji(agent.identity?.emoji || '');
+    setFormVibe(agent.identity?.vibe || '');
     setFormModel(agent.model || '');
     setFormEnabled(agent.enabled);
     setFormToolsFilterEnabled(Array.isArray(agent.toolsFilter) && agent.toolsFilter.length > 0);
-    setFormToolsFilter(agent.toolsFilter || []);
+    // 将原始工具名折叠为引擎组
+    const loadedGroups = [...new Set((agent.toolsFilter || []).map((t: string) => TOOL_TO_GROUP[t] || t))];
+    setFormToolsFilter(loadedGroups);
     setFormSkillsFilterEnabled(Array.isArray(agent.skillsFilter) && agent.skillsFilter.length > 0);
     setFormSkillsFilter(agent.skillsFilter || []);
     setFormMcpFilterEnabled(Array.isArray(agent.mcpFilter) && agent.mcpFilter.length > 0);
@@ -263,15 +273,20 @@ export default function AgentsPage({ onConfigAgent }: AgentsPageProps) {
 
     setSubmitting(true);
     try {
-      const identity = (formIdentityName || formIdentityEmoji)
-        ? { name: formIdentityName || undefined, emoji: formIdentityEmoji || undefined }
+      const identity = (formIdentityName || formIdentityEmoji || formVibe)
+        ? { name: formIdentityName || undefined, emoji: formIdentityEmoji || undefined, vibe: formVibe || undefined }
         : null;
 
       const data: any = {
         name: formName,
         model: formModel || null,
         identity,
-        toolsFilter: formToolsFilterEnabled ? formToolsFilter : [],
+        toolsFilter: formToolsFilterEnabled
+          ? formToolsFilter.flatMap(t => {
+              const group = WORKSPACE_TOOLS.find(w => w.value === t);
+              return group ? group.engines : [t];
+            })
+          : [],
         skillsFilter: formSkillsFilterEnabled ? formSkillsFilter : [],
         mcpFilter: formMcpFilterEnabled ? formMcpFilter : [],
         allowedConnections: formConnFilterEnabled ? formAllowedConnections : [],
@@ -378,7 +393,7 @@ export default function AgentsPage({ onConfigAgent }: AgentsPageProps) {
                 <div className="flex flex-wrap gap-1.5 mb-3">
                   {Array.isArray(agent.toolsFilter) && agent.toolsFilter.length > 0 ? (
                     <Badge variant="outline" className="text-xs text-blue-600 border-blue-200 bg-blue-50">
-                      工具: {agent.toolsFilter.length}
+                      工具: {[...new Set(agent.toolsFilter.map((t: string) => TOOL_TO_GROUP[t] || t))].length} 组
                     </Badge>
                   ) : (
                     <Badge variant="outline" className="text-xs text-red-600 border-red-200 bg-red-50">工具: 禁用</Badge>
@@ -552,6 +567,17 @@ export default function AgentsPage({ onConfigAgent }: AgentsPageProps) {
                     )}
                   </div>
                 </div>
+              </div>
+
+              {/* Vibe（性格/风格描述） */}
+              <div className="space-y-2">
+                <Label htmlFor="identity-vibe">Vibe（性格/风格）</Label>
+                <Input
+                  id="identity-vibe"
+                  placeholder="如: 严谨专业、活泼友好、简洁高效"
+                  value={formVibe}
+                  onChange={(e) => setFormVibe(e.target.value)}
+                />
               </div>
 
               {/* 模型 */}

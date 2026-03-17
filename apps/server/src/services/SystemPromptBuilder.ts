@@ -204,25 +204,33 @@ export async function buildEnterpriseSystemPrompt(
   const mcpSection = await buildMCPToolsSection(agent?.mcpFilter as string[] | null | undefined, user.id, agent?.allowedConnections as string[] | null | undefined, prisma);
   if (mcpSection) sections.push(mcpSection);
 
-  // 工作空间工具权限
+  // 工作空间工具权限（按组描述，避免暴露内部工具名）
   // 权限逻辑：null/[] = 全部禁用，有值数组 = 白名单
   const tf = agent?.toolsFilter;
-  const allWorkspaceTools = ['list_files', 'read_file', 'write_file', 'execute_command', 'search_files'];
+  const TOOL_GROUPS = [
+    { group: 'read', label: '文件读取', tools: ['list_files', 'read_file'] },
+    { group: 'write', label: '文件写入', tools: ['write_file'] },
+    { group: 'exec', label: '命令执行', tools: ['execute_command', 'search_files'] },
+  ];
+
+  const enabledTools = new Set(tf || []);
+  const allowedGroups = TOOL_GROUPS.filter(g => g.tools.some(t => enabledTools.has(t)));
+  const blockedGroups = TOOL_GROUPS.filter(g => !g.tools.some(t => enabledTools.has(t)));
+
   if (!Array.isArray(tf) || tf.length === 0) {
     sections.push(
       `## 工作空间工具限制\n\n` +
-      `你**没有**任何工作空间工具的权限。严禁使用 ${allWorkspaceTools.join(', ')} 等工具。` +
+      `你**没有**任何工作空间工具的权限。严禁使用文件读取、文件写入、命令执行工具。` +
       `如果用户要求操作文件或执行命令，请说明你没有该权限。`
     );
-  } else {
-    const blockedTools = allWorkspaceTools.filter(t => !tf.includes(t));
-    if (blockedTools.length > 0) {
-      sections.push(
-        `## 工作空间工具限制\n\n` +
-        `你**仅**被授权使用以下工具：${tf.join(', ')}。\n` +
-        `严禁使用以下工具：${blockedTools.join(', ')}。如果用户要求使用受限工具，请说明你没有该权限。`
-      );
-    }
+  } else if (blockedGroups.length > 0) {
+    const allowed = allowedGroups.map(g => g.label).join('、');
+    const blocked = blockedGroups.map(g => g.label).join('、');
+    sections.push(
+      `## 工作空间工具限制\n\n` +
+      `你**仅**被授权使用以下工具组：${allowed}。\n` +
+      `严禁使用以下工具组：${blocked}。如果用户要求使用受限工具，请说明你没有该权限。`
+    );
   }
 
   // MCP 兜底提示

@@ -224,6 +224,7 @@ Start all: `./start.sh start` | Stop all: `./start.sh stop`
 | 2026-03-16 | agent 工具调用失败后 LLM 反复换参数重试进入死循环，无法通过前端终止按钮停止 | 三层防护：① 引擎 `loopDetection` 配置启用（8 次警告/15 次阻断/25 次终止）；② MCP 工具层连续失败 3 次自动熔断；③ IM `/cancel` 命令 + 30 分钟兜底超时 |
 | 2026-03-16 | 引擎 tool 事件字段名是 `name` 不是 `toolName`，导致 `sessions_spawn` 检测失败，前端 delegation poll 不启动，子 agent 结果不自动显示 | `EngineAdapter.ts` 中 `data.toolName` 改为 `data.toolName \|\| data.name` |
 | 2026-03-16 | 删除用户时 workspace 清理失败（sandbox 容器创建的 root 文件，宿主机 uid 无权删除） | `deleteWorkspace` 失败时自动用 Docker `--user root` 清理 |
+| 2026-03-17 | `configApplyFull` 所有调用点都涉及 `agents.list` 数组修改 | 无法用 `configApply`（deep merge）替换（对数组是替换语义），保持 read-modify-write 模式；阶段 2 已通过 `AgentConfigSync` 合并调用次数（6→2） |
 
 ---
 
@@ -256,6 +257,14 @@ Enterprise Gateway 从独立 DeepSeek 调用者重构为原生代理层：
 - SkillManager: DB 持久化 + 内存缓存双层架构（启动恢复 + fire-and-forget 写入）
 - Plugins 迁移: `~/.octopus/plugins/` → `./plugins/`（版本控制 + 统一管理）
 - State 目录迁移: `~/.octopus/` → `.octopus-state/`（项目内版本控制，`OCTOPUS_STATE_DIR` 环境变量）
+
+### 阶段 3 整改 — 配置管理统一 + 工具权限对齐 (2026-03-17) ✅
+- 工具权限对齐引擎粒度：前端 5 个独立 checkbox → 3 组（read/write/exec），后端提示同步适配
+- IDENTITY.md 添加 creature（来自 description）和 vibe 字段，利用原生引擎人设渲染
+- 沙箱参数配置化：executor.ts/index.ts 从 octopus.json `sandbox.personal` 读取（替代硬编码）
+- 记忆隔离显式化：AgentConfigSync 在 agent 创建/删除时同步 agentAccess 到 memory-lancedb-pro
+- configApplyFull 分析结论：所有调用点涉及数组操作，保持 read-modify-write 模式
+- 延后项：skills.entries 双写（引擎不支持）、Plugin 配置 UI（需从零创建）、SystemConfigPage 补齐（stash WIP）
 
 ### 阶段 2 整改 — 消除重复代码 + 性能优化 (2026-03-17) ✅
 - chat.ts 瘦身拆分：1432→722 行（减 710 行），提取 sessions.ts(573)、SystemPromptBuilder.ts(277)、ContentSanitizer.ts(59)
