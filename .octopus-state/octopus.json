@@ -1,7 +1,7 @@
 {
   "meta": {
     "lastTouchedVersion": "1.0.0",
-    "lastTouchedAt": "2026-03-17T14:49:59.883Z"
+    "lastTouchedAt": "2026-03-17T15:39:44.820Z"
   },
   "update": {
     "channel": "beta"
@@ -64,6 +64,7 @@
       },
       "sandbox": {
         "mode": "all",
+        "workspaceAccess": "rw",
         "scope": "agent",
         "docker": {
           "image": "octopus-sandbox:enterprise"
@@ -130,12 +131,6 @@
         "workspace": "/home/baizh/octopus/data/users/user-baizh/workspace",
         "agentDir": "/home/baizh/octopus/.octopus-state/agents/ent_user-baizh_default/agent",
         "model": "openai-codex/gpt-5.2"
-      },
-      {
-        "id": "ent_user-admin_b8644b95",
-        "name": "ent_user-admin_b8644b95",
-        "workspace": "/home/baizh/octopus/data/users/user-admin/agents/财务助手/workspace",
-        "agentDir": "/home/baizh/octopus/.octopus-state/agents/ent_user-admin_b8644b95/agent"
       }
     ]
   },
@@ -228,7 +223,11 @@
           "autoRecall": true,
           "scopes": {
             "default": "global",
-            "agentAccess": {}
+            "agentAccess": {
+              "ent_user-admin_default": [
+                "ent_user-admin_default"
+              ]
+            }
           }
         }
       },
@@ -246,8 +245,16 @@
           "databaseUrl": "mysql://octopus:YOUR_DB_PASSWORD_URLENCODED@localhost:3306/octopus_enterprise",
           "dataRoot": "/home/baizh/octopus/data",
           "sandbox": {
-            "mcp": { "memory": "256m", "cpus": "0.5", "network": "octopus-internal" },
-            "skill": { "memory": "512m", "cpus": "1", "network": "none" }
+            "mcp": {
+              "memory": "256m",
+              "cpus": "0.5",
+              "network": "octopus-internal"
+            },
+            "skill": {
+              "memory": "512m",
+              "cpus": "1",
+              "network": "none"
+            }
           }
         }
       }
