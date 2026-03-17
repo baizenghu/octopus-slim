@@ -139,12 +139,6 @@
       }
     ]
   },
-  "sandbox": {
-    "personal": {
-      "mcp": { "memory": "256m", "cpus": "0.5", "network": "octopus-internal" },
-      "skill": { "memory": "512m", "cpus": "1", "network": "none" }
-    }
-  },
   "tools": {
     "loopDetection": {
       "enabled": true,
@@ -250,7 +244,11 @@
         "enabled": true,
         "config": {
           "databaseUrl": "mysql://octopus:YOUR_DB_PASSWORD_URLENCODED@localhost:3306/octopus_enterprise",
-          "dataRoot": "/home/baizh/octopus/data"
+          "dataRoot": "/home/baizh/octopus/data",
+          "sandbox": {
+            "mcp": { "memory": "256m", "cpus": "0.5", "network": "octopus-internal" },
+            "skill": { "memory": "512m", "cpus": "1", "network": "none" }
+          }
         }
       }
     }

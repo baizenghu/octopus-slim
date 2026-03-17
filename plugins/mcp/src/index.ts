@@ -343,14 +343,12 @@ export default function enterpriseMcpPlugin(api: any) {
     return;
   }
 
-  // ── 从 octopus.json 读取 sandbox.personal 配置，覆盖默认沙箱参数 ──────
+  // ── 从 plugin config 读取 sandbox 配置，覆盖默认沙箱参数 ──────
+  // 配置位于 octopus.json plugins.entries.enterprise-mcp.config.sandbox
   try {
-    const stateDir = process.env.OCTOPUS_STATE_DIR || path.join(__dirname, '..', '..', '..', '.octopus-state');
-    const octopusJsonPath = path.join(stateDir, 'octopus.json');
-    const octopusCfg = JSON.parse(fs.readFileSync(octopusJsonPath, 'utf-8'));
-    if (octopusCfg.sandbox?.personal) {
-      setSandboxConfig(octopusCfg.sandbox.personal);
-      api.logger.info('enterprise-mcp: sandbox config loaded from octopus.json');
+    if ((config as any)?.sandbox) {
+      setSandboxConfig((config as any).sandbox);
+      api.logger.info('enterprise-mcp: sandbox config loaded from plugin config');
     }
   } catch (err: any) {
     api.logger.warn(`enterprise-mcp: failed to read sandbox config, using defaults: ${err.message}`);
