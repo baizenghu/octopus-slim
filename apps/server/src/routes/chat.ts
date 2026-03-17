@@ -190,7 +190,8 @@ export function createChatRouter(
       }
 
       default:
-        return { reply: `未知命令: \`${cmd}\`\n输入 \`/help\` 查看可用命令` };
+        // 不认识的斜杠命令透传给原生 agent（支持 /new /reset /stop 等原生命令）
+        return null;
     }
   }
 

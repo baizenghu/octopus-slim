@@ -16,6 +16,7 @@ import type { AuthService } from '@octopus/auth';
 import { createAuthMiddleware, type AuthenticatedRequest } from '../middleware/auth';
 import { EngineAdapter } from '../services/EngineAdapter';
 import type { EngineAdapter as BridgeType } from '../services/EngineAdapter';
+import { syncAgentToEngine } from '../services/AgentConfigSync';
 
 function normalizeHeartbeatContent(content: string): string {
   return content.trim();
@@ -210,17 +211,11 @@ export function createSchedulerRouter(
           console.error(`[scheduler] writeHeartbeatToAgent failed for ${nativeAgentId}:`, e.message);
         }
 
-        // 更新 heartbeat 配置（全量替换）
-        const { config } = await bridge.configGetParsed();
-        const agentsList: any[] = (config as any).agents?.list || [];
-        const targetAgent = agentsList.find((a: any) => a.id === nativeAgentId);
-        if (targetAgent) {
-          targetAgent.heartbeat = { every, prompt: 'HEARTBEAT.md' };
-        } else {
-          agentsList.push({ id: nativeAgentId, heartbeat: { every, prompt: 'HEARTBEAT.md' } });
-        }
-        (config as any).agents = { ...(config as any).agents, list: agentsList };
-        await bridge.configApplyFull(config);
+        // 通过 AgentConfigSync 更新 heartbeat 配置（复用 read-diff-write 逻辑，避免 configApplyFull）
+        await syncAgentToEngine(bridge, user.id, {
+          agentName: agent.name,
+          heartbeat: { every, prompt: 'HEARTBEAT.md' },
+        });
 
         res.json({ task });
         return;
@@ -348,43 +343,20 @@ export function createSchedulerRouter(
           (enabled !== undefined && Boolean(enabled) !== dbTask.enabled);
 
         if (needConfigUpdate) {
-          let heartbeatEvery: string;
-          if (enabled === false) {
-            heartbeatEvery = 'disabled';
-          } else if (enabled === true) {
-            // 启用：恢复 taskConfig 中保存的 every 值
-            heartbeatEvery = effectiveEvery;
-          } else {
-            heartbeatEvery = effectiveEvery;
-          }
-
-          const { config } = await bridge.configGetParsed();
-          const agentsList: any[] = (config as any).agents?.list || [];
-          const oldTargetAgent = agentsList.find((a: any) => a.id === oldNativeAgentId);
-          const nextTargetAgent = agentsList.find((a: any) => a.id === nextNativeAgentId);
-
+          const isDisabled = enabled === false;
+          // 通过 AgentConfigSync 更新 heartbeat 配置
+          // 禁用 = 删除心跳（null），启用/更新 = 设置心跳
           if (agentChanged) {
-            // 切换 agent 时，删除旧 agent 的心跳配置
-            if (oldTargetAgent) {
-              delete oldTargetAgent.heartbeat;
-            }
-          }
-
-          if (nextTargetAgent) {
-            if (heartbeatEvery === 'disabled') {
-              // 禁用：删除 heartbeat 字段（native gateway 不认识 'disabled'）
-              delete nextTargetAgent.heartbeat;
-            } else {
-              nextTargetAgent.heartbeat = { every: heartbeatEvery, prompt: 'HEARTBEAT.md' };
-            }
-          } else if (heartbeatEvery !== 'disabled') {
-            agentsList.push({
-              id: nextNativeAgentId,
-              heartbeat: { every: heartbeatEvery, prompt: 'HEARTBEAT.md' },
+            // agent 切换：先删旧 agent 心跳，再设新 agent 心跳
+            await syncAgentToEngine(bridge, user.id, {
+              agentName: oldAgent.name,
+              heartbeat: null,
             });
           }
-          (config as any).agents = { ...(config as any).agents, list: agentsList };
-          await bridge.configApplyFull(config);
+          await syncAgentToEngine(bridge, user.id, {
+            agentName: nextAgent.name,
+            heartbeat: isDisabled ? null : { every: effectiveEvery, prompt: 'HEARTBEAT.md' },
+          });
         }
 
         res.json({ task });
@@ -461,15 +433,11 @@ export function createSchedulerRouter(
             console.error(`[scheduler] clearHeartbeatFromAgent failed for ${nativeAgentId}:`, e.message);
           }
 
-          // 删除 heartbeat 字段（native gateway 不认识 'disabled'）
-          const { config } = await bridge.configGetParsed();
-          const agentsList: any[] = (config as any).agents?.list || [];
-          const targetAgent = agentsList.find((a: any) => a.id === nativeAgentId);
-          if (targetAgent && targetAgent.heartbeat) {
-            delete targetAgent.heartbeat;
-            (config as any).agents = { ...(config as any).agents, list: agentsList };
-            await bridge.configApplyFull(config);
-          }
+          // 通过 AgentConfigSync 删除 heartbeat 配置（避免 configApplyFull）
+          await syncAgentToEngine(bridge, user.id, {
+            agentName: agent.name,
+            heartbeat: null,
+          });
         }
 
         // 删除 DB 记录

@@ -22,6 +22,31 @@ import { getSkillsForUser, buildSkillsSystemPromptSection } from '../SkillsInfo'
 
 const FILE_SIZE_LIMIT = 10 * 1024 * 1024; // 10MB
 
+// IM activeAgents 持久化文件路径（重启后恢复用户的 agent 选择）
+const ACTIVE_AGENTS_FILE = path.join(
+  process.env.OCTOPUS_STATE_DIR || '.octopus-state',
+  'im-active-agents.json',
+);
+
+/** 从文件恢复 activeAgents Map */
+function loadActiveAgents(): Map<string, string> {
+  try {
+    const data = JSON.parse(fs.readFileSync(ACTIVE_AGENTS_FILE, 'utf8'));
+    return new Map(Object.entries(data));
+  } catch {
+    return new Map();
+  }
+}
+
+/** 持久化 activeAgents Map 到文件（fire-and-forget） */
+function saveActiveAgents(map: Map<string, string>): void {
+  try {
+    fs.writeFileSync(ACTIVE_AGENTS_FILE, JSON.stringify(Object.fromEntries(map)));
+  } catch (e: any) {
+    console.warn('[im-router] Failed to save activeAgents:', e.message);
+  }
+}
+
 /** 清理模型输出中的 <think> 标签 */
 function stripThinkTags(text: string): string {
   const thinkOpen = text.indexOf('<think>');
@@ -42,8 +67,8 @@ export class IMRouter {
     private auditLogger?: AuditLogger,
   ) {}
 
-  /** IM 用户当前选中的 agent（进程级，重启回落 default） */
-  private activeAgents = new Map<string, string>();
+  /** IM 用户当前选中的 agent（启动时从文件恢复，变更时持久化） */
+  private activeAgents = loadActiveAgents();
 
   /** /bind 频率限制：key = imUserId, value = { count, firstAttempt } */
   private bindAttempts = new Map<string, { count: number; firstAttempt: number }>();
@@ -345,6 +370,7 @@ export class IMRouter {
     // 切回 default 直接允许
     if (targetName === 'default') {
       this.activeAgents.delete(imKey);
+      saveActiveAgents(this.activeAgents);
       await adapter.sendText(imUserId, '已切换到主助手 (default)');
       return;
     }
@@ -375,8 +401,9 @@ export class IMRouter {
       // 确保 native agent 存在
       await this.ensureAgent(userId, targetName);
 
-      // 更新 Map
+      // 更新 Map 并持久化
       this.activeAgents.set(imKey, targetName);
+      saveActiveAgents(this.activeAgents);
       console.log(`[im-router] agentSwitch: imKey=${imKey}, set to ${targetName}, map size=${this.activeAgents.size}`);
 
       // 审计记录
@@ -465,6 +492,7 @@ export class IMRouter {
         });
         if (!agentExists) {
           this.activeAgents.delete(imKey);
+          saveActiveAgents(this.activeAgents);
           await adapter.sendText(msg.imUserId, `Agent "${agentName}" 已不可用，已自动切回主助手。`);
           // 回落到 default，重新调用自身
           return this.routeToAgent(adapter, userId, msg);

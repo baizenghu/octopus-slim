@@ -16,9 +16,9 @@ const TOOL_NAME_TO_ENGINE: Record<string, string> = {
   search_files: 'exec',     // 搜索通过 exec 的 grep/find 实现
 };
 
-/** 始终允许的非文件类工具（plugin / memory / session / misc） */
-const ALWAYS_ALLOW_TOOLS = [
-  'group:plugins', 'memory_search', 'memory_get',
+/** 基础工具（所有 agent 都需要的非文件类工具） */
+const BASE_TOOLS = [
+  'memory_search', 'memory_get',
   'sessions_list', 'sessions_history', 'sessions_send', 'sessions_spawn',
   'agents_list', 'cron', 'image',
 ];
@@ -58,6 +58,8 @@ export async function syncAgentToEngine(
     toolsFilter?: string[] | null;
     enabledAgentNames?: string[];
     deleteAgentName?: string;
+    /** 心跳配置同步。传对象 = 创建/更新心跳，null = 删除心跳 */
+    heartbeat?: { every: string; prompt: string } | null;
   },
 ): Promise<void> {
   if (!bridge.isConnected) return;
@@ -106,20 +108,46 @@ export async function syncAgentToEngine(
       // toolsFilter → 引擎 tools.allow 硬限制
       if (opts.toolsFilter !== undefined) {
         const tf = opts.toolsFilter;
+        // P1-14: 只有 default agent 获得 group:plugins（可访问所有插件工具）
+        // 专业 agent 只能使用通过 engineNames 显式授权的工具，遵循最小权限原则
+        const isDefault = opts.agentName === 'default';
         let newAllow: string[];
         if (Array.isArray(tf) && tf.length > 0) {
-          // 白名单模式：映射为引擎原生工具名 + 始终允许的工具
+          // 白名单模式：映射为引擎原生工具名 + 基础工具
           const engineTools = mapToolsToEngine(tf);
-          newAllow = [...engineTools, ...ALWAYS_ALLOW_TOOLS];
+          newAllow = [...engineTools, ...BASE_TOOLS, ...(isDefault ? ['group:plugins'] : [])];
         } else {
-          // 空数组 / null = 全部禁用工作空间工具，但保留非文件工具
-          newAllow = [...ALWAYS_ALLOW_TOOLS];
+          // 空数组 / null = 全部禁用工作空间工具，但保留基础工具
+          newAllow = [...BASE_TOOLS, ...(isDefault ? ['group:plugins'] : [])];
         }
         const oldAllow = JSON.stringify(entry.tools?.allow);
         if (oldAllow !== JSON.stringify(newAllow)) {
           entry.tools = { ...entry.tools, allow: newAllow };
           changed = true;
           console.log(`[AgentConfigSync] tools.allow: ${targetId} → [${newAllow.join(', ')}]`);
+        }
+      }
+    }
+  }
+
+  // 2.5 更新心跳配置
+  if (opts.heartbeat !== undefined && opts.agentName) {
+    const targetId = EA.userAgentId(userId, opts.agentName);
+    const entry = currentList.find((a: any) => a.id === targetId);
+    if (entry) {
+      if (opts.heartbeat === null) {
+        // 删除心跳
+        if (entry.heartbeat) {
+          delete entry.heartbeat;
+          changed = true;
+          console.log(`[AgentConfigSync] heartbeat deleted: ${targetId}`);
+        }
+      } else {
+        const oldHb = JSON.stringify(entry.heartbeat);
+        entry.heartbeat = opts.heartbeat;
+        if (oldHb !== JSON.stringify(entry.heartbeat)) {
+          changed = true;
+          console.log(`[AgentConfigSync] heartbeat updated: ${targetId} → every=${opts.heartbeat.every}`);
         }
       }
     }

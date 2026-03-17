@@ -221,31 +221,20 @@ export function createSessionsRouter(
       const rawSessions = ((result?.sessions || result) as any[] || [])
         .filter((s: any) => (s.key || s.sessionKey || '').startsWith(agentPrefix));
 
-      // 对没有标题或标题包含脏数据的 session 异步补标题
+      // P1-12: 异步补标题（fire-and-forget），不阻塞列表返回
+      // 标题会在后台生成，前端下次刷新时看到
       const needsTitle = (s: any) => {
         const lbl = s.label || s.title || '';
         return !lbl || lbl === '新对话' || lbl.includes('<relevant-memories') || lbl.includes('[UNTRUSTED DATA');
       };
-      const titleTasks = rawSessions
-        .filter(needsTitle)
-        .slice(0, 5)  // 最多同时补 5 个，避免大量历史 session 拖慢响应
-        .map((s: any) => autoGenerateTitle(bridge!, s.key || s.sessionKey).catch(() => null));
-      if (titleTasks.length > 0) {
-        await Promise.allSettled(titleTasks);
-        // 重新拉一次列表拿到更新后的 label（传入 agentId 服务端过滤）
-        const refreshed = await bridge.sessionsList(nativeAgentId) as any;
-        const refreshedMap = new Map<string, any>();
-        for (const s of ((refreshed?.sessions || refreshed) as any[] || [])) {
-          refreshedMap.set(s.key || s.sessionKey, s);
-        }
-        for (const s of rawSessions) {
-          const key = s.key || s.sessionKey;
-          const fresh = refreshedMap.get(key);
-          if (fresh) {
-            s.label = fresh.label || s.label;
-            s.title = fresh.title || s.title;
-          }
-        }
+      const sessionsNeedingTitle = rawSessions.filter(needsTitle).slice(0, 5);
+      if (sessionsNeedingTitle.length > 0) {
+        // fire-and-forget: 不 await，后台异步执行
+        Promise.allSettled(
+          sessionsNeedingTitle.map((s: any) =>
+            autoGenerateTitle(bridge!, s.key || s.sessionKey).catch(() => null)
+          )
+        ).catch(err => console.error('[sessions] background title generation error:', err));
       }
 
       const sessions = rawSessions.map((s: any) => ({

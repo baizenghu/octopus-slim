@@ -255,8 +255,14 @@ export default function ChatPage() {
     return () => clearInterval(timer);
   }, []);
 
-  // 加载会话列表
+  // 加载会话列表（防抖：500ms 内不重复请求）
+  const lastLoadRef = useRef(0);
   const loadSessions = useCallback(async () => {
+    // currentAgentId 尚未初始化时跳过无效请求
+    if (!currentAgentId) return;
+    const now = Date.now();
+    if (now - lastLoadRef.current < 500) return;
+    lastLoadRef.current = now;
     try {
       const res = await adminApi.getSessions(currentAgentId);
       setSessions(res.sessions.map(s => ({
