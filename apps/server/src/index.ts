@@ -263,18 +263,28 @@ async function main() {
           const isAlert = content && !content.includes('HEARTBEAT_OK');
           console.log(`[heartbeat] event: status=${evt.status}, reason=${evt.reason || 'n/a'}, alert=${isAlert}, agent=${evt.agentId || 'default'}`);
 
-          // 推送条件：有内容且不含 HEARTBEAT_OK（无论 status 是 completed 还是 skipped/target-none）
+          // 推送条件：有内容且不含 HEARTBEAT_OK
           if (isAlert) {
             // 从 agentId 提取 userId（ent_{userId}_{agentName}）
-            // 如果是 main agent 或无法解析，尝试向所有管理员推送
             const match = evt.agentId?.match(/^ent_(.+?)_[^_]+$/);
-            const userId = match?.[1] ? `user-${match[1]}` : undefined;
-            if (userId) {
-              const alertText = `🚨 心跳巡检告警\nAgent: ${evt.agentId}\n时间: ${new Date().toLocaleString('zh-CN')}\n\n${content.slice(0, 2000)}`;
-              heartbeatImService.sendToUser(userId, alertText).then(sent => {
-                if (sent > 0) console.log(`[heartbeat] Alert pushed to ${userId} via IM`);
-                else console.log(`[heartbeat] No IM binding for ${userId}, alert not sent`);
-              }).catch((e: any) => console.warn(`[heartbeat] IM push failed: ${e.message}`));
+            let userIds: string[] = [];
+            if (match?.[1]) {
+              userIds = [`user-${match[1]}`];
+            } else {
+              // agentId 为 default 或无法解析 — 查 DB 找有心跳任务的所有用户
+              try {
+                const hbTasks = await prismaClient!.scheduledTask.findMany({
+                  where: { taskType: 'heartbeat', enabled: true },
+                  select: { userId: true },
+                });
+                userIds = [...new Set(hbTasks.map((t: any) => t.userId))];
+              } catch { /* fallback: 不推送 */ }
+            }
+            const alertText = `🚨 心跳巡检告警\n时间: ${new Date().toLocaleString('zh-CN')}\n\n${content.slice(0, 2000)}`;
+            for (const uid of userIds) {
+              heartbeatImService.sendToUser(uid, alertText).then(sent => {
+                if (sent > 0) console.log(`[heartbeat] Alert pushed to ${uid} via IM`);
+              }).catch((e: any) => console.warn(`[heartbeat] IM push to ${uid} failed: ${e.message}`));
             }
           }
         });
