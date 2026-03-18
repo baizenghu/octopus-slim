@@ -86,15 +86,24 @@ export class EngineAdapter extends EventEmitter {
 
     // 订阅心跳事件，转发给 EventEmitter
     try {
-      const { onHeartbeatEvent } = await opaqueImport(`${ENGINE_ROOT}infra/heartbeat-visibility.js`);
-      if (typeof onHeartbeatEvent === 'function') {
-        this.unsubHeartbeatEvents = onHeartbeatEvent((evt: any) => {
+      // heartbeat-visibility 导出 onHeartbeatEvent（也可能在 heartbeat-events 中）
+      let onHbEvent: ((cb: (evt: any) => void) => () => void) | undefined;
+      for (const mod of ['infra/heartbeat-visibility.js', 'infra/heartbeat-events.js']) {
+        try {
+          const m = await opaqueImport(`${ENGINE_ROOT}${mod}`);
+          if (typeof m.onHeartbeatEvent === 'function') { onHbEvent = m.onHeartbeatEvent; break; }
+        } catch { /* try next */ }
+      }
+      if (onHbEvent) {
+        this.unsubHeartbeatEvents = onHbEvent((evt: any) => {
           this.emit('heartbeat', evt);
         });
         console.log('[engine] Heartbeat event listener registered');
+      } else {
+        console.warn('[engine] onHeartbeatEvent not found in engine modules');
       }
-    } catch {
-      console.warn('[engine] Heartbeat event listener not available');
+    } catch (e: any) {
+      console.warn('[engine] Heartbeat event listener failed:', e.message);
     }
 
     this.initialized = true;
