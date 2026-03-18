@@ -53,6 +53,7 @@ export class EngineAdapter extends EventEmitter {
   private configBatcher: ConfigBatcher;
   private engineServer: { close: (opts?: Record<string, unknown>) => Promise<void> } | null = null;
   private unsubAgentEvents: (() => void) | null = null;
+  private unsubHeartbeatEvents: (() => void) | null = null;
 
   /** 由 callAgent 发起的 runId 集合，用于区分心跳等非 callAgent 触发的事件 */
   readonly trackedRunIds = new Set<string>();
@@ -83,6 +84,19 @@ export class EngineAdapter extends EventEmitter {
       this.emit('_raw_event', evt);
     });
 
+    // 订阅心跳事件，转发给 EventEmitter
+    try {
+      const { onHeartbeatEvent } = await opaqueImport(`${ENGINE_ROOT}infra/heartbeat-visibility.js`);
+      if (typeof onHeartbeatEvent === 'function') {
+        this.unsubHeartbeatEvents = onHeartbeatEvent((evt: any) => {
+          this.emit('heartbeat', evt);
+        });
+        console.log('[engine] Heartbeat event listener registered');
+      }
+    } catch {
+      console.warn('[engine] Heartbeat event listener not available');
+    }
+
     this.initialized = true;
     console.log(`[engine] EngineAdapter initialized (single-process, port=${port})`);
   }
@@ -91,6 +105,10 @@ export class EngineAdapter extends EventEmitter {
     if (this.unsubAgentEvents) {
       this.unsubAgentEvents();
       this.unsubAgentEvents = null;
+    }
+    if (this.unsubHeartbeatEvents) {
+      this.unsubHeartbeatEvents();
+      this.unsubHeartbeatEvents = null;
     }
     if (this.engineServer) {
       await this.engineServer.close({ reason: 'shutdown' });

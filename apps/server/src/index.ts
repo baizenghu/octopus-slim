@@ -255,6 +255,21 @@ async function main() {
         });
         await imService.start();
 
+        // 监听引擎心跳事件 — 异常时自动推送 IM 告警
+        const heartbeatImService = imService;
+        bridge.on('heartbeat', (evt: any) => {
+          console.log(`[heartbeat] event: status=${evt.status}, reason=${evt.reason || 'n/a'}, agent=${evt.agentId || 'default'}`);
+          if (evt.status === 'completed' && evt.reply && !evt.reply.includes('HEARTBEAT_OK')) {
+            const match = evt.agentId?.match(/^ent_([^_]+(?:_[^_]+)*?)_[^_]+$/);
+            const userId = match?.[1] ? `user-${match[1]}` : undefined;
+            if (userId) {
+              const alertText = `🚨 心跳巡检告警\nAgent: ${evt.agentId}\n时间: ${new Date().toLocaleString('zh-CN')}\n\n${String(evt.reply).slice(0, 2000)}`;
+              heartbeatImService.sendToUser(userId, alertText).then(sent => {
+                if (sent > 0) console.log(`[heartbeat] Alert pushed to ${userId} via IM`);
+              }).catch((e: any) => console.warn(`[heartbeat] IM push failed: ${e.message}`));
+            }
+          }
+        });
       }
     } catch (err: any) {
       console.warn('   Native Gateway: connection failed -', err.message);
