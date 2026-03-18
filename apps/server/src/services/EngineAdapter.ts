@@ -96,6 +96,7 @@ export class EngineAdapter extends EventEmitter {
       }
       if (onHbEvent) {
         this.unsubHeartbeatEvents = onHbEvent((evt: any) => {
+          console.log('[engine] heartbeat event received:', JSON.stringify(evt).slice(0, 500));
           this.emit('heartbeat', evt);
         });
         console.log('[engine] Heartbeat event listener registered');
