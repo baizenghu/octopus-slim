@@ -256,16 +256,24 @@ async function main() {
         await imService.start();
 
         // 监听引擎心跳事件 — 异常时自动推送 IM 告警
+        // 事件字段：status(completed/skipped), reason(target-none等), preview(回复摘要), agentId, durationMs
         const heartbeatImService = imService;
         bridge.on('heartbeat', (evt: any) => {
-          console.log(`[heartbeat] event: status=${evt.status}, reason=${evt.reason || 'n/a'}, agent=${evt.agentId || 'default'}`);
-          if (evt.status === 'completed' && evt.reply && !evt.reply.includes('HEARTBEAT_OK')) {
-            const match = evt.agentId?.match(/^ent_([^_]+(?:_[^_]+)*?)_[^_]+$/);
+          const content = evt.preview || evt.reply || '';
+          const isAlert = content && !content.includes('HEARTBEAT_OK');
+          console.log(`[heartbeat] event: status=${evt.status}, reason=${evt.reason || 'n/a'}, alert=${isAlert}, agent=${evt.agentId || 'default'}`);
+
+          // 推送条件：有内容且不含 HEARTBEAT_OK（无论 status 是 completed 还是 skipped/target-none）
+          if (isAlert) {
+            // 从 agentId 提取 userId（ent_{userId}_{agentName}）
+            // 如果是 main agent 或无法解析，尝试向所有管理员推送
+            const match = evt.agentId?.match(/^ent_(.+?)_[^_]+$/);
             const userId = match?.[1] ? `user-${match[1]}` : undefined;
             if (userId) {
-              const alertText = `🚨 心跳巡检告警\nAgent: ${evt.agentId}\n时间: ${new Date().toLocaleString('zh-CN')}\n\n${String(evt.reply).slice(0, 2000)}`;
+              const alertText = `🚨 心跳巡检告警\nAgent: ${evt.agentId}\n时间: ${new Date().toLocaleString('zh-CN')}\n\n${content.slice(0, 2000)}`;
               heartbeatImService.sendToUser(userId, alertText).then(sent => {
                 if (sent > 0) console.log(`[heartbeat] Alert pushed to ${userId} via IM`);
+                else console.log(`[heartbeat] No IM binding for ${userId}, alert not sent`);
               }).catch((e: any) => console.warn(`[heartbeat] IM push failed: ${e.message}`));
             }
           }
