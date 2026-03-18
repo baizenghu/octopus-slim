@@ -493,34 +493,47 @@ export function createSchedulerRouter(
         const sessionKey = EngineAdapter.userSessionKey(user.id, agent.name, heartbeatSessionId);
         const content = taskCfg?.content || '';
         const prompt = buildHeartbeatRunPrompt(content);
-        let cleanupTriggered = false;
         let heartbeatReply = '';
         await bridge.callAgent({
           message: prompt,
           agentId: nativeAgentId,
           sessionKey,
         }, (event) => {
-          // 收集 agent 回复文本
-          if (event.type === 'text_delta') {
-            heartbeatReply = event.content || heartbeatReply;
+          // 收集 agent 回复文本（累积全量）
+          if (event.type === 'text_delta' && event.content) {
+            heartbeatReply = event.content;
           }
-          if (cleanupTriggered) return;
-          if (event.type !== 'done' && event.type !== 'error') return;
-          cleanupTriggered = true;
-          // 心跳结果推送：不含 HEARTBEAT_OK → 有异常，自动推 IM
-          if (imService && heartbeatReply && !heartbeatReply.includes('HEARTBEAT_OK')) {
-            const alertText = `🚨 心跳巡检告警\nAgent: ${agent.name}\n时间: ${new Date().toLocaleString('zh-CN')}\n\n${heartbeatReply.slice(0, 2000)}`;
-            imService.sendToUser(user.id, alertText).then(sent => {
-              if (sent > 0) console.log(`[scheduler] Heartbeat alert sent to ${user.id} via IM`);
-            }).catch(e => console.warn(`[scheduler] IM send failed: ${e.message}`));
-          }
-          bridge.sessionsDelete(sessionKey).catch((e: any) => {
-            console.warn(`[scheduler] Failed to cleanup heartbeat session ${sessionKey}: ${e.message}`);
-          });
         });
-        // 更新 lastRunAt + 执行结果
+
+        // callAgent resolve 后，从 session history 获取完整回复（更可靠）
+        if (!heartbeatReply) {
+          try {
+            const history = await bridge.chatHistory(sessionKey) as any;
+            const msgs = (history?.messages || history?.history || []) as any[];
+            const lastAssistant = [...msgs].reverse().find((m: any) => m.role === 'assistant');
+            if (lastAssistant) {
+              heartbeatReply = Array.isArray(lastAssistant.content)
+                ? lastAssistant.content.map((c: any) => c.text || c.content || '').join('')
+                : String(lastAssistant.content || '');
+            }
+          } catch { /* history 读取失败不阻塞 */ }
+        }
+
         const isOk = heartbeatReply.includes('HEARTBEAT_OK');
         const resultSummary = isOk ? 'HEARTBEAT_OK' : heartbeatReply.slice(0, 2000);
+
+        // 心跳结果推送：不含 HEARTBEAT_OK → 有异常，自动推 IM
+        if (imService && resultSummary && !isOk) {
+          const alertText = `🚨 心跳巡检告警\nAgent: ${agent.name}\n时间: ${new Date().toLocaleString('zh-CN')}\n\n${resultSummary}`;
+          imService.sendToUser(user.id, alertText).then(sent => {
+            if (sent > 0) console.log(`[scheduler] Heartbeat alert sent to ${user.id} via IM`);
+          }).catch(e => console.warn(`[scheduler] IM send failed: ${e.message}`));
+        }
+
+        // 清理隔离 session
+        bridge.sessionsDelete(sessionKey).catch((e: any) => {
+          console.warn(`[scheduler] Failed to cleanup heartbeat session ${sessionKey}: ${e.message}`);
+        });
         await prisma.scheduledTask.update({
           where: { id: dbTask.id },
           data: {
