@@ -298,12 +298,18 @@ Enterprise Gateway 从独立 DeepSeek 调用者重构为原生代理层：
 - ~~`memory-lancedb-pro` 的 `scopes` 按用户隔离~~ ✅ 阶段 3 已实现 agentAccess 显式注册
 
 ### 待做：功能完善
-- **个人 Skill 依赖自动安装**：当前 Docker 镜像缺少的包会导致 ImportError。方案：上传时 `pip install --target {skillDir}/packages`，执行时 `-e PYTHONPATH=/skill/packages`。改动：`skills.ts`（上传安装）+ `index.ts`（执行设 PYTHONPATH）
-- **企业 Skill per-skill 依赖隔离**（可选）：同上方案，替代当前共享 `.venv`
-- skills.entries 双写同步（引擎不支持该配置路径，需确认）
-- Plugin 配置 UI（需从零创建完整栈）
-- SystemConfigPage 补齐（stash 中有 WIP）
-- ChatPage.tsx 前端拆分（1400 行）
-- 提醒轮询优化（Cron delivery.mode: announce）
-- ensureNativeAgent/syncToNative 完全合并
+
+**P0 — 系统运维入口**
+- **SystemConfigPage 系统配置管理页面**：管理员通过前端维护 octopus.json 配置（模型、sandbox、插件、技能等），替代手动编辑文件。stash 中有 WIP（`git stash pop` 恢复后评估）。涉及：system-config.ts API + SystemConfigPage.tsx + SettingsPage 管理员菜单入口
+- **Plugin 配置 UI**：无前端/API/DB 模型，需从零创建。包括 memory-lancedb-pro 参数调整、enterprise-mcp 配置管理、插件启用/禁用
+
+**P1 — 功能缺失**
+- **个人 Skill 依赖自动安装**：Docker 镜像缺少的包导致 ImportError。方案：上传时 `pip install --target {skillDir}/packages`，执行时 `-e PYTHONPATH=/skill/packages`。改动：`skills.ts` + `index.ts`
+- **skills.entries 双写同步**：引擎不支持 `skills.entries` 配置路径，DB skill.enabled 与引擎不联动，需先确认引擎行为
+
+**P2 — 代码优化**
+- **ChatPage.tsx 前端拆分**（~1400 行）：职责过重，可拆为对话组件 + 会话管理组件 + 委派组件
+- **ensureNativeAgent/syncToNative 完全合并**：两套 agent 创建逻辑共存，功能正常但代码冗余
+- **提醒轮询优化**：当前每 30s 轮询 `/reminders/due`，可改用引擎 Cron delivery.mode: announce 主动推送
+- **企业 Skill per-skill 依赖隔离**（可选）：替代当前共享 `.venv`，避免依赖冲突
 - 详见 `docs/reports/2026-02-23-system-audit.md`
