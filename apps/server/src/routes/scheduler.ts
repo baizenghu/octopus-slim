@@ -518,9 +518,32 @@ export function createSchedulerRouter(
             console.warn(`[scheduler] Failed to cleanup heartbeat session ${sessionKey}: ${e.message}`);
           });
         });
-        // 更新 lastRunAt
-        await prisma.scheduledTask.update({ where: { id: dbTask.id }, data: { lastRunAt: new Date() } }).catch(() => {});
-        res.json({ ok: true, message: '心跳已手动触发', alert: !heartbeatReply.includes('HEARTBEAT_OK') });
+        // 更新 lastRunAt + 执行结果
+        const isOk = heartbeatReply.includes('HEARTBEAT_OK');
+        const resultSummary = isOk ? 'HEARTBEAT_OK' : heartbeatReply.slice(0, 2000);
+        await prisma.scheduledTask.update({
+          where: { id: dbTask.id },
+          data: {
+            lastRunAt: new Date(),
+            taskConfig: { ...taskCfg, lastResult: resultSummary, lastResultAt: new Date().toISOString() },
+          },
+        }).catch(() => {});
+
+        // 审计日志：记录心跳执行结果
+        try {
+          await prisma.auditLog.create({
+            data: {
+              userId: user.id,
+              action: isOk ? 'scheduler:heartbeat:ok' : 'scheduler:heartbeat:alert',
+              resource: `scheduler:${dbTask.id}`,
+              details: { agentName: agent.name, result: resultSummary.slice(0, 500) },
+              success: true,
+              durationMs: 0,
+            },
+          });
+        } catch { /* 审计写入失败不阻塞 */ }
+
+        res.json({ ok: true, message: '心跳已手动触发', alert: !isOk, result: resultSummary });
         return;
       }
 
