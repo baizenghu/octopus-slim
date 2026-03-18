@@ -617,15 +617,16 @@ export default function ChatPage() {
         const pollInterval = 5000;
         const maxPolls = 36; // 最多轮询 3 分钟
         let polls = 0;
-        let lastCount = -1;   // 上一次 status 返回的 messageCount
-        let stableCount = 0;  // 连续无变化次数
-        const delegationSid = sid; // 固定委派 session ID
+        let lastCount = -1;     // 上一次 status 返回的 messageCount
+        let baselineCount = -1; // 委派开始时的 messageCount（用于判断是否有新内容）
+        let stableCount = 0;    // 连续无变化次数
+        let hasGrown = false;   // messageCount 是否比 baseline 增长过
+        const delegationSid = sid;
 
         setIsDelegating(true);
         console.log('[chat] delegation poll: started, sid:', delegationSid);
         const pollTimer = setInterval(async () => {
           polls++;
-          // 用户已切换到其他会话，停止轮询
           if (currentSessionRef.current !== delegationSid) {
             console.log('[chat] session changed, stopping delegation poll');
             clearInterval(pollTimer);
@@ -634,22 +635,24 @@ export default function ChatPage() {
             return;
           }
           try {
-            // 轻量检查：只拿 messageCount + completed 状态
             const status = await adminApi.getSessionStatus(delegationSid, currentAgentId);
 
+            // 首次轮询记录 baseline
+            if (baselineCount === -1) baselineCount = status.messageCount;
+
             if (status.messageCount === lastCount) {
-              // 消息数未变
               stableCount++;
-              if (stableCount >= 2 && lastCount > 0) {
-                // 连续 2 次无变化且已有消息 → 结果已稳定，停止轮询
-                console.log('[chat] delegation result stabilized, done.');
+              // 只有 messageCount 真正增长过（subagent 返回了内容），才判定稳定停止
+              if (stableCount >= 2 && hasGrown) {
+                console.log('[chat] delegation result stabilized after growth, done.');
                 clearInterval(pollTimer);
                 delegationPollRef.current = null;
                 setIsDelegating(false);
                 return;
               }
             } else {
-              // messageCount 有变化 → 拉全量历史更新 UI
+              // messageCount 有变化 → 拉全量历史
+              if (status.messageCount > baselineCount) hasGrown = true;
               lastCount = status.messageCount;
               stableCount = 0;
               const histRes = await adminApi.getChatHistory(delegationSid, currentAgentId);
@@ -660,11 +663,11 @@ export default function ChatPage() {
                 ts: m.ts,
               }));
               setMessages(allMsgs);
-              console.log(`[chat] delegation poll: messageCount=${status.messageCount}, updating`);
+              console.log(`[chat] delegation poll: messageCount=${status.messageCount}, baseline=${baselineCount}, hasGrown=${hasGrown}`);
             }
 
-            // 已完成且稳定 → 提前停止
-            if (status.completed && stableCount >= 1) {
+            // 已完成 + 已增长 + 稳定 → 停止
+            if (status.completed && hasGrown && stableCount >= 1) {
               console.log('[chat] delegation completed by status check.');
               clearInterval(pollTimer);
               delegationPollRef.current = null;

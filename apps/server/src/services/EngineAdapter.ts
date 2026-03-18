@@ -229,6 +229,10 @@ export class EngineAdapter extends EventEmitter {
     };
 
     const unsubscribe = onAgentEvent((evt: any) => {
+      // 调试：记录 tool 事件
+      if (evt.stream === 'tool') {
+        console.log(`[engine] tool event: runId=${evt.runId}, tracked=${this.trackedRunIds.has(evt.runId)}, name=${evt.data?.toolName || evt.data?.name}`);
+      }
       // 只处理本次运行的事件
       if (!this.trackedRunIds.has(evt.runId)) return;
       const mapped = this.mapEngineEvent(evt);

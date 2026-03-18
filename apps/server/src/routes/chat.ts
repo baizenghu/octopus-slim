@@ -510,7 +510,10 @@ export function createChatRouter(
               break;
             }
             case 'tool_call':
-              if (event.toolName?.includes('sessions_spawn')) hasDelegation = true;
+              if (event.toolName?.includes('sessions_spawn')) {
+                hasDelegation = true;
+                console.log(`[chat] sessions_spawn detected, hasDelegation=true`);
+              }
               res.write(`data: ${JSON.stringify({ content: '', toolCall: true, tools: [event.toolName], done: false })}\n\n`);
               break;
             case 'thinking': {
@@ -554,6 +557,7 @@ export function createChatRouter(
                 });
               }
               // 返回完整 sessionKey（而非短 sid），前端轮询和后续请求需要完整 key
+              console.log(`[chat] done event: hasDelegation=${hasDelegation}, sessionKey=${sessionKey}`);
               res.write(`data: ${JSON.stringify({ content: '', done: true, sessionId: sessionKey, ...(hasDelegation ? { delegated: true } : {}) })}\n\n`);
               clearInterval(heartbeat);
               res.end();
