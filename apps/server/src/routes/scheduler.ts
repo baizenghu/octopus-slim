@@ -105,6 +105,7 @@ export function createSchedulerRouter(
   authService: AuthService,
   prisma: any,
   bridge?: BridgeType,
+  imService?: { sendToUser(userId: string, text: string): Promise<number> },
 ): Router {
   const router = Router();
   const authMiddleware = createAuthMiddleware(authService, prisma);
@@ -493,19 +494,33 @@ export function createSchedulerRouter(
         const content = taskCfg?.content || '';
         const prompt = buildHeartbeatRunPrompt(content);
         let cleanupTriggered = false;
+        let heartbeatReply = '';
         await bridge.callAgent({
           message: prompt,
           agentId: nativeAgentId,
           sessionKey,
         }, (event) => {
+          // 收集 agent 回复文本
+          if (event.type === 'text_delta') {
+            heartbeatReply = event.content || heartbeatReply;
+          }
           if (cleanupTriggered) return;
           if (event.type !== 'done' && event.type !== 'error') return;
           cleanupTriggered = true;
+          // 心跳结果推送：不含 HEARTBEAT_OK → 有异常，自动推 IM
+          if (imService && heartbeatReply && !heartbeatReply.includes('HEARTBEAT_OK')) {
+            const alertText = `🚨 心跳巡检告警\nAgent: ${agent.name}\n时间: ${new Date().toLocaleString('zh-CN')}\n\n${heartbeatReply.slice(0, 2000)}`;
+            imService.sendToUser(user.id, alertText).then(sent => {
+              if (sent > 0) console.log(`[scheduler] Heartbeat alert sent to ${user.id} via IM`);
+            }).catch(e => console.warn(`[scheduler] IM send failed: ${e.message}`));
+          }
           bridge.sessionsDelete(sessionKey).catch((e: any) => {
             console.warn(`[scheduler] Failed to cleanup heartbeat session ${sessionKey}: ${e.message}`);
           });
         });
-        res.json({ ok: true, message: '心跳已手动触发' });
+        // 更新 lastRunAt
+        await prisma.scheduledTask.update({ where: { id: dbTask.id }, data: { lastRunAt: new Date() } }).catch(() => {});
+        res.json({ ok: true, message: '心跳已手动触发', alert: !heartbeatReply.includes('HEARTBEAT_OK') });
         return;
       }
 

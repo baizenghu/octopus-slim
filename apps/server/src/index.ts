@@ -397,7 +397,7 @@ async function main() {
   }
   app.use('/api/skills', quotaMiddleware, createSkillsRouter(authService, prismaClient!, config.workspace.dataRoot));
   app.use('/api/agents', createAgentsRouter(authService, prismaClient!, workspaceManager, bridge, config.workspace.dataRoot));
-  app.use('/api/scheduler', createSchedulerRouter(authService, prismaClient!, bridge));
+  app.use('/api/scheduler', createSchedulerRouter(authService, prismaClient!, bridge, imService));
   app.use('/api/quotas', createQuotasRouter(authService, prismaClient, quotaManager));
   app.use('/api/user/db-connections', createDbConnectionsRouter(authService, prismaClient));
   if (imService) {
