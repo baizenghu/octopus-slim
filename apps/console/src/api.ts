@@ -711,7 +711,7 @@ class AdminApi {
   }
 
   async runScheduledTask(id: string) {
-    return this.request<{ task: ScheduledTaskInfo; message: string }>(`/scheduler/tasks/${id}/run`, {
+    return this.request<{ task: ScheduledTaskInfo; message: string; alert?: boolean; result?: string }>(`/scheduler/tasks/${id}/run`, {
       method: 'POST',
     });
   }

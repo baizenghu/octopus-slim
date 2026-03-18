@@ -55,7 +55,7 @@ function formatEvery(every: string): string {
 
 
 export default function SchedulerPage() {
-  const navigate = useNavigate();
+  // const navigate = useNavigate(); // removed: heartbeat run no longer redirects
   const [tasks, setTasks] = useState<ScheduledTaskInfo[]>([]);
   const [loading, setLoading] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
@@ -178,8 +178,8 @@ export default function SchedulerPage() {
   const handleRun = async (id: string) => {
     try {
       const res = await adminApi.runScheduledTask(id);
-      toast.success(res.message || '巡检已触发');
-      setTimeout(() => navigate('/chat'), 500);
+      toast.success(res.alert ? '⚠️ 巡检发现异常，已推送告警' : '✅ 巡检完成，一切正常');
+      loadData(); // 刷新列表（更新 lastRunAt）
     } catch (err: any) {
       toast.error(err.message || '执行失败');
     }
