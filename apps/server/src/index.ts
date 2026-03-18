@@ -272,13 +272,19 @@ async function main() {
               userIds = [`user-${match[1]}`];
             } else {
               // agentId 为 default 或无法解析 — 查 DB 找有心跳任务的所有用户
-              try {
-                const hbTasks = await prismaClient!.scheduledTask.findMany({
-                  where: { taskType: 'heartbeat', enabled: true },
-                  select: { userId: true },
-                });
-                userIds = [...new Set(hbTasks.map((t: any) => t.userId))];
-              } catch { /* fallback: 不推送 */ }
+              prismaClient!.scheduledTask.findMany({
+                where: { taskType: 'heartbeat', enabled: true },
+                select: { userId: true },
+              }).then((hbTasks: any[]) => {
+                const uids = [...new Set(hbTasks.map((t: any) => t.userId))];
+                const alert = `🚨 心跳巡检告警\n时间: ${new Date().toLocaleString('zh-CN')}\n\n${content.slice(0, 2000)}`;
+                for (const uid of uids) {
+                  heartbeatImService.sendToUser(uid, alert).then(sent => {
+                    if (sent > 0) console.log(`[heartbeat] Alert pushed to ${uid} via IM`);
+                  }).catch((e2: any) => console.warn(`[heartbeat] IM push to ${uid} failed: ${e2.message}`));
+                }
+              }).catch(() => { /* DB 查询失败不阻塞 */ });
+              return; // 异步处理，提前返回
             }
             const alertText = `🚨 心跳巡检告警\n时间: ${new Date().toLocaleString('zh-CN')}\n\n${content.slice(0, 2000)}`;
             for (const uid of userIds) {
