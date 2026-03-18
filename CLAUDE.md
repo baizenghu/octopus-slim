@@ -225,6 +225,10 @@ Start all: `./start.sh start` | Stop all: `./start.sh stop`
 | 2026-03-16 | 引擎 tool 事件字段名是 `name` 不是 `toolName`，导致 `sessions_spawn` 检测失败，前端 delegation poll 不启动，子 agent 结果不自动显示 | `EngineAdapter.ts` 中 `data.toolName` 改为 `data.toolName \|\| data.name` |
 | 2026-03-16 | 删除用户时 workspace 清理失败（sandbox 容器创建的 root 文件，宿主机 uid 无权删除） | `deleteWorkspace` 失败时自动用 Docker `--user root` 清理 |
 | 2026-03-17 | `configApplyFull` 所有调用点都涉及 `agents.list` 数组修改 | 无法用 `configApply`（deep merge）替换（对数组是替换语义），保持 read-modify-write 模式；阶段 2 已通过 `AgentConfigSync` 合并调用次数（6→2） |
+| 2026-03-18 | `openclaw system heartbeat last` CLI 查的是个人版 systemd gateway（端口 18789），不是企业版内嵌引擎（端口 19791） | 企业版心跳状态只能通过 gateway.log 日志确认，CLI 工具不可靠 |
+| 2026-03-18 | 引擎心跳事件字段是 `preview`（非 `reply`），`agentId` 是引擎内部 ID `"default"`（非企业 ID `ent_xxx`） | 推送告警时需从 DB scheduledTask 表查找心跳任务 owner 来确定 userId |
+| 2026-03-18 | 引擎心跳 target 默认 `"none"`，导致 status 为 `"skipped"` + reason `"target-none"`，但 agent 仍然执行了检查 | 企业层按 `preview` 内容是否含 `HEARTBEAT_OK` 判断，不依赖 status 字段 |
+| 2026-03-18 | `writeHeartbeatToAgent` 通过 `agentFilesSet` RPC 写入企业 agent workspace，引擎心跳也从该 workspace 读 HEARTBEAT.md | 路径一致（`resolveAgentWorkspaceDir` 读 `agents.list[].workspace`），无需额外复制 |
 
 ---
 
@@ -291,5 +295,15 @@ Enterprise Gateway 从独立 DeepSeek 调用者重构为原生代理层：
 ### 待做：系统加固
 - ~~启用 sandbox~~ ✅ 已改用 Docker sandbox（`tools.exec.host = "sandbox"`）
 - ~~提醒机制换 native `cron.add()` RPC~~ ✅ 已完成
-- `memory-lancedb-pro` 的 `scopes` 按用户隔离（agentAccess 已有配置，需验证生效）
+- ~~`memory-lancedb-pro` 的 `scopes` 按用户隔离~~ ✅ 阶段 3 已实现 agentAccess 显式注册
+
+### 待做：功能完善
+- **个人 Skill 依赖自动安装**：当前 Docker 镜像缺少的包会导致 ImportError。方案：上传时 `pip install --target {skillDir}/packages`，执行时 `-e PYTHONPATH=/skill/packages`。改动：`skills.ts`（上传安装）+ `index.ts`（执行设 PYTHONPATH）
+- **企业 Skill per-skill 依赖隔离**（可选）：同上方案，替代当前共享 `.venv`
+- skills.entries 双写同步（引擎不支持该配置路径，需确认）
+- Plugin 配置 UI（需从零创建完整栈）
+- SystemConfigPage 补齐（stash 中有 WIP）
+- ChatPage.tsx 前端拆分（1400 行）
+- 提醒轮询优化（Cron delivery.mode: announce）
+- ensureNativeAgent/syncToNative 完全合并
 - 详见 `docs/reports/2026-02-23-system-audit.md`
