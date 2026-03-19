@@ -692,7 +692,6 @@ export default function enterpriseMcpPlugin(api: any) {
           const argsArray = params.args ? parseSkillArgs(params.args) : [];
 
           // 7. 检测依赖：容错 — 执行时发现 deps/*.whl 未安装则补装
-          const packagesDir = path.join(skillPath, 'packages');
           const depsDir = path.join(skillPath, 'deps');
           if (fs.existsSync(depsDir) && skill.scope === 'personal') {
             const whlFiles = fs.readdirSync(depsDir).filter(f => f.endsWith('.whl'));
@@ -711,15 +710,7 @@ export default function enterpriseMcpPlugin(api: any) {
               }
             }
           }
-          const hasPackages = fs.existsSync(packagesDir);
           const extraEnv: Record<string, string> = {};
-          // per-skill packages/ 目录（向后兼容已有 Skill）
-          if (hasPackages) {
-            const pkgPath = skill.scope === 'enterprise'
-              ? path.resolve(skillPath, 'packages')
-              : `/workspace/skills/${skill.id}/packages`;
-            extraEnv['PYTHONPATH'] = pkgPath;
-          }
           // 共享 venv site-packages（Docker 执行时通过 /opt/venv-lib 挂载）
           if (skill.scope === 'personal') {
             const venvLib = path.resolve(_dataRoot, 'skills', '.venv', 'lib');

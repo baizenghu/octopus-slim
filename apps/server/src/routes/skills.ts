@@ -109,9 +109,9 @@ export function createSkillsRouter(
         return { depsType: 'python-deps-invalid', depsInfo: 'deps/ 目录仅支持 .whl 格式，请使用 pip download 下载 wheel 包' };
       }
     }
-    // 向后兼容：packages/ 目录
+    // packages/ 不再支持，引导用户改用 deps/*.whl
     if (fs.existsSync(path.join(skillDir, 'packages'))) {
-      return { depsType: 'python-packages', depsInfo: '已检测到 packages/ 目录（旧格式），执行时自动设置 PYTHONPATH' };
+      return { depsType: 'python-deps-invalid', depsInfo: 'packages/ 格式已废弃，请改用 deps/*.whl。下载命令: pip download -r requirements.txt --platform manylinux2014_x86_64 --python-version 312 --only-binary=:all: -d deps/' };
     }
     if (hasNodeModules) {
       return { depsType: 'node-modules', depsInfo: '已检测到 node_modules/ 目录，Node.js 依赖就绪' };
