@@ -753,6 +753,32 @@ class AdminApi {
       method: 'DELETE',
     });
   }
+  // ─── System Config (Admin) ───
+
+  async getSystemConfig() {
+    return this.request<{ config: Record<string, any> }>('/admin/config');
+  }
+
+  async updateModelsConfig(data: { providers: Record<string, any>; defaults: { model: { primary: string; fallbacks: string[] } } }) {
+    return this.request<{ ok: boolean }>('/admin/config/models', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updatePluginsConfig(data: { allow: string[]; entries: Record<string, any> }) {
+    return this.request<{ ok: boolean }>('/admin/config/plugins', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateToolsConfig(data: { loopDetection: any; exec: any; fs: any }) {
+    return this.request<{ ok: boolean }>('/admin/config/tools', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
 }
 
 export const adminApi = new AdminApi();

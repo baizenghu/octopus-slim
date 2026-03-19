@@ -47,6 +47,7 @@ import { createSchedulerRouter } from './routes/scheduler';
 import { createQuotasRouter } from './routes/quotas';
 import { createDbConnectionsRouter } from './routes/db-connections';
 import { createImInternalRouter } from './routes/im-internal';
+import { createSystemConfigRouter } from './routes/system-config';
 import { MCPRegistry, MCPExecutor } from '@octopus/mcp';
 import { QuotaManager } from '@octopus/quota';
 import { createQuotaMiddleware } from './middleware/quota';
@@ -430,6 +431,9 @@ async function main() {
   app.use('/api/chat', quotaMiddleware, createSessionsRouter(config, authService, workspaceManager, bridge, prismaClient, auditLogger, undefined, quotaManager));
   app.use('/api/audit', createAuditRouter(authService, auditLogger));
   app.use('/api/admin', createAdminRouter(authService, auditLogger, prismaClient!, workspaceManager, bridge));
+  if (bridge) {
+    app.use('/api/admin/config', createSystemConfigRouter(authService, bridge));
+  }
   app.use('/api/files', quotaMiddleware, createFilesRouter(config, authService, workspaceManager, prismaClient));
   if (prismaClient) {
     app.use('/api/mcp', quotaMiddleware, createMcpRouter(authService, prismaClient, mcpRegistry, mcpExecutor, config.workspace.dataRoot));

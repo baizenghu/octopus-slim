@@ -19,6 +19,7 @@ import {
   Users,
   ShieldCheck,
   Settings,
+  Sliders,
   User,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -38,6 +39,7 @@ import AuditPage from './AuditPage';
 import SystemPage from './SystemPage';
 import PersonalSettingsPage from './PersonalSettingsPage';
 import AgentConfigPage from './AgentConfigPage';
+import SystemConfigPage from './SystemConfigPage';
 import { cn } from '@/lib/utils';
 
 const userMenuItems = [
@@ -55,6 +57,7 @@ const adminMenuItems = [
   { key: 'users', icon: Users, label: '用户管理' },
   { key: 'audit', icon: ShieldCheck, label: '审计日志' },
   { key: 'admin-system', icon: Settings, label: '系统信息' },
+  { key: 'system-config', icon: Sliders, label: '系统配置' },
 ];
 
 const sectionComponents: Record<string, React.ComponentType> = {
@@ -69,6 +72,7 @@ const sectionComponents: Record<string, React.ComponentType> = {
   users: UsersPage,
   audit: AuditPage,
   'admin-system': SystemPage,
+  'system-config': SystemConfigPage,
 };
 
 export default function SettingsPage() {
