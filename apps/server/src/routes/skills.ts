@@ -37,6 +37,7 @@ export function createSkillsRouter(
   authService: AuthService,
   prisma: AppPrismaClient,
   dataRoot: string,
+  bridge?: import('../services/EngineAdapter').EngineAdapter,
 ): Router {
   const router = Router();
   const authMiddleware = createAuthMiddleware(authService, prisma);
@@ -50,6 +51,20 @@ export function createSkillsRouter(
   // 确保企业级目录存在
   if (!fs.existsSync(enterpriseSkillsBase)) {
     fs.mkdirSync(enterpriseSkillsBase, { recursive: true });
+  }
+
+  /**
+   * 将 Skill 启用/禁用状态同步到引擎 skills.entries
+   * 引擎原生支持 skills.entries[skillName].enabled，写入后 agent 立即生效
+   */
+  async function syncSkillEnabledToEngine(skillId: string, enabled: boolean) {
+    if (!bridge) return;
+    try {
+      await bridge.configApply({ skills: { entries: { [skillId]: { enabled } } } });
+      console.log(`[skills] Synced ${skillId} enabled=${enabled} to engine`);
+    } catch (e: any) {
+      console.warn(`[skills] Failed to sync ${skillId} to engine:`, e.message);
+    }
   }
 
   // multer 配置 — 临时存储 zip 文件
@@ -460,6 +475,7 @@ export function createSkillsRouter(
         data: { status: 'approved', enabled: true },
       });
 
+      syncSkillEnabledToEngine(id, true);
       res.json({ message: '技能已审批通过', skill });
     } catch (err) {
       next(err);
@@ -493,6 +509,7 @@ export function createSkillsRouter(
         },
       });
 
+      syncSkillEnabledToEngine(id, false);
       res.json({ message: '技能已拒绝', skill });
     } catch (err) {
       next(err);
@@ -517,6 +534,7 @@ export function createSkillsRouter(
         data: { enabled },
       });
 
+      syncSkillEnabledToEngine(id, enabled);
       res.json({ message: enabled ? '技能已启用' : '技能已禁用', skill });
     } catch (err: any) {
       if (err.code === 'P2025') {

@@ -438,7 +438,7 @@ async function main() {
   if (prismaClient) {
     app.use('/api/mcp', quotaMiddleware, createMcpRouter(authService, prismaClient, mcpRegistry, mcpExecutor, config.workspace.dataRoot));
   }
-  app.use('/api/skills', quotaMiddleware, createSkillsRouter(authService, prismaClient!, config.workspace.dataRoot));
+  app.use('/api/skills', quotaMiddleware, createSkillsRouter(authService, prismaClient!, config.workspace.dataRoot, bridge));
   app.use('/api/agents', createAgentsRouter(authService, prismaClient!, workspaceManager, bridge, config.workspace.dataRoot));
   app.use('/api/scheduler', createSchedulerRouter(authService, prismaClient!, bridge, imService));
   app.use('/api/quotas', createQuotasRouter(authService, prismaClient, quotaManager));
