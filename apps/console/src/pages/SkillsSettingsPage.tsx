@@ -40,10 +40,7 @@ export default function SkillsSettingsPage() {
   const [personalUploadOpen, setPersonalUploadOpen] = useState(false);
   const [personalUploading, setPersonalUploading] = useState(false);
   const personalFileRef = useRef<File | null>(null);
-  const [personalFormName, setPersonalFormName] = useState('');
-  const [personalFormDesc, setPersonalFormDesc] = useState('');
-  const [personalFormCmd, setPersonalFormCmd] = useState('');
-  const [personalFormScript, setPersonalFormScript] = useState('');
+  // 个人技能表单字段已移除，元数据从 SKILL.md 自动读取
 
   // 企业级技能上传（admin）
   const [enterpriseUploadOpen, setEnterpriseUploadOpen] = useState(false);
@@ -164,12 +161,7 @@ export default function SkillsSettingsPage() {
     }
     setPersonalUploading(true);
     try {
-      const result = await adminApi.uploadPersonalSkill(personalFileRef.current, {
-        name: personalFormName || undefined,
-        description: personalFormDesc || undefined,
-        command: personalFormCmd || undefined,
-        scriptPath: personalFormScript || undefined,
-      });
+      const result = await adminApi.uploadPersonalSkill(personalFileRef.current, {});
       toast.success(result.message);
       setPersonalUploadOpen(false);
       personalFileRef.current = null;
@@ -429,7 +421,6 @@ export default function SkillsSettingsPage() {
         <TabsContent value="personal">
           <div className="flex justify-end mb-4">
             <Button onClick={() => {
-              setPersonalFormName(''); setPersonalFormDesc(''); setPersonalFormCmd(''); setPersonalFormScript('');
               personalFileRef.current = null;
               setPersonalUploadOpen(true);
             }}>
@@ -468,19 +459,27 @@ export default function SkillsSettingsPage() {
 
       {/* 个人技能上传 Dialog */}
       <Dialog open={personalUploadOpen} onOpenChange={setPersonalUploadOpen}>
-        <DialogContent className="max-w-[600px]">
+        <DialogContent className="max-w-[500px]">
           <DialogHeader>
             <DialogTitle>上传个人技能包</DialogTitle>
-            <DialogDescription>上传 zip 格式的技能包，扫描通过后自动启用</DialogDescription>
+            <DialogDescription>上传 zip 格式的技能包，元数据从 SKILL.md 自动读取，扫描通过后自动启用</DialogDescription>
           </DialogHeader>
-          {renderUploadForm(
-            'personal',
-            personalFormName, setPersonalFormName,
-            personalFormDesc, setPersonalFormDesc,
-            personalFormCmd, setPersonalFormCmd,
-            personalFormScript, setPersonalFormScript,
-            personalFileRef,
-          )}
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>技能包 (zip) <span className="text-destructive">*</span></Label>
+              <div>
+                <input
+                  type="file"
+                  accept=".zip"
+                  className="text-sm file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border file:border-input file:bg-background file:text-sm file:font-medium hover:file:bg-accent"
+                  onChange={(e) => { personalFileRef.current = e.target.files?.[0] || null; }}
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                zip 包结构：SKILL.md（元数据）+ 入口脚本 + deps/*.whl（Python 离线依赖，可选）
+              </p>
+            </div>
+          </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setPersonalUploadOpen(false)}>取消</Button>
             <Button onClick={handlePersonalUpload} disabled={personalUploading}>
