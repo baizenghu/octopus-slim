@@ -691,32 +691,45 @@ export default function enterpriseMcpPlugin(api: any) {
           // 6. 解析参数
           const argsArray = params.args ? parseSkillArgs(params.args) : [];
 
-          // 7. 检测依赖：如有 requirements.txt 但缺 packages/，执行前自动安装（容错）
+          // 7. 检测依赖：如有 requirements.txt，容错安装到共享 venv（跳过已有包）
           const packagesDir = path.join(skillPath, 'packages');
           const requirementsPath = path.join(skillPath, 'requirements.txt');
-          if (!fs.existsSync(packagesDir) && fs.existsSync(requirementsPath) && skill.scope === 'personal') {
-            console.log(`[enterprise-mcp][run_skill] Auto-installing deps for ${skillName}...`);
+          if (fs.existsSync(requirementsPath) && skill.scope === 'personal') {
             try {
-              fs.mkdirSync(packagesDir, { recursive: true });
-              const { execSync } = await import('child_process');
               const venvPip = path.resolve(_dataRoot, 'skills', '.venv', 'bin', 'pip');
-              const pipCmd = fs.existsSync(venvPip) ? venvPip : 'pip';
-              execSync(`${pipCmd} install --target "${packagesDir}" -r "${requirementsPath}" --quiet --disable-pip-version-check`, {
-                timeout: 300000,
-                stdio: 'pipe',
-              });
-              console.log(`[enterprise-mcp][run_skill] Deps installed for ${skillName}`);
+              if (fs.existsSync(venvPip)) {
+                const { execSync } = await import('child_process');
+                execSync(`${venvPip} install -r "${requirementsPath}" --quiet --disable-pip-version-check`, {
+                  timeout: 300000,
+                  stdio: 'pipe',
+                });
+              }
             } catch (e: any) {
-              console.warn(`[enterprise-mcp][run_skill] Auto-install failed: ${e.message}`);
+              console.warn(`[enterprise-mcp][run_skill] Shared venv install failed: ${e.message}`);
             }
           }
           const hasPackages = fs.existsSync(packagesDir);
           const extraEnv: Record<string, string> = {};
+          // per-skill packages/ 目录（向后兼容已有 Skill）
           if (hasPackages) {
             const pkgPath = skill.scope === 'enterprise'
               ? path.resolve(skillPath, 'packages')
               : `/workspace/skills/${skill.id}/packages`;
             extraEnv['PYTHONPATH'] = pkgPath;
+          }
+          // 共享 venv site-packages（Docker 执行时通过 /opt/venv-lib 挂载）
+          if (skill.scope === 'personal') {
+            const venvLib = path.resolve(_dataRoot, 'skills', '.venv', 'lib');
+            if (fs.existsSync(venvLib)) {
+              // 动态获取 python 版本目录名（如 python3.12）
+              const pyDirs = fs.readdirSync(venvLib).filter(d => d.startsWith('python'));
+              if (pyDirs.length > 0) {
+                const venvSitePackages = `/opt/venv-lib/${pyDirs[0]}/site-packages`;
+                extraEnv['PYTHONPATH'] = extraEnv['PYTHONPATH']
+                  ? `${extraEnv['PYTHONPATH']}:${venvSitePackages}`
+                  : venvSitePackages;
+              }
+            }
           }
           // 注入用户数据库连接环境变量（DB_{name}_HOST 等）
           if (userId && prisma) {
@@ -1401,6 +1414,8 @@ function executeSkillInDocker(
     `--network=${sandboxConfig.skill.network}`,
     '-v', `${skillPath}:/skill:ro`,
     '-v', `${userWorkspacePath}:/workspace`,
+    // 挂载共享 venv site-packages，让容器内 python3 可 import 已安装依赖
+    '-v', `${path.resolve(_dataRootGlobal, 'skills', '.venv', 'lib')}:/opt/venv-lib:ro`,
     '-w', '/workspace',
     ...Object.entries(extraEnv).flatMap(([k, v]) => ['-e', `${k}=${v}`]),
     '-e', 'WORKSPACE_PATH=/workspace',
