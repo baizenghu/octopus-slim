@@ -575,6 +575,27 @@ export function createSkillsRouter(
         console.warn(`[skills] scan error for ${skillId}:`, scanErr.message);
       }
 
+      // 个人 Skill：检测到 requirements.txt 时自动安装依赖到 packages/
+      if (deps.depsType === 'python-requirements-only') {
+        console.log(`[skills] Auto-installing Python deps for personal skill ${skillId}...`);
+        try {
+          const reqPath = path.join(skillDir, 'requirements.txt');
+          const packagesPath = path.join(skillDir, 'packages');
+          fs.mkdirSync(packagesPath, { recursive: true });
+          const { execSync } = await import('child_process');
+          execSync(`pip install --target "${packagesPath}" -r "${reqPath}" --quiet --disable-pip-version-check`, {
+            timeout: 300000,
+            stdio: 'pipe',
+          });
+          deps.depsType = 'python-packages';
+          deps.depsInfo = '依赖已在上传时自动安装到 packages/ 目录';
+          console.log(`[skills] Deps installed for ${skillId}`);
+        } catch (installErr: any) {
+          console.warn(`[skills] Auto-install failed for ${skillId}:`, installErr.message);
+          deps.depsInfo = `自动安装失败: ${installErr.stderr?.toString().slice(-200) || installErr.message}`;
+        }
+      }
+
       // 合并依赖信息到 scanReport
       const reportWithDeps = {
         ...(scanReport ? JSON.parse(JSON.stringify(scanReport)) : {}),

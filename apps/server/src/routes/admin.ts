@@ -430,14 +430,18 @@ export function createAdminRouter(
       const sevenDaysAgo = new Date(now.getTime() - 6 * 24 * 60 * 60 * 1000);
       sevenDaysAgo.setHours(0, 0, 0, 0);
       const rawTrend = await prisma.$queryRaw<Array<{ date: string; count: bigint }>>`
-        SELECT DATE(createdAt) as date, COUNT(*) as count
-        FROM AuditLog
-        WHERE createdAt >= ${sevenDaysAgo}
-        GROUP BY DATE(createdAt)
+        SELECT DATE(created_at) as date, COUNT(*) as count
+        FROM audit_logs
+        WHERE created_at >= ${sevenDaysAgo}
+        GROUP BY DATE(created_at)
         ORDER BY date ASC
       `;
       // 补齐缺失的日期（无审计记录的天数 count=0）
-      const trendMap = new Map(rawTrend.map(r => [r.date, Number(r.count)]));
+      // Prisma $queryRaw 的 DATE() 结果可能是 Date 对象或字符串，统一转字符串
+      const trendMap = new Map(rawTrend.map(r => {
+        const dateKey = r.date instanceof Date ? r.date.toISOString().slice(0, 10) : String(r.date);
+        return [dateKey, Number(r.count)];
+      }));
       const dailyTrend: { date: string; count: number }[] = [];
       for (let i = 6; i >= 0; i--) {
         const d = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);

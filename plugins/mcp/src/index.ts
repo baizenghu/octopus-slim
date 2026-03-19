@@ -691,8 +691,23 @@ export default function enterpriseMcpPlugin(api: any) {
           // 6. 解析参数
           const argsArray = params.args ? parseSkillArgs(params.args) : [];
 
-          // 7. 检测 packages/ 目录用于 PYTHONPATH + 注入 DB 环境变量
+          // 7. 检测依赖：如有 requirements.txt 但缺 packages/，执行前自动安装（容错）
           const packagesDir = path.join(skillPath, 'packages');
+          const requirementsPath = path.join(skillPath, 'requirements.txt');
+          if (!fs.existsSync(packagesDir) && fs.existsSync(requirementsPath) && skill.scope === 'personal') {
+            console.log(`[enterprise-mcp][run_skill] Auto-installing deps for ${skillName}...`);
+            try {
+              fs.mkdirSync(packagesDir, { recursive: true });
+              const { execSync } = await import('child_process');
+              execSync(`pip install --target "${packagesDir}" -r "${requirementsPath}" --quiet --disable-pip-version-check`, {
+                timeout: 300000,
+                stdio: 'pipe',
+              });
+              console.log(`[enterprise-mcp][run_skill] Deps installed for ${skillName}`);
+            } catch (e: any) {
+              console.warn(`[enterprise-mcp][run_skill] Auto-install failed: ${e.message}`);
+            }
+          }
           const hasPackages = fs.existsSync(packagesDir);
           const extraEnv: Record<string, string> = {};
           if (hasPackages) {
