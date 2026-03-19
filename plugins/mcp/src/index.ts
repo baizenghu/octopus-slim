@@ -691,21 +691,24 @@ export default function enterpriseMcpPlugin(api: any) {
           // 6. 解析参数
           const argsArray = params.args ? parseSkillArgs(params.args) : [];
 
-          // 7. 检测依赖：如有 requirements.txt，容错安装到共享 venv（跳过已有包）
+          // 7. 检测依赖：容错 — 执行时发现 deps/*.whl 未安装则补装
           const packagesDir = path.join(skillPath, 'packages');
-          const requirementsPath = path.join(skillPath, 'requirements.txt');
-          if (fs.existsSync(requirementsPath) && skill.scope === 'personal') {
-            try {
-              const venvPip = path.resolve(_dataRoot, 'skills', '.venv', 'bin', 'pip');
-              if (fs.existsSync(venvPip)) {
-                const { execSync } = await import('child_process');
-                execSync(`${venvPip} install -r "${requirementsPath}" --quiet --disable-pip-version-check`, {
-                  timeout: 300000,
-                  stdio: 'pipe',
-                });
+          const depsDir = path.join(skillPath, 'deps');
+          if (fs.existsSync(depsDir) && skill.scope === 'personal') {
+            const whlFiles = fs.readdirSync(depsDir).filter(f => f.endsWith('.whl'));
+            if (whlFiles.length > 0) {
+              try {
+                const venvPip = path.resolve(_dataRoot, 'skills', '.venv', 'bin', 'pip');
+                if (fs.existsSync(venvPip)) {
+                  const { execSync } = await import('child_process');
+                  execSync(`${venvPip} install "${depsDir}/"*.whl --quiet --disable-pip-version-check --no-deps`, {
+                    timeout: 120000,
+                    stdio: 'pipe',
+                  });
+                }
+              } catch (e: any) {
+                console.warn(`[enterprise-mcp][run_skill] .whl install failed: ${e.message}`);
               }
-            } catch (e: any) {
-              console.warn(`[enterprise-mcp][run_skill] Shared venv install failed: ${e.message}`);
             }
           }
           const hasPackages = fs.existsSync(packagesDir);

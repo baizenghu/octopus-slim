@@ -91,23 +91,32 @@ export function createSkillsRouter(
    * 检测技能目录中的依赖结构
    * 返回依赖类型和相关信息，存入 scanReport
    */
-  function detectDeps(skillDir: string): { depsType: string; depsInfo: string } {
-    const hasPackages = fs.existsSync(path.join(skillDir, 'packages'));
+  function detectDeps(skillDir: string): { depsType: string; depsInfo: string; whlFiles?: string[] } {
+    const depsDir = path.join(skillDir, 'deps');
     const hasNodeModules = fs.existsSync(path.join(skillDir, 'node_modules'));
-    const hasRequirements = fs.existsSync(path.join(skillDir, 'requirements.txt'));
     const hasPackageJson = fs.existsSync(path.join(skillDir, 'package.json'));
 
-    if (hasPackages) {
-      return { depsType: 'python-packages', depsInfo: '已检测到 packages/ 目录，执行时自动设置 PYTHONPATH' };
+    // 优先检测 deps/*.whl（推荐方式）
+    if (fs.existsSync(depsDir)) {
+      const whlFiles = fs.readdirSync(depsDir).filter(f => f.endsWith('.whl'));
+      if (whlFiles.length > 0) {
+        return { depsType: 'python-whl', depsInfo: `检测到 ${whlFiles.length} 个 .whl 依赖包`, whlFiles };
+      }
+      // deps/ 目录存在但没有 .whl 文件
+      const otherFiles = fs.readdirSync(depsDir);
+      if (otherFiles.length > 0) {
+        return { depsType: 'python-deps-invalid', depsInfo: 'deps/ 目录仅支持 .whl 格式，请使用 pip download 下载 wheel 包' };
+      }
+    }
+    // 向后兼容：packages/ 目录
+    if (fs.existsSync(path.join(skillDir, 'packages'))) {
+      return { depsType: 'python-packages', depsInfo: '已检测到 packages/ 目录（旧格式），执行时自动设置 PYTHONPATH' };
     }
     if (hasNodeModules) {
       return { depsType: 'node-modules', depsInfo: '已检测到 node_modules/ 目录，Node.js 依赖就绪' };
     }
-    if (hasRequirements && !hasPackages) {
-      return { depsType: 'python-requirements-only', depsInfo: '检测到 requirements.txt 但缺少 packages/ 目录，建议运行 pip install -t ./packages/ -r requirements.txt 后重新打包' };
-    }
     if (hasPackageJson && !hasNodeModules) {
-      return { depsType: 'node-package-json-only', depsInfo: '检测到 package.json 但缺少 node_modules/ 目录，建议运行 npm install 后重新打包' };
+      return { depsType: 'node-package-json-only', depsInfo: '检测到 package.json 但缺少 node_modules/，建议 npm install 后重新打包' };
     }
     return { depsType: 'none', depsInfo: '无外部依赖，使用沙箱预装包' };
   }
@@ -575,40 +584,27 @@ export function createSkillsRouter(
         console.warn(`[skills] scan error for ${skillId}:`, scanErr.message);
       }
 
-      // 个人 Skill：将离线 packages/ 或 requirements.txt 依赖合并到共享 venv
-      if (deps.depsType === 'python-packages' || deps.depsType === 'python-requirements-only') {
-        const venvLib = path.resolve(dataRoot, 'skills', '.venv', 'lib');
-        // 动态获取 python 版本目录
-        const pyDirs = fs.existsSync(venvLib) ? fs.readdirSync(venvLib).filter(d => d.startsWith('python')) : [];
-        const sitePackages = pyDirs.length > 0 ? path.join(venvLib, pyDirs[0], 'site-packages') : null;
-
-        if (sitePackages && fs.existsSync(sitePackages)) {
+      // 个人 Skill：将 deps/*.whl 安装到共享 venv
+      if (deps.depsType === 'python-whl') {
+        const venvPip = path.resolve(dataRoot, 'skills', '.venv', 'bin', 'pip');
+        if (fs.existsSync(venvPip)) {
           try {
-            if (deps.depsType === 'python-packages') {
-              // 离线模式：复制 packages/ 内容到共享 venv site-packages
-              console.log(`[skills] Copying offline packages to shared venv for ${skillId}...`);
-              const { execSync } = await import('child_process');
-              const pkgDir = path.join(skillDir, 'packages');
-              execSync(`cp -rn "${pkgDir}/"* "${sitePackages}/"`, { timeout: 60000, stdio: 'pipe' });
-            } else {
-              // 在线模式：pip install（内网可能失败）
-              console.log(`[skills] Installing deps to shared venv for ${skillId}...`);
-              const reqPath = path.join(skillDir, 'requirements.txt');
-              const { execSync } = await import('child_process');
-              const venvPip = path.resolve(dataRoot, 'skills', '.venv', 'bin', 'pip');
-              const pipCmd = fs.existsSync(venvPip) ? venvPip : 'pip';
-              execSync(`${pipCmd} install -r "${reqPath}" --quiet --disable-pip-version-check`, {
-                timeout: 300000,
-                stdio: 'pipe',
-              });
-            }
+            const depsDir = path.join(skillDir, 'deps');
+            console.log(`[skills] Installing ${deps.whlFiles!.length} .whl packages to shared venv for ${skillId}...`);
+            const { execSync } = await import('child_process');
+            execSync(`${venvPip} install "${depsDir}/"*.whl --quiet --disable-pip-version-check --no-deps`, {
+              timeout: 120000,
+              stdio: 'pipe',
+            });
             deps.depsType = 'python-shared-venv';
-            deps.depsInfo = '依赖已合并到共享虚拟环境';
-            console.log(`[skills] Deps merged to shared venv for ${skillId}`);
+            deps.depsInfo = `${deps.whlFiles!.length} 个 .whl 包已安装到共享虚拟环境`;
+            console.log(`[skills] .whl packages installed for ${skillId}`);
           } catch (installErr: any) {
-            console.warn(`[skills] Deps merge failed for ${skillId}:`, installErr.message);
-            deps.depsInfo = `依赖合并失败: ${installErr.stderr?.toString().slice(-200) || installErr.message}。packages/ 目录仍可通过 PYTHONPATH 使用`;
+            console.warn(`[skills] .whl install failed for ${skillId}:`, installErr.message);
+            deps.depsInfo = `安装失败: ${installErr.stderr?.toString().slice(-200) || installErr.message}。请检查 .whl 文件是否匹配服务器平台 (Linux x86_64, Python 3.12)`;
           }
+        } else {
+          deps.depsInfo = '共享虚拟环境未就绪 (data/skills/.venv)，.whl 包未安装';
         }
       }
 
