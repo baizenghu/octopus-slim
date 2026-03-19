@@ -46,10 +46,7 @@ export default function SkillsSettingsPage() {
   const [enterpriseUploadOpen, setEnterpriseUploadOpen] = useState(false);
   const [enterpriseUploading, setEnterpriseUploading] = useState(false);
   const enterpriseFileRef = useRef<File | null>(null);
-  const [enterpriseFormName, setEnterpriseFormName] = useState('');
-  const [enterpriseFormDesc, setEnterpriseFormDesc] = useState('');
-  const [enterpriseFormCmd, setEnterpriseFormCmd] = useState('');
-  const [enterpriseFormScript, setEnterpriseFormScript] = useState('');
+  // 企业技能表单字段已移除，元数据从 SKILL.md 自动读取
 
   // 扫描报告 Modal
   const [reportModalOpen, setReportModalOpen] = useState(false);
@@ -79,12 +76,7 @@ export default function SkillsSettingsPage() {
     }
     setEnterpriseUploading(true);
     try {
-      const result = await adminApi.uploadSkill(enterpriseFileRef.current, {
-        name: enterpriseFormName || undefined,
-        description: enterpriseFormDesc || undefined,
-        command: enterpriseFormCmd || undefined,
-        scriptPath: enterpriseFormScript || undefined,
-      });
+      const result = await adminApi.uploadSkill(enterpriseFileRef.current, {});
       toast.success(result.message);
       setEnterpriseUploadOpen(false);
       enterpriseFileRef.current = null;
@@ -218,67 +210,6 @@ export default function SkillsSettingsPage() {
     info: 'bg-blue-50 border-blue-200',
   };
 
-  // =============== 渲染上传表单 ===============
-  const renderUploadForm = (
-    scope: 'enterprise' | 'personal',
-    formName: string, setName: (v: string) => void,
-    formDesc: string, setDesc: (v: string) => void,
-    formCmd: string, setCmd: (v: string) => void,
-    formScript: string, setScript: (v: string) => void,
-    fileRef: React.MutableRefObject<File | null>,
-  ) => (
-    <div className="space-y-4">
-      <div className="space-y-2">
-        <Label>技能包 (zip) <span className="text-destructive">*</span></Label>
-        <div>
-          <input
-            type="file"
-            accept=".zip"
-            className="text-sm file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border file:border-input file:bg-background file:text-sm file:font-medium hover:file:bg-accent"
-            onChange={(e) => { fileRef.current = e.target.files?.[0] || null; }}
-          />
-        </div>
-        <p className="text-xs text-muted-foreground">
-          {scope === 'enterprise'
-            ? 'zip 包应包含 SKILL.md 文件（YAML frontmatter 定义元数据）和入口脚本'
-            : 'zip 包应包含 SKILL.md 和入口脚本，扫描通过后自动启用'}
-        </p>
-      </div>
-      <div className="space-y-2">
-        <Label>名称（可选{scope === 'enterprise' ? '，从 SKILL.md 自动读取' : ''}）</Label>
-        <Input
-          placeholder={scope === 'enterprise' ? '覆盖 SKILL.md 中的 name' : '从 SKILL.md 自动读取'}
-          value={formName}
-          onChange={(e) => setName(e.target.value)}
-        />
-      </div>
-      <div className="space-y-2">
-        <Label>描述</Label>
-        <Input
-          placeholder={scope === 'enterprise' ? '覆盖 SKILL.md 中的 description' : '简要描述技能用途'}
-          value={formDesc}
-          onChange={(e) => setDesc(e.target.value)}
-        />
-      </div>
-      <div className="space-y-2">
-        <Label>执行命令</Label>
-        <Input
-          placeholder="例如: python3 / node / bash"
-          value={formCmd}
-          onChange={(e) => setCmd(e.target.value)}
-        />
-      </div>
-      <div className="space-y-2">
-        <Label>入口脚本路径</Label>
-        <Input
-          placeholder="相对路径，例如: main.py"
-          value={formScript}
-          onChange={(e) => setScript(e.target.value)}
-        />
-      </div>
-    </div>
-  );
-
   // =============== 渲染技能表格 ===============
   const renderSkillsTable = (skills: SkillInfo[], scope: 'enterprise' | 'personal') => (
     <div className="rounded-md border">
@@ -406,7 +337,6 @@ export default function SkillsSettingsPage() {
           {isAdmin && (
             <div className="flex justify-end mb-4">
               <Button onClick={() => {
-                setEnterpriseFormName(''); setEnterpriseFormDesc(''); setEnterpriseFormCmd(''); setEnterpriseFormScript('');
                 enterpriseFileRef.current = null;
                 setEnterpriseUploadOpen(true);
               }}>
@@ -437,16 +367,24 @@ export default function SkillsSettingsPage() {
         <DialogContent className="max-w-[600px]">
           <DialogHeader>
             <DialogTitle>上传企业级技能包</DialogTitle>
-            <DialogDescription>上传 zip 格式的技能包，系统将自动扫描安全性</DialogDescription>
+            <DialogDescription>上传 zip 格式的技能包，元数据从 SKILL.md 自动读取，系统将自动扫描安全性</DialogDescription>
           </DialogHeader>
-          {renderUploadForm(
-            'enterprise',
-            enterpriseFormName, setEnterpriseFormName,
-            enterpriseFormDesc, setEnterpriseFormDesc,
-            enterpriseFormCmd, setEnterpriseFormCmd,
-            enterpriseFormScript, setEnterpriseFormScript,
-            enterpriseFileRef,
-          )}
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>技能包 (zip) <span className="text-destructive">*</span></Label>
+              <div>
+                <input
+                  type="file"
+                  accept=".zip"
+                  className="text-sm file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border file:border-input file:bg-background file:text-sm file:font-medium hover:file:bg-accent"
+                  onChange={(e) => { enterpriseFileRef.current = e.target.files?.[0] || null; }}
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                zip 包结构：SKILL.md（元数据）+ 入口脚本 + deps/*.whl（Python 离线依赖，可选）
+              </p>
+            </div>
+          </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setEnterpriseUploadOpen(false)}>取消</Button>
             <Button onClick={handleEnterpriseUpload} disabled={enterpriseUploading}>

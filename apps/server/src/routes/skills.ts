@@ -251,6 +251,28 @@ export function createSkillsRouter(
       // 依赖检测
       const deps = detectDeps(skillDir);
 
+      // 企业 Skill：将 deps/*.whl 安装到共享 venv
+      if (deps.depsType === 'python-whl') {
+        const venvPip = path.resolve(dataRoot, 'skills', '.venv', 'bin', 'pip');
+        if (fs.existsSync(venvPip)) {
+          try {
+            const depsDir = path.join(skillDir, 'deps');
+            console.log(`[skills] Installing ${deps.whlFiles!.length} .whl packages to shared venv for enterprise skill ${skillId}...`);
+            const { execSync } = await import('child_process');
+            execSync(`${venvPip} install "${depsDir}/"*.whl --quiet --disable-pip-version-check --no-deps`, {
+              timeout: 120000,
+              stdio: 'pipe',
+            });
+            deps.depsType = 'python-shared-venv';
+            deps.depsInfo = `${deps.whlFiles!.length} 个 .whl 包已安装到共享虚拟环境`;
+            console.log(`[skills] .whl packages installed for enterprise skill ${skillId}`);
+          } catch (installErr: any) {
+            console.warn(`[skills] .whl install failed for enterprise skill ${skillId}:`, installErr.message);
+            deps.depsInfo = `安装失败: ${installErr.stderr?.toString().slice(-200) || installErr.message}。请检查 .whl 文件平台兼容性`;
+          }
+        }
+      }
+
       // 安全扫描
       let scanReport: ScanReport | null = null;
       try {
