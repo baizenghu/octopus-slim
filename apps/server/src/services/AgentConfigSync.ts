@@ -3,9 +3,14 @@
  *
  * 合并 syncAllowAgents + syncAgentNativeConfig + 删除清理，
  * 只做 1 次 config read + 1 次 config write，减少竞态和 rate limit 风险。
+ *
+ * ensureAndSyncNativeAgent — 统一 agent 原生引擎同步（创建 + 文件写入）
+ * 合并 chat.ts ensureNativeAgent 与 agents.ts syncToNative 的共享逻辑。
  */
 
 import type { EngineAdapter } from './EngineAdapter';
+import type { WorkspaceManager } from '@octopus/workspace';
+import { getSoulTemplate, getMemoryTemplate } from './SoulTemplate';
 
 // 引擎 tools.allow 映射：企业语义名 → 引擎原生名
 const TOOL_NAME_TO_ENGINE: Record<string, string> = {
@@ -227,4 +232,237 @@ export async function syncAgentToEngine(
   } else {
     console.log(`[AgentConfigSync] no changes needed for user ${userId}`);
   }
+}
+
+// ─── ensureAndSyncNativeAgent ───────────────────────────────────────────────
+
+/** 已确认存在的 native agent 缓存，避免每次 chat 都调 RPC */
+const knownNativeAgents = new Set<string>();
+
+/** agentFilesSet 带重试：原生 gateway 创建 agent 后异步初始化 workspace，立即调用会 "unknown agent id" */
+async function setFileWithRetry(
+  bridge: EngineAdapter,
+  nativeAgentId: string,
+  fileName: string,
+  content: string,
+  logPrefix: string,
+): Promise<void> {
+  try {
+    await bridge.agentFilesSet(nativeAgentId, fileName, content);
+  } catch (e: any) {
+    if (logPrefix === '[agents]') {
+      console.warn(`${logPrefix} agentFilesSet ${fileName} failed for ${nativeAgentId}, retrying in 1.5s:`, e.message);
+    }
+    await new Promise(r => setTimeout(r, 1500));
+    await bridge.agentFilesSet(nativeAgentId, fileName, content);
+  }
+}
+
+/**
+ * 统一的 agent 原生引擎同步实现
+ *
+ * 合并 chat.ts ensureNativeAgent 与 agents.ts syncToNative 的共享逻辑。
+ * - chat.ts 调用：useCache=true, 不写 IDENTITY, 轻量级
+ * - agents.ts 调用：useCache=false, 写完整文件, 初始化工作空间
+ *
+ * @param bridge - EngineAdapter 实例
+ * @param workspaceManager - WorkspaceManager 实例
+ * @param userId - 用户 ID
+ * @param agentName - agent 名称
+ * @param options - 同步选项
+ */
+export async function ensureAndSyncNativeAgent(
+  bridge: EngineAdapter,
+  workspaceManager: WorkspaceManager,
+  userId: string,
+  agentName: string,
+  options?: {
+    /** 启用缓存（chat.ts 模式），默认 true */
+    useCache?: boolean;
+    /** 初始化工作空间目录（agents.ts 模式），默认 false */
+    initWorkspace?: boolean;
+    /** IDENTITY.md 内容：name, emoji, vibe 等 */
+    identity?: { name?: string; emoji?: string; vibe?: string } | null;
+    /** SOUL.md 自定义内容，null 表示使用模板 */
+    systemPrompt?: string | null;
+    /** agent 描述（用于 IDENTITY.md creature 字段） */
+    description?: string | null;
+    /** 是否为更新操作（更新时不覆盖 SOUL.md 模板和 MEMORY.md），默认 false */
+    isUpdate?: boolean;
+    /** dataRoot 路径（用于 SOUL/MEMORY 模板），默认 '' */
+    dataRoot?: string;
+  },
+): Promise<void> {
+  const {
+    useCache = true,
+    initWorkspace = false,
+    identity = null,
+    systemPrompt = null,
+    description = null,
+    isUpdate = false,
+    dataRoot = '',
+  } = options || {};
+
+  const logPrefix = useCache ? '[chat]' : '[agents]';
+
+  // 延迟导入 EngineAdapter 类以获取静态方法（避免循环依赖）
+  const { EngineAdapter: EA } = await import('./EngineAdapter');
+  const nativeAgentId = EA.userAgentId(userId, agentName);
+
+  // ── 1. 缓存检查（仅 chat.ts 模式） ──
+  if (useCache) {
+    if (knownNativeAgents.has(nativeAgentId)) return;
+
+    // 先检查引擎中是否已有该 agent
+    try {
+      const result = await bridge.agentsList() as any;
+      const agents: any[] = result?.agents || [];
+      for (const a of agents) knownNativeAgents.add(a.id);
+      if (knownNativeAgents.has(nativeAgentId)) return;
+    } catch {
+      // agents.list 失败时 fallback 到 create
+    }
+  }
+
+  // ── 2. 获取 workspace 路径 ──
+  let workspacePath: string;
+  if (initWorkspace) {
+    // agents.ts 模式：初始化工作空间目录（创建目录结构）
+    workspacePath = await workspaceManager.initAgentWorkspace(userId, agentName);
+  } else {
+    // chat.ts 模式：仅获取路径，不创建目录
+    workspacePath = agentName === 'default'
+      ? workspaceManager.getSubPath(userId, 'WORKSPACE')
+      : workspaceManager.getAgentWorkspacePath(userId, agentName);
+  }
+
+  // ── 3. 创建 agent ──
+  let agentReady = false;
+  let isNewAgent = false;
+
+  if (useCache) {
+    // chat.ts 模式：单次尝试，无重试
+    try {
+      await bridge.agentsCreate({ name: nativeAgentId, workspace: workspacePath });
+      isNewAgent = true;
+      agentReady = true;
+    } catch (createErr: any) {
+      const msg = createErr.message || '';
+      if (msg.includes('already exists')) {
+        knownNativeAgents.add(nativeAgentId);
+        agentReady = true;
+      } else {
+        console.error(`${logPrefix} agentsCreate failed for ${nativeAgentId}: ${msg}`);
+      }
+    }
+  } else {
+    // agents.ts 模式：3 次重试，已存在时更新 workspace
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        await bridge.agentsCreate({ name: nativeAgentId, workspace: workspacePath });
+        isNewAgent = true;
+        agentReady = true;
+        break;
+      } catch (createErr: any) {
+        const msg = createErr.message || '';
+        if (msg.includes('already exists')) {
+          try {
+            await bridge.agentsUpdate({ agentId: nativeAgentId, workspace: workspacePath });
+          } catch { /* ignore */ }
+          agentReady = true;
+          break;
+        }
+        console.warn(`${logPrefix} agentsCreate attempt ${attempt + 1} failed for ${nativeAgentId}: ${msg}`);
+        if (attempt < 2) await new Promise(r => setTimeout(r, 2000));
+      }
+    }
+    if (!agentReady) {
+      console.error(`${logPrefix} syncToNative: agent ${nativeAgentId} creation failed after 3 attempts, skipping file sync`);
+      return;
+    }
+  }
+
+  // ── 4. 等待 agent 就绪（仅 chat.ts 新建时） ──
+  if (useCache && isNewAgent) {
+    for (let i = 0; i < 5; i++) {
+      try {
+        const result = await bridge.agentsList() as any;
+        const agents: any[] = result?.agents || [];
+        if (agents.some((a: any) => a.id === nativeAgentId || a.name === nativeAgentId)) break;
+      } catch { /* retry */ }
+      await new Promise(r => setTimeout(r, 500));
+    }
+  }
+
+  // ── 5. 写文件 ──
+  if (!agentReady) return;
+
+  if (useCache && isNewAgent) {
+    // chat.ts 模式：新建时无条件写 SOUL.md + MEMORY.md（不写 IDENTITY.md）
+    await setFileWithRetry(bridge, nativeAgentId, 'SOUL.md', getSoulTemplate(dataRoot, agentName), logPrefix).catch((e: any) => {
+      console.error(`${logPrefix} agentFilesSet SOUL.md failed for ${nativeAgentId}:`, e.message);
+    });
+    await setFileWithRetry(bridge, nativeAgentId, 'MEMORY.md', getMemoryTemplate(dataRoot, agentName), logPrefix).catch((e: any) => {
+      console.error(`${logPrefix} agentFilesSet MEMORY.md failed for ${nativeAgentId}:`, e.message);
+    });
+  } else if (!useCache) {
+    // agents.ts 模式：条件写 IDENTITY.md + SOUL.md + MEMORY.md
+
+    // IDENTITY.md：name, emoji, creature（来自 description）, vibe
+    const identityParts = [
+      identity?.name ? `name: ${identity.name}` : '',
+      identity?.emoji ? `emoji: ${identity.emoji}` : '',
+    ].filter(Boolean);
+    if (description) {
+      identityParts.push(`creature: ${description}`);
+    }
+    if (identity?.vibe) {
+      identityParts.push(`vibe: ${identity.vibe}`);
+    }
+    if (identityParts.length > 0) {
+      await setFileWithRetry(bridge, nativeAgentId, 'IDENTITY.md', identityParts.join('\n'), logPrefix).catch((e: any) => {
+        console.error(`${logPrefix} agentFilesSet IDENTITY.md ultimately failed for ${nativeAgentId}:`, e.message);
+      });
+    }
+
+    // SOUL.md：有明确的 systemPrompt 时写入；否则仅在文件不存在时用模板填充
+    if (systemPrompt) {
+      await setFileWithRetry(bridge, nativeAgentId, 'SOUL.md', systemPrompt, logPrefix).catch((e: any) => {
+        console.error(`${logPrefix} agentFilesSet SOUL.md ultimately failed for ${nativeAgentId}:`, e.message);
+      });
+    } else if (!isUpdate) {
+      try {
+        const existing = await bridge.agentFilesGet(nativeAgentId, 'SOUL.md') as any;
+        if (!existing?.content) {
+          await setFileWithRetry(bridge, nativeAgentId, 'SOUL.md', getSoulTemplate(dataRoot, agentName), logPrefix).catch((e: any) => {
+            console.error(`${logPrefix} agentFilesSet SOUL.md ultimately failed for ${nativeAgentId}:`, e.message);
+          });
+        }
+      } catch {
+        // 文件不存在，用模板填充
+        await setFileWithRetry(bridge, nativeAgentId, 'SOUL.md', getSoulTemplate(dataRoot, agentName), logPrefix).catch((e: any) => {
+          console.error(`${logPrefix} agentFilesSet SOUL.md ultimately failed for ${nativeAgentId}:`, e.message);
+        });
+      }
+    }
+
+    // MEMORY.md：仅在文件不存在时写入（保护已有记忆）
+    if (!isUpdate) {
+      try {
+        const existing = await bridge.agentFilesGet(nativeAgentId, 'MEMORY.md') as any;
+        if (!existing?.content) {
+          const memDisplayName = identity?.name || agentName;
+          await setFileWithRetry(bridge, nativeAgentId, 'MEMORY.md', getMemoryTemplate(dataRoot, memDisplayName), logPrefix).catch((e: any) => {
+            console.error(`${logPrefix} agentFilesSet MEMORY.md ultimately failed for ${nativeAgentId}:`, e.message);
+          });
+        }
+      } catch {
+        const memDisplayName = identity?.name || agentName;
+        await setFileWithRetry(bridge, nativeAgentId, 'MEMORY.md', getMemoryTemplate(dataRoot, memDisplayName), logPrefix).catch((e: any) => {
+          console.error(`${logPrefix} agentFilesSet MEMORY.md ultimately failed for ${nativeAgentId}:`, e.message);
+        });
+      }
+    }
+  }
+  // memory-lancedb-pro 默认行为已提供 scope 隔离，无需显式注册
 }

@@ -16,8 +16,7 @@ import type { AuthService } from '@octopus/auth';
 import type { WorkspaceManager } from '@octopus/workspace';
 import { createAuthMiddleware, type AuthenticatedRequest } from '../middleware/auth';
 import type { EngineAdapter } from '../services/EngineAdapter';
-import { getSoulTemplate, getMemoryTemplate } from '../services/SoulTemplate';
-import { syncAgentToEngine } from '../services/AgentConfigSync';
+import { syncAgentToEngine, ensureAndSyncNativeAgent } from '../services/AgentConfigSync';
 import { invalidatePromptCache } from '../services/SystemPromptBuilder';
 
 import type { AppPrismaClient } from '../types/prisma';
@@ -46,103 +45,15 @@ export function createAgentsRouter(
    */
   async function syncToNative(userId: string, agentName: string, systemPrompt?: string | null, identity?: any, isUpdate = false, description?: string | null) {
     if (!bridge?.isConnected || !workspaceManager) return;
-    const { EngineAdapter: OCB } = await import('../services/EngineAdapter');
-    const nativeAgentId = OCB.userAgentId(userId, agentName);
-
-    // 专业 agent 使用独立工作空间，default agent 使用用户主 workspace
-    const workspacePath = await workspaceManager.initAgentWorkspace(userId, agentName);
-    // 创建 agent，带重试（引擎 config reload 可能需要时间）
-    let agentReady = false;
-    for (let attempt = 0; attempt < 3; attempt++) {
-      try {
-        await bridge.agentsCreate({ name: nativeAgentId, workspace: workspacePath });
-        agentReady = true;
-        break;
-      } catch (createErr: any) {
-        const msg = createErr.message || '';
-        if (msg.includes('already exists')) {
-          // 已存在，更新 workspace 路径
-          try {
-            await bridge.agentsUpdate({ agentId: nativeAgentId, workspace: workspacePath });
-          } catch { /* ignore */ }
-          agentReady = true;
-          break;
-        }
-        console.warn(`[agents] agentsCreate attempt ${attempt + 1} failed for ${nativeAgentId}: ${msg}`);
-        if (attempt < 2) await new Promise(r => setTimeout(r, 2000));
-      }
-    }
-    if (!agentReady) {
-      console.error(`[agents] syncToNative: agent ${nativeAgentId} creation failed after 3 attempts, skipping file sync`);
-      return;
-    }
-
-    // agentFilesSet 带重试：原生 gateway 创建 agent 后异步初始化 workspace，立即调用会 "unknown agent id"
-    const setFileWithRetry = async (fileName: string, content: string) => {
-      try {
-        await bridge.agentFilesSet(nativeAgentId, fileName, content);
-      } catch (e: any) {
-        console.warn(`[agents] agentFilesSet ${fileName} failed for ${nativeAgentId}, retrying in 1.5s:`, e.message);
-        await new Promise(r => setTimeout(r, 1500));
-        await bridge.agentFilesSet(nativeAgentId, fileName, content);
-      }
-    };
-
-    // IDENTITY.md：name, emoji, creature（来自 description）, vibe
-    const identityParts = [
-      identity?.name ? `name: ${identity.name}` : '',
-      identity?.emoji ? `emoji: ${identity.emoji}` : '',
-    ].filter(Boolean);
-    // description → creature（原生引擎人设描述字段）
-    if (description) {
-      identityParts.push(`creature: ${description}`);
-    }
-    if (identity?.vibe) {
-      identityParts.push(`vibe: ${identity.vibe}`);
-    }
-    if (identityParts.length > 0) {
-      await setFileWithRetry('IDENTITY.md', identityParts.join('\n')).catch((e: any) => {
-        console.error(`[agents] agentFilesSet IDENTITY.md ultimately failed for ${nativeAgentId}:`, e.message);
-      });
-    }
-    // SOUL.md：有明确的 systemPrompt 时写入；否则仅在文件不存在时用模板填充
-    if (systemPrompt) {
-      await setFileWithRetry('SOUL.md', systemPrompt).catch((e: any) => {
-        console.error(`[agents] agentFilesSet SOUL.md ultimately failed for ${nativeAgentId}:`, e.message);
-      });
-    } else if (!isUpdate) {
-      try {
-        const existing = await bridge.agentFilesGet(nativeAgentId, 'SOUL.md');
-        if (!existing?.content) {
-          await setFileWithRetry('SOUL.md', getSoulTemplate(dataRoot || '', agentName)).catch((e: any) => {
-            console.error(`[agents] agentFilesSet SOUL.md ultimately failed for ${nativeAgentId}:`, e.message);
-          });
-        }
-      } catch {
-        // 文件不存在，用模板填充
-        await setFileWithRetry('SOUL.md', getSoulTemplate(dataRoot || '', agentName)).catch((e: any) => {
-          console.error(`[agents] agentFilesSet SOUL.md ultimately failed for ${nativeAgentId}:`, e.message);
-        });
-      }
-    }
-    // MEMORY.md：仅在文件不存在时写入（保护已有记忆）
-    if (!isUpdate) {
-      try {
-        const existing = await bridge.agentFilesGet(nativeAgentId, 'MEMORY.md');
-        if (!existing?.content) {
-          const memDisplayName = identity?.name || agentName;
-          await setFileWithRetry('MEMORY.md', getMemoryTemplate(dataRoot || '', memDisplayName)).catch((e: any) => {
-            console.error(`[agents] agentFilesSet MEMORY.md ultimately failed for ${nativeAgentId}:`, e.message);
-          });
-        }
-      } catch {
-        const memDisplayName = identity?.name || agentName;
-        await setFileWithRetry('MEMORY.md', getMemoryTemplate(dataRoot || '', memDisplayName)).catch((e: any) => {
-          console.error(`[agents] agentFilesSet MEMORY.md ultimately failed for ${nativeAgentId}:`, e.message);
-        });
-      }
-    }
-    // memory-lancedb-pro 默认行为已提供 scope 隔离（agent:<id> + global），无需显式注册
+    await ensureAndSyncNativeAgent(bridge, workspaceManager, userId, agentName, {
+      useCache: false,
+      initWorkspace: true,
+      identity,
+      systemPrompt,
+      description,
+      isUpdate,
+      dataRoot: dataRoot || '',
+    });
   }
 
   /** 原生工具描述映射（用于 TOOLS.md 生成，面向 LLM 提示） */

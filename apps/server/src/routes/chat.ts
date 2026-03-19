@@ -25,7 +25,7 @@ import { Role, type AuthService } from '@octopus/auth';
 import type { WorkspaceManager } from '@octopus/workspace';
 import type { AuditLogger } from '@octopus/audit';
 import { EngineAdapter } from '../services/EngineAdapter';
-import { getSoulTemplate, getMemoryTemplate } from '../services/SoulTemplate';
+import { ensureAndSyncNativeAgent } from '../services/AgentConfigSync';
 import type { QuotaManager } from '@octopus/quota';
 
 import { validateSessionOwnership } from '../utils/ownership';
@@ -199,73 +199,13 @@ export function createChatRouter(
   const dataRoot = _config.workspace.dataRoot;
 
 
-  /** 已确认存在的 native agent 缓存，避免每次 chat 都调 RPC */
-  const knownNativeAgents = new Set<string>();
-
   /** 确保 native gateway 中存在对应 agent，不存在时自动创建；同时配置 memory scope 隔离 */
   async function ensureNativeAgent(userId: string, agentName: string) {
     if (!bridge?.isConnected) return;
-    const nativeAgentId = EngineAdapter.userAgentId(userId, agentName);
-
-    // 内存缓存命中，跳过 RPC
-    if (knownNativeAgents.has(nativeAgentId)) return;
-
-    // 先检查引擎中是否已有该 agent
-    try {
-      const result = await bridge.agentsList() as any;
-      const agents: any[] = result?.agents || [];
-      for (const a of agents) knownNativeAgents.add(a.id);
-      if (knownNativeAgents.has(nativeAgentId)) return;
-    } catch {
-      // agents.list 失败时 fallback 到 create
-    }
-
-    // 专业 agent 使用独立 workspace，防止文件互相覆盖（IDENTITY.md/SOUL.md 等）
-    const workspacePath = agentName === 'default'
-      ? workspaceManager.getSubPath(userId, 'WORKSPACE')
-      : workspaceManager.getAgentWorkspacePath(userId, agentName);
-    let isNewAgent = false;
-    try {
-      await bridge.agentsCreate({ name: nativeAgentId, workspace: workspacePath });
-      isNewAgent = true;
-    } catch (createErr: any) {
-      const msg = createErr.message || '';
-      if (msg.includes('already exists')) {
-        // 确实已存在，安全加入缓存
-        knownNativeAgents.add(nativeAgentId);
-      } else {
-        // 创建失败（非"已存在"），不加入缓存，下次对话会重试
-        console.error(`[chat] agentsCreate failed for ${nativeAgentId}: ${msg}`);
-      }
-    }
-    // 首次创建时等待 agent 就绪，再写入默认文件
-    if (isNewAgent) {
-      // agents.create 触发 config 重写 → 轮询等待 agent 可见（替代固定 sleep）
-      for (let i = 0; i < 5; i++) {
-        try {
-          const result = await bridge.agentsList() as any;
-          const agents: any[] = result?.agents || [];
-          if (agents.some((a: any) => a.id === nativeAgentId || a.name === nativeAgentId)) break;
-        } catch { /* retry */ }
-        await new Promise(r => setTimeout(r, 500));
-      }
-      const setFileWithRetry = async (fileName: string, content: string) => {
-        try {
-          await bridge.agentFilesSet(nativeAgentId, fileName, content);
-        } catch {
-          await new Promise(r => setTimeout(r, 1500));
-          await bridge.agentFilesSet(nativeAgentId, fileName, content);
-        }
-      };
-      const soulTemplate = getSoulTemplate(dataRoot, agentName);
-      await setFileWithRetry('SOUL.md', soulTemplate).catch((e) => {
-        console.error(`[chat] agentFilesSet SOUL.md failed for ${nativeAgentId}:`, e.message);
-      });
-      await setFileWithRetry('MEMORY.md', getMemoryTemplate(dataRoot, agentName)).catch((e) => {
-        console.error(`[chat] agentFilesSet MEMORY.md failed for ${nativeAgentId}:`, e.message);
-      });
-    }
-    // memory-lancedb-pro 默认行为已提供 scope 隔离，无需显式注册
+    await ensureAndSyncNativeAgent(bridge, workspaceManager, userId, agentName, {
+      useCache: true,
+      dataRoot,
+    });
   }
 
   /** 附件处理：保存到 agent workspace 并返回相对路径列表 */
