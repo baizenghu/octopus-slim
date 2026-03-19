@@ -575,24 +575,40 @@ export function createSkillsRouter(
         console.warn(`[skills] scan error for ${skillId}:`, scanErr.message);
       }
 
-      // 个人 Skill：检测到 requirements.txt 时安装依赖到共享 venv（跳过已有包）
-      if (deps.depsType === 'python-requirements-only') {
-        console.log(`[skills] Installing deps to shared venv for personal skill ${skillId}...`);
-        try {
-          const reqPath = path.join(skillDir, 'requirements.txt');
-          const { execSync } = await import('child_process');
-          const venvPip = path.resolve(dataRoot, 'skills', '.venv', 'bin', 'pip');
-          const pipCmd = fs.existsSync(venvPip) ? venvPip : 'pip';
-          execSync(`${pipCmd} install -r "${reqPath}" --quiet --disable-pip-version-check`, {
-            timeout: 300000,
-            stdio: 'pipe',
-          });
-          deps.depsType = 'python-shared-venv';
-          deps.depsInfo = '依赖已安装到共享虚拟环境';
-          console.log(`[skills] Deps installed to shared venv for ${skillId}`);
-        } catch (installErr: any) {
-          console.warn(`[skills] Auto-install failed for ${skillId}:`, installErr.message);
-          deps.depsInfo = `自动安装失败: ${installErr.stderr?.toString().slice(-200) || installErr.message}`;
+      // 个人 Skill：将离线 packages/ 或 requirements.txt 依赖合并到共享 venv
+      if (deps.depsType === 'python-packages' || deps.depsType === 'python-requirements-only') {
+        const venvLib = path.resolve(dataRoot, 'skills', '.venv', 'lib');
+        // 动态获取 python 版本目录
+        const pyDirs = fs.existsSync(venvLib) ? fs.readdirSync(venvLib).filter(d => d.startsWith('python')) : [];
+        const sitePackages = pyDirs.length > 0 ? path.join(venvLib, pyDirs[0], 'site-packages') : null;
+
+        if (sitePackages && fs.existsSync(sitePackages)) {
+          try {
+            if (deps.depsType === 'python-packages') {
+              // 离线模式：复制 packages/ 内容到共享 venv site-packages
+              console.log(`[skills] Copying offline packages to shared venv for ${skillId}...`);
+              const { execSync } = await import('child_process');
+              const pkgDir = path.join(skillDir, 'packages');
+              execSync(`cp -rn "${pkgDir}/"* "${sitePackages}/"`, { timeout: 60000, stdio: 'pipe' });
+            } else {
+              // 在线模式：pip install（内网可能失败）
+              console.log(`[skills] Installing deps to shared venv for ${skillId}...`);
+              const reqPath = path.join(skillDir, 'requirements.txt');
+              const { execSync } = await import('child_process');
+              const venvPip = path.resolve(dataRoot, 'skills', '.venv', 'bin', 'pip');
+              const pipCmd = fs.existsSync(venvPip) ? venvPip : 'pip';
+              execSync(`${pipCmd} install -r "${reqPath}" --quiet --disable-pip-version-check`, {
+                timeout: 300000,
+                stdio: 'pipe',
+              });
+            }
+            deps.depsType = 'python-shared-venv';
+            deps.depsInfo = '依赖已合并到共享虚拟环境';
+            console.log(`[skills] Deps merged to shared venv for ${skillId}`);
+          } catch (installErr: any) {
+            console.warn(`[skills] Deps merge failed for ${skillId}:`, installErr.message);
+            deps.depsInfo = `依赖合并失败: ${installErr.stderr?.toString().slice(-200) || installErr.message}。packages/ 目录仍可通过 PYTHONPATH 使用`;
+          }
         }
       }
 
