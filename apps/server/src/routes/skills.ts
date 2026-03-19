@@ -30,6 +30,7 @@ import { SkillScanner } from '@octopus/skills';
 import type { ScanReport } from '@octopus/skills';
 import type { AuthService } from '@octopus/auth';
 import { createAuthMiddleware, type AuthenticatedRequest } from '../middleware/auth';
+import { Prisma } from '@prisma/client';
 import type { AppPrismaClient } from '../types/prisma';
 
 export function createSkillsRouter(
@@ -354,7 +355,7 @@ export function createSkillsRouter(
         );
         await prisma.agent.update({
           where: { id: agent.id },
-          data: { skillsFilter: filter.length > 0 ? filter : null },
+          data: { skillsFilter: filter.length > 0 ? filter : Prisma.JsonNull },
         });
       }
 
