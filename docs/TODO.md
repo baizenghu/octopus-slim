@@ -7,9 +7,9 @@
 
 ## P0 — 系统运维入口
 
-### 1. SystemConfigPage 系统配置管理页面
+### 1. SystemConfigPage 系统配置管理页面 ✅
 
-**状态：** stash 中有 WIP（`git stash pop` 恢复后评估）
+**状态：** 已完成（2026-03-18，commit a8fbfb1）
 
 **需求：** 管理员通过前端维护 octopus.json 核心配置，替代手动编辑文件+重启。
 
@@ -47,9 +47,9 @@ PUT  /api/admin/config/:section     — 更新指定配置段
 
 ---
 
-### 2. Plugin 配置 UI
+### 2. Plugin 配置 UI ✅
 
-**状态：** 无前端/API/DB 模型，需从零创建
+**状态：** 已完成（合并在 #1 中，SystemConfigPlugins.tsx）
 
 **需求：** 前端管理插件配置参数（当前只能手动编辑 octopus.json `plugins.entries`）。
 
@@ -68,9 +68,9 @@ PUT  /api/admin/config/:section     — 更新指定配置段
 
 ## P1 — 功能缺失
 
-### 3. 个人 Skill 依赖自动安装
+### 3. 个人 Skill 依赖自动安装 ✅
 
-**状态：** 未实现。个人 Skill 如果有 `requirements.txt` 且 Docker 镜像中缺少依赖，执行时 ImportError。
+**状态：** 已完成（2026-03-18，commit 078c0dd）。上传时自动 pip install --target packages/，执行时容错补装。
 
 **方案：**
 ```
@@ -97,9 +97,9 @@ PUT  /api/admin/config/:section     — 更新指定配置段
 
 ---
 
-### 4. skills.entries 双写同步
+### 4. skills.entries 双写同步 ✅
 
-**状态：** 引擎不支持 `skills.entries` 配置路径（octopus.json 中无此字段）。DB `skill.enabled` 修改后不通知引擎。
+**状态：** 已完成（2026-03-18，commit 393d938）。引擎原生支持 `skills.entries[id].enabled`，在 approve/reject/enable 时调用 `configApply` 同步。
 
 **前置确认：** 验证引擎是否支持通过配置控制单个 Skill 启用/禁用。如不支持，可能需要通过删除/恢复 `extraDirs` 中的文件实现。
 
@@ -109,9 +109,9 @@ PUT  /api/admin/config/:section     — 更新指定配置段
 
 ## P2 — 代码优化
 
-### 5. ChatPage.tsx 前端拆分
+### 5. ChatPage.tsx 前端拆分 ✅
 
-**状态：** 当前 1249 行，职责过重。
+**状态：** 已完成（2026-03-18，commit 2f76aad）。1249→561 行，拆出 SessionSidebar/ChatMessages/ChatInput。
 
 **拆分方案：**
 | 拆出组件 | 内容 | 预估行数 |
@@ -127,9 +127,9 @@ ChatPage.tsx 保留为容器组件（~400 行），组装上述子组件。
 
 ---
 
-### 6. ensureNativeAgent / syncToNative 合并
+### 6. ensureNativeAgent / syncToNative 合并 ✅
 
-**状态：** 两套 agent 创建逻辑共存：
+**状态：** 已完成（2026-03-18，commit 2f76aad）。统一到 AgentConfigSync.ensureAndSyncNativeAgent()，减少 89 行重复。原两套逻辑共存：
 - `chat.ts:206` — `ensureNativeAgent()`（对话时 lazy 创建，有缓存 + 轮询就绪）
 - `agents.ts:47` — `syncToNative()`（CRUD 时主动同步，写 IDENTITY/SOUL/MEMORY.md，3 次重试）
 
@@ -154,15 +154,30 @@ ChatPage.tsx 保留为容器组件（~400 行），组装上述子组件。
 
 ---
 
-### 8. 企业 Skill per-skill 依赖隔离（可选）
+### 8. 企业 Skill per-skill 依赖隔离（已关闭）
 
-**状态：** 当前企业 Skill 共享 `data/skills/.venv/`，多 Skill 依赖可能冲突。
+**状态：** 不再需要。#3 已统一为共享 venv + deps/*.whl 方案，企业和个人 Skill 共用 `data/skills/.venv/`。等出现实际版本冲突再评估。
 
-**方案：** 同 #3 的 `pip install --target` 方案，每个 Skill 目录内独立 `packages/`。
+---
 
-**触发条件：** 等 Skill 数量增多或出现实际依赖冲突时再实施。
+## 待讨论
 
-**预估工作量：** 小
+### 9. Skill Service — 远程执行能力
+
+**状态：** 概念阶段，待讨论
+
+**需求：** 部分用户有自己的服务器（GPU、大内存、特定硬件），Skill 可直接运行在用户服务器上，而非企业 Docker 沙箱。
+
+**候选方案：**
+| 方案 | 原理 | 复杂度 |
+|------|------|--------|
+| A. HTTP 回调 | Skill 配置 `serviceUrl`，Gateway POST 调用，等响应 | 小 |
+| B. Runner 模式 | 用户部署轻量 Agent，长轮询拉取任务执行 | 中 |
+
+**关键设计点：**
+- Skill 增加 `executionMode: "local" | "docker" | "remote"`
+- remote 模式：认证（token）、超时、健康检查、结果格式
+- 与现有 `run_skill` 执行分支并列，改动集中
 
 ---
 
@@ -180,12 +195,7 @@ ChatPage.tsx 保留为容器组件（~400 行），组装上述子组件。
 ## 开发顺序建议
 
 ```
-第一优先：#1 SystemConfigPage + #2 Plugin 配置（合并实现）
-    ↓ 恢复 stash → 评估 → 补齐
-第二优先：#3 个人 Skill 依赖安装
-    ↓ 小改动，独立
-第三优先：#5 ChatPage.tsx 拆分 + #6 ensureNativeAgent 合并
-    ↓ 代码质量，可并行
-后续评估：#4 skills.entries + #7 提醒优化
-    ↓ 需调研引擎行为
+✅ 已完成：#1 #2 #3 #5 #6
+剩余：#4 skills.entries（需调研） + #7 提醒优化（需调研） + #8 per-skill 隔离（等触发）
+待讨论：#9 Skill Service 远程执行
 ```
