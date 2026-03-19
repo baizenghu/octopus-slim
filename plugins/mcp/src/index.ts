@@ -699,7 +699,9 @@ export default function enterpriseMcpPlugin(api: any) {
             try {
               fs.mkdirSync(packagesDir, { recursive: true });
               const { execSync } = await import('child_process');
-              execSync(`pip install --target "${packagesDir}" -r "${requirementsPath}" --quiet --disable-pip-version-check`, {
+              const venvPip = path.resolve(_dataRoot, 'skills', '.venv', 'bin', 'pip');
+              const pipCmd = fs.existsSync(venvPip) ? venvPip : 'pip';
+              execSync(`${pipCmd} install --target "${packagesDir}" -r "${requirementsPath}" --quiet --disable-pip-version-check`, {
                 timeout: 300000,
                 stdio: 'pipe',
               });

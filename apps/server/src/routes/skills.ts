@@ -583,7 +583,9 @@ export function createSkillsRouter(
           const packagesPath = path.join(skillDir, 'packages');
           fs.mkdirSync(packagesPath, { recursive: true });
           const { execSync } = await import('child_process');
-          execSync(`pip install --target "${packagesPath}" -r "${reqPath}" --quiet --disable-pip-version-check`, {
+          const venvPip = path.resolve(dataRoot, 'skills', '.venv', 'bin', 'pip');
+          const pipCmd = fs.existsSync(venvPip) ? venvPip : 'pip';
+          execSync(`${pipCmd} install --target "${packagesPath}" -r "${reqPath}" --quiet --disable-pip-version-check`, {
             timeout: 300000,
             stdio: 'pipe',
           });
