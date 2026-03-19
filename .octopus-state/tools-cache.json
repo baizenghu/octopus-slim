@@ -1,0 +1,1018 @@
+[
+  {
+    "serverId": "mcp-1770876329419-bgrjr5",
+    "serverName": "数据库连接器",
+    "toolName": "execute_sql",
+    "nativeToolName": "mcp_mcp_1770876329419_bgrjr5_execute_sql",
+    "description": "执行 SQL 查询并返回结果。用于查询数据库中的数据。",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "connection_name": {
+          "type": "string",
+          "description": "数据库连接名称。先调用 list_connections 查看可用连接。快捷连接: mysql/pgsql；多连接格式 DB_{name}_* 自动注册为对应 name"
+        },
+        "sql": {
+          "type": "string",
+          "description": "要执行的 SQL 语句"
+        },
+        "max_rows": {
+          "type": "integer",
+          "description": "最大返回行数，默认 10000",
+          "default": 10000
+        }
+      },
+      "required": [
+        "connection_name",
+        "sql"
+      ]
+    }
+  },
+  {
+    "serverId": "mcp-1770876329419-bgrjr5",
+    "serverName": "数据库连接器",
+    "toolName": "list_tables",
+    "nativeToolName": "mcp_mcp_1770876329419_bgrjr5_list_tables",
+    "description": "列出数据库中的所有表",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "connection_name": {
+          "type": "string",
+          "description": "数据库连接名称"
+        }
+      },
+      "required": [
+        "connection_name"
+      ]
+    }
+  },
+  {
+    "serverId": "mcp-1770876329419-bgrjr5",
+    "serverName": "数据库连接器",
+    "toolName": "describe_table",
+    "nativeToolName": "mcp_mcp_1770876329419_bgrjr5_describe_table",
+    "description": "获取表的结构信息（列名、类型等）",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "connection_name": {
+          "type": "string",
+          "description": "数据库连接名称"
+        },
+        "table_name": {
+          "type": "string",
+          "description": "表名"
+        }
+      },
+      "required": [
+        "connection_name",
+        "table_name"
+      ]
+    }
+  },
+  {
+    "serverId": "mcp-1770876329419-bgrjr5",
+    "serverName": "数据库连接器",
+    "toolName": "list_connections",
+    "nativeToolName": "mcp_mcp_1770876329419_bgrjr5_list_connections",
+    "description": "列出所有已配置的数据库连接",
+    "inputSchema": {
+      "type": "object",
+      "properties": {}
+    }
+  },
+  {
+    "serverId": "mcp-amap",
+    "serverName": "高德地图",
+    "toolName": "maps_regeocode",
+    "nativeToolName": "mcp_mcp_amap_maps_regeocode",
+    "description": "将一个高德经纬度坐标转换为行政区划地址信息",
+    "inputSchema": {
+      "properties": {
+        "location": {
+          "title": "Location",
+          "type": "string"
+        }
+      },
+      "required": [
+        "location"
+      ],
+      "title": "maps_regeocodeArguments",
+      "type": "object"
+    }
+  },
+  {
+    "serverId": "mcp-amap",
+    "serverName": "高德地图",
+    "toolName": "maps_geo",
+    "nativeToolName": "mcp_mcp_amap_maps_geo",
+    "description": "将详细的结构化地址转换为经纬度坐标。支持对地标性名胜景区、建筑物名称解析为经纬度坐标",
+    "inputSchema": {
+      "properties": {
+        "address": {
+          "title": "Address",
+          "type": "string"
+        },
+        "city": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "City"
+        }
+      },
+      "required": [
+        "address"
+      ],
+      "title": "maps_geoArguments",
+      "type": "object"
+    }
+  },
+  {
+    "serverId": "mcp-amap",
+    "serverName": "高德地图",
+    "toolName": "maps_ip_location",
+    "nativeToolName": "mcp_mcp_amap_maps_ip_location",
+    "description": "IP 定位根据用户输入的 IP 地址，定位 IP 的所在位置",
+    "inputSchema": {
+      "properties": {
+        "ip": {
+          "title": "Ip",
+          "type": "string"
+        }
+      },
+      "required": [
+        "ip"
+      ],
+      "title": "maps_ip_locationArguments",
+      "type": "object"
+    }
+  },
+  {
+    "serverId": "mcp-amap",
+    "serverName": "高德地图",
+    "toolName": "maps_weather",
+    "nativeToolName": "mcp_mcp_amap_maps_weather",
+    "description": "根据城市名称或者标准adcode查询指定城市的天气",
+    "inputSchema": {
+      "properties": {
+        "city": {
+          "title": "City",
+          "type": "string"
+        }
+      },
+      "required": [
+        "city"
+      ],
+      "title": "maps_weatherArguments",
+      "type": "object"
+    }
+  },
+  {
+    "serverId": "mcp-amap",
+    "serverName": "高德地图",
+    "toolName": "maps_bicycling_by_address",
+    "nativeToolName": "mcp_mcp_amap_maps_bicycling_by_address",
+    "description": "Plans a bicycle route between two locations using addresses. Unless you have a specific reason to use coordinates, it's recommended to use this tool.\n    \n    Args:\n        origin_address (str): Starting point address (e.g. \"北京市朝阳区阜通东大街6号\")\n        destination_address (str): Ending point address (e.g. \"北京市海淀区上地十街10号\")\n        origin_city (Optional[str]): Optional city name for the origin address to improve geocoding accuracy\n        destination_city (Optional[str]): Optional city name for the destination address to improve geocoding accuracy\n        \n    Returns:\n        Dict[str, Any]: Route information including distance, duration, and turn-by-turn instructions.\n        Considers bridges, one-way streets, and road closures. Supports routes up to 500km.\n    ",
+    "inputSchema": {
+      "properties": {
+        "origin_address": {
+          "title": "Origin Address",
+          "type": "string"
+        },
+        "destination_address": {
+          "title": "Destination Address",
+          "type": "string"
+        },
+        "origin_city": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Origin City"
+        },
+        "destination_city": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Destination City"
+        }
+      },
+      "required": [
+        "origin_address",
+        "destination_address"
+      ],
+      "title": "maps_bicycling_by_addressArguments",
+      "type": "object"
+    }
+  },
+  {
+    "serverId": "mcp-amap",
+    "serverName": "高德地图",
+    "toolName": "maps_bicycling_by_coordinates",
+    "nativeToolName": "mcp_mcp_amap_maps_bicycling_by_coordinates",
+    "description": "Plans a bicycle route between two coordinates.\n    \n    Args:\n        origin_coordinates (str): Starting point coordinates in the format \"longitude,latitude\" (e.g. \"116.434307,39.90909\")\n        destination_coordinates (str): Ending point coordinates in the format \"longitude,latitude\" (e.g. \"116.434307,39.90909\")\n        \n    Returns:\n        Dict[str, Any]: Route information including distance, duration, and turn-by-turn instructions.\n        Considers bridges, one-way streets, and road closures. Supports routes up to 500km.\n    ",
+    "inputSchema": {
+      "properties": {
+        "origin_coordinates": {
+          "title": "Origin Coordinates",
+          "type": "string"
+        },
+        "destination_coordinates": {
+          "title": "Destination Coordinates",
+          "type": "string"
+        }
+      },
+      "required": [
+        "origin_coordinates",
+        "destination_coordinates"
+      ],
+      "title": "maps_bicycling_by_coordinatesArguments",
+      "type": "object"
+    }
+  },
+  {
+    "serverId": "mcp-amap",
+    "serverName": "高德地图",
+    "toolName": "maps_direction_walking_by_address",
+    "nativeToolName": "mcp_mcp_amap_maps_direction_walking_by_address",
+    "description": "Plans a walking route between two locations using addresses. Unless you have a specific reason to use coordinates, it's recommended to use this tool.\n    \n    Args:\n        origin_address (str): Starting point address (e.g. \"北京市朝阳区阜通东大街6号\")\n        destination_address (str): Ending point address (e.g. \"北京市海淀区上地十街10号\")\n        origin_city (Optional[str]): Optional city name for the origin address to improve geocoding accuracy\n        destination_city (Optional[str]): Optional city name for the destination address to improve geocoding accuracy\n        \n    Returns:\n        Dict[str, Any]: Route information including distance, duration, and turn-by-turn instructions.\n        Supports routes up to 100km.\n    ",
+    "inputSchema": {
+      "properties": {
+        "origin_address": {
+          "title": "Origin Address",
+          "type": "string"
+        },
+        "destination_address": {
+          "title": "Destination Address",
+          "type": "string"
+        },
+        "origin_city": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Origin City"
+        },
+        "destination_city": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Destination City"
+        }
+      },
+      "required": [
+        "origin_address",
+        "destination_address"
+      ],
+      "title": "maps_direction_walking_by_addressArguments",
+      "type": "object"
+    }
+  },
+  {
+    "serverId": "mcp-amap",
+    "serverName": "高德地图",
+    "toolName": "maps_direction_walking_by_coordinates",
+    "nativeToolName": "mcp_mcp_amap_maps_direction_walking_by_coordinates",
+    "description": "步行路径规划 API 可以根据输入起点终点经纬度坐标规划100km 以内的步行通勤方案，并且返回通勤方案的数据\n    \n    Args:\n        origin (str): 起点经纬度坐标，格式为\"经度,纬度\" (例如：\"116.434307,39.90909\")\n        destination (str): 终点经纬度坐标，格式为\"经度,纬度\" (例如：\"116.434307,39.90909\")\n        \n    Returns:\n        Dict[str, Any]: 包含距离、时长和详细导航信息的路线数据\n    ",
+    "inputSchema": {
+      "properties": {
+        "origin": {
+          "title": "Origin",
+          "type": "string"
+        },
+        "destination": {
+          "title": "Destination",
+          "type": "string"
+        }
+      },
+      "required": [
+        "origin",
+        "destination"
+      ],
+      "title": "maps_direction_walking_by_coordinatesArguments",
+      "type": "object"
+    }
+  },
+  {
+    "serverId": "mcp-amap",
+    "serverName": "高德地图",
+    "toolName": "maps_direction_driving_by_address",
+    "nativeToolName": "mcp_mcp_amap_maps_direction_driving_by_address",
+    "description": "Plans a driving route between two locations using addresses. Unless you have a specific reason to use coordinates, it's recommended to use this tool.\n    \n    Args:\n        origin_address (str): Starting point address (e.g. \"北京市朝阳区阜通东大街6号\")\n        destination_address (str): Ending point address (e.g. \"北京市海淀区上地十街10号\")\n        origin_city (Optional[str]): Optional city name for the origin address to improve geocoding accuracy\n        destination_city (Optional[str]): Optional city name for the destination address to improve geocoding accuracy\n        \n    Returns:\n        Dict[str, Any]: Route information including distance, duration, and turn-by-turn instructions.\n        Considers traffic conditions and road restrictions.\n    ",
+    "inputSchema": {
+      "properties": {
+        "origin_address": {
+          "title": "Origin Address",
+          "type": "string"
+        },
+        "destination_address": {
+          "title": "Destination Address",
+          "type": "string"
+        },
+        "origin_city": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Origin City"
+        },
+        "destination_city": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Destination City"
+        }
+      },
+      "required": [
+        "origin_address",
+        "destination_address"
+      ],
+      "title": "maps_direction_driving_by_addressArguments",
+      "type": "object"
+    }
+  },
+  {
+    "serverId": "mcp-amap",
+    "serverName": "高德地图",
+    "toolName": "maps_direction_driving_by_coordinates",
+    "nativeToolName": "mcp_mcp_amap_maps_direction_driving_by_coordinates",
+    "description": "驾车路径规划 API 可以根据用户起终点经纬度坐标规划以小客车、轿车通勤出行的方案，并且返回通勤方案的数据\n    \n    Args:\n        origin (str): 起点经纬度坐标，格式为\"经度,纬度\" (例如：\"116.434307,39.90909\")\n        destination (str): 终点经纬度坐标，格式为\"经度,纬度\" (例如：\"116.434307,39.90909\")\n        \n    Returns:\n        Dict[str, Any]: 包含距离、时长和详细导航信息的路线数据\n    ",
+    "inputSchema": {
+      "properties": {
+        "origin": {
+          "title": "Origin",
+          "type": "string"
+        },
+        "destination": {
+          "title": "Destination",
+          "type": "string"
+        }
+      },
+      "required": [
+        "origin",
+        "destination"
+      ],
+      "title": "maps_direction_driving_by_coordinatesArguments",
+      "type": "object"
+    }
+  },
+  {
+    "serverId": "mcp-amap",
+    "serverName": "高德地图",
+    "toolName": "maps_direction_transit_integrated_by_address",
+    "nativeToolName": "mcp_mcp_amap_maps_direction_transit_integrated_by_address",
+    "description": "Plans a public transit route between two locations using addresses. Unless you have a specific reason to use coordinates, it's recommended to use this tool.\n    \n    Args:\n        origin_address (str): Starting point address (e.g. \"北京市朝阳区阜通东大街6号\")\n        destination_address (str): Ending point address (e.g. \"北京市海淀区上地十街10号\")\n        origin_city (str): City name for the origin address (required for cross-city transit)\n        destination_city (str): City name for the destination address (required for cross-city transit)\n        \n    Returns:\n        Dict[str, Any]: Route information including distance, duration, and detailed transit instructions.\n        Considers various public transit options including buses, subways, and trains.\n    ",
+    "inputSchema": {
+      "properties": {
+        "origin_address": {
+          "title": "Origin Address",
+          "type": "string"
+        },
+        "destination_address": {
+          "title": "Destination Address",
+          "type": "string"
+        },
+        "origin_city": {
+          "title": "Origin City",
+          "type": "string"
+        },
+        "destination_city": {
+          "title": "Destination City",
+          "type": "string"
+        }
+      },
+      "required": [
+        "origin_address",
+        "destination_address",
+        "origin_city",
+        "destination_city"
+      ],
+      "title": "maps_direction_transit_integrated_by_addressArguments",
+      "type": "object"
+    }
+  },
+  {
+    "serverId": "mcp-amap",
+    "serverName": "高德地图",
+    "toolName": "maps_direction_transit_integrated_by_coordinates",
+    "nativeToolName": "mcp_mcp_amap_maps_direction_transit_integrated_by_coordinates",
+    "description": "根据用户起终点经纬度坐标规划综合各类公共（火车、公交、地铁）交通方式的通勤方案，并且返回通勤方案的数据，跨城场景下必须传起点城市与终点城市\n\n    Args:\n        origin (str): 起点经纬度坐标，格式为\"经度,纬度\" (例如：\"116.434307,39.90909\")\n        destination (str): 终点经纬度坐标，格式为\"经度,纬度\" (例如：\"116.434307,39.90909\")\n        city (str): 起点城市名称\n        cityd (str): 终点城市名称\n\n    Returns:\n        Dict[str, Any]: 包含距离、时长和详细公共交通信息的路线数据\n    ",
+    "inputSchema": {
+      "properties": {
+        "origin": {
+          "title": "Origin",
+          "type": "string"
+        },
+        "destination": {
+          "title": "Destination",
+          "type": "string"
+        },
+        "city": {
+          "title": "City",
+          "type": "string"
+        },
+        "cityd": {
+          "title": "Cityd",
+          "type": "string"
+        }
+      },
+      "required": [
+        "origin",
+        "destination",
+        "city",
+        "cityd"
+      ],
+      "title": "maps_direction_transit_integrated_by_coordinatesArguments",
+      "type": "object"
+    }
+  },
+  {
+    "serverId": "mcp-amap",
+    "serverName": "高德地图",
+    "toolName": "maps_distance",
+    "nativeToolName": "mcp_mcp_amap_maps_distance",
+    "description": "测量两个经纬度坐标之间的距离,支持驾车、步行以及球面距离测量",
+    "inputSchema": {
+      "properties": {
+        "origins": {
+          "title": "Origins",
+          "type": "string"
+        },
+        "destination": {
+          "title": "Destination",
+          "type": "string"
+        },
+        "type": {
+          "default": "1",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "origins",
+        "destination"
+      ],
+      "title": "maps_distanceArguments",
+      "type": "object"
+    }
+  },
+  {
+    "serverId": "mcp-amap",
+    "serverName": "高德地图",
+    "toolName": "maps_text_search",
+    "nativeToolName": "mcp_mcp_amap_maps_text_search",
+    "description": "关键词搜索 API 根据用户输入的关键字进行 POI 搜索，并返回相关的信息",
+    "inputSchema": {
+      "properties": {
+        "keywords": {
+          "title": "Keywords",
+          "type": "string"
+        },
+        "city": {
+          "default": "",
+          "title": "City",
+          "type": "string"
+        },
+        "citylimit": {
+          "default": "false",
+          "title": "Citylimit",
+          "type": "string"
+        }
+      },
+      "required": [
+        "keywords"
+      ],
+      "title": "maps_text_searchArguments",
+      "type": "object"
+    }
+  },
+  {
+    "serverId": "mcp-amap",
+    "serverName": "高德地图",
+    "toolName": "maps_around_search",
+    "nativeToolName": "mcp_mcp_amap_maps_around_search",
+    "description": "周边搜，根据用户传入关键词以及坐标location，搜索出radius半径范围的POI",
+    "inputSchema": {
+      "properties": {
+        "location": {
+          "title": "Location",
+          "type": "string"
+        },
+        "radius": {
+          "default": "1000",
+          "title": "Radius",
+          "type": "string"
+        },
+        "keywords": {
+          "default": "",
+          "title": "Keywords",
+          "type": "string"
+        }
+      },
+      "required": [
+        "location"
+      ],
+      "title": "maps_around_searchArguments",
+      "type": "object"
+    }
+  },
+  {
+    "serverId": "mcp-amap",
+    "serverName": "高德地图",
+    "toolName": "maps_search_detail",
+    "nativeToolName": "mcp_mcp_amap_maps_search_detail",
+    "description": "查询关键词搜或者周边搜获取到的POI ID的详细信息",
+    "inputSchema": {
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "maps_search_detailArguments",
+      "type": "object"
+    }
+  },
+  {
+    "serverId": "mcp-email-sender",
+    "serverName": "邮件发送器",
+    "toolName": "send_email",
+    "nativeToolName": "mcp_mcp_email_sender_send_email",
+    "description": "发送电子邮件。可以给指定收件人发送邮件，支持纯文本、HTML 格式和文件附件（包括压缩包）。",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "to": {
+          "type": "string",
+          "description": "收件人邮箱地址，多个用逗号分隔"
+        },
+        "subject": {
+          "type": "string",
+          "description": "邮件主题"
+        },
+        "body": {
+          "type": "string",
+          "description": "邮件正文内容（纯文本）"
+        },
+        "html": {
+          "type": "string",
+          "description": "邮件 HTML 内容（可选，优先于 body）"
+        },
+        "cc": {
+          "type": "string",
+          "description": "抄送地址（可选）"
+        },
+        "attachments": {
+          "type": "string",
+          "description": "附件文件路径，多个用逗号分隔（可选）"
+        }
+      },
+      "required": [
+        "to",
+        "subject",
+        "body"
+      ]
+    }
+  },
+  {
+    "serverId": "mcp-nocobase-oa",
+    "serverName": "OA办公系统",
+    "toolName": "oa_query_leaves",
+    "nativeToolName": "mcp_mcp_nocobase_oa_oa_query_leaves",
+    "description": "查询请假申请。经理默认看待审批的单据，员工默认看自己的申请。可通过 role_view 切换视角。",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "current_user": {
+          "type": "string",
+          "description": "当前 Octopus 用户名（如 baizh、test），系统自动映射为 OA 用户身份"
+        },
+        "status": {
+          "type": "string",
+          "description": "按状态筛选: pending(待审批) / approved(已批准) / rejected(已驳回)",
+          "enum": [
+            "pending",
+            "approved",
+            "rejected"
+          ]
+        },
+        "applicant": {
+          "type": "string",
+          "description": "按申请人筛选（覆盖自动视角）"
+        },
+        "role_view": {
+          "type": "string",
+          "description": "查看视角: my_requests(我的申请) / my_approvals(待我审批) / all(全部)",
+          "enum": [
+            "my_requests",
+            "my_approvals",
+            "all"
+          ]
+        }
+      },
+      "required": [
+        "current_user"
+      ]
+    }
+  },
+  {
+    "serverId": "mcp-nocobase-oa",
+    "serverName": "OA办公系统",
+    "toolName": "oa_create_leave",
+    "nativeToolName": "mcp_mcp_nocobase_oa_oa_create_leave",
+    "description": "创建请假申请。自动填充申请人、部门、审批人（根据 current_user 映射）。",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "current_user": {
+          "type": "string",
+          "description": "当前 Octopus 用户名（如 baizh、test），系统自动映射为 OA 用户身份"
+        },
+        "leave_type": {
+          "type": "string",
+          "description": "请假类型: annual(年假) / sick(病假) / personal(事假) / marriage(婚假)",
+          "enum": [
+            "annual",
+            "sick",
+            "personal",
+            "marriage"
+          ]
+        },
+        "start_date": {
+          "type": "string",
+          "description": "开始日期，格式 YYYY-MM-DD"
+        },
+        "end_date": {
+          "type": "string",
+          "description": "结束日期，格式 YYYY-MM-DD"
+        },
+        "days": {
+          "type": "number",
+          "description": "请假天数（支持 0.5 天等小数）"
+        },
+        "reason": {
+          "type": "string",
+          "description": "请假原因"
+        }
+      },
+      "required": [
+        "current_user",
+        "leave_type",
+        "start_date",
+        "end_date",
+        "days",
+        "reason"
+      ]
+    }
+  },
+  {
+    "serverId": "mcp-nocobase-oa",
+    "serverName": "OA办公系统",
+    "toolName": "oa_approve_leave",
+    "nativeToolName": "mcp_mcp_nocobase_oa_oa_approve_leave",
+    "description": "审批请假申请。审批人根据 current_user 自动填充。",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "current_user": {
+          "type": "string",
+          "description": "当前 Octopus 用户名（如 baizh、test），系统自动映射为 OA 用户身份"
+        },
+        "record_id": {
+          "type": "integer",
+          "description": "请假记录 ID（从查询结果中获取）"
+        },
+        "status": {
+          "type": "string",
+          "description": "审批结果: approved(批准) / rejected(驳回)",
+          "enum": [
+            "approved",
+            "rejected"
+          ]
+        },
+        "approve_comment": {
+          "type": "string",
+          "description": "审批意见",
+          "default": ""
+        }
+      },
+      "required": [
+        "current_user",
+        "record_id",
+        "status"
+      ]
+    }
+  },
+  {
+    "serverId": "mcp-nocobase-oa",
+    "serverName": "OA办公系统",
+    "toolName": "oa_query_expenses",
+    "nativeToolName": "mcp_mcp_nocobase_oa_oa_query_expenses",
+    "description": "查询报销申请。经理默认看待审批的单据，员工默认看自己的申请。",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "current_user": {
+          "type": "string",
+          "description": "当前 Octopus 用户名（如 baizh、test），系统自动映射为 OA 用户身份"
+        },
+        "status": {
+          "type": "string",
+          "description": "按状态筛选: pending(待审批) / approved(已批准) / rejected(已驳回) / paid(已付款)",
+          "enum": [
+            "pending",
+            "approved",
+            "rejected",
+            "paid"
+          ]
+        },
+        "applicant": {
+          "type": "string",
+          "description": "按申请人筛选（覆盖自动视角）"
+        },
+        "role_view": {
+          "type": "string",
+          "description": "查看视角: my_requests(我的申请) / my_approvals(待我审批) / all(全部)",
+          "enum": [
+            "my_requests",
+            "my_approvals",
+            "all"
+          ]
+        }
+      },
+      "required": [
+        "current_user"
+      ]
+    }
+  },
+  {
+    "serverId": "mcp-nocobase-oa",
+    "serverName": "OA办公系统",
+    "toolName": "oa_create_expense",
+    "nativeToolName": "mcp_mcp_nocobase_oa_oa_create_expense",
+    "description": "创建报销申请。自动填充申请人、部门、审批人。",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "current_user": {
+          "type": "string",
+          "description": "当前 Octopus 用户名（如 baizh、test），系统自动映射为 OA 用户身份"
+        },
+        "expense_type": {
+          "type": "string",
+          "description": "报销类型: travel(差旅) / meal(餐饮) / office(办公) / other(其他)",
+          "enum": [
+            "travel",
+            "meal",
+            "office",
+            "other"
+          ]
+        },
+        "amount": {
+          "type": "number",
+          "description": "报销金额（元）"
+        },
+        "description": {
+          "type": "string",
+          "description": "报销说明"
+        },
+        "invoice_count": {
+          "type": "integer",
+          "description": "发票数量"
+        },
+        "expense_date": {
+          "type": "string",
+          "description": "消费日期，格式 YYYY-MM-DD"
+        }
+      },
+      "required": [
+        "current_user",
+        "expense_type",
+        "amount",
+        "description",
+        "invoice_count",
+        "expense_date"
+      ]
+    }
+  },
+  {
+    "serverId": "mcp-nocobase-oa",
+    "serverName": "OA办公系统",
+    "toolName": "oa_approve_expense",
+    "nativeToolName": "mcp_mcp_nocobase_oa_oa_approve_expense",
+    "description": "审批报销申请。审批人根据 current_user 自动填充。",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "current_user": {
+          "type": "string",
+          "description": "当前 Octopus 用户名（如 baizh、test），系统自动映射为 OA 用户身份"
+        },
+        "record_id": {
+          "type": "integer",
+          "description": "报销记录 ID（从查询结果中获取）"
+        },
+        "status": {
+          "type": "string",
+          "description": "审批结果: approved(批准) / rejected(驳回)",
+          "enum": [
+            "approved",
+            "rejected"
+          ]
+        },
+        "approve_comment": {
+          "type": "string",
+          "description": "审批意见",
+          "default": ""
+        }
+      },
+      "required": [
+        "current_user",
+        "record_id",
+        "status"
+      ]
+    }
+  },
+  {
+    "serverId": "mcp-nocobase-oa",
+    "serverName": "OA办公系统",
+    "toolName": "oa_query_trips",
+    "nativeToolName": "mcp_mcp_nocobase_oa_oa_query_trips",
+    "description": "查询出差申请。经理默认看待审批的单据，员工默认看自己的申请。",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "current_user": {
+          "type": "string",
+          "description": "当前 Octopus 用户名（如 baizh、test），系统自动映射为 OA 用户身份"
+        },
+        "status": {
+          "type": "string",
+          "description": "按状态筛选: pending(待审批) / approved(已批准) / rejected(已驳回)",
+          "enum": [
+            "pending",
+            "approved",
+            "rejected"
+          ]
+        },
+        "applicant": {
+          "type": "string",
+          "description": "按申请人筛选（覆盖自动视角）"
+        },
+        "role_view": {
+          "type": "string",
+          "description": "查看视角: my_requests / my_approvals / all",
+          "enum": [
+            "my_requests",
+            "my_approvals",
+            "all"
+          ]
+        }
+      },
+      "required": [
+        "current_user"
+      ]
+    }
+  },
+  {
+    "serverId": "mcp-nocobase-oa",
+    "serverName": "OA办公系统",
+    "toolName": "oa_create_trip",
+    "nativeToolName": "mcp_mcp_nocobase_oa_oa_create_trip",
+    "description": "创建出差申请。自动填充申请人、部门、审批人。",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "current_user": {
+          "type": "string",
+          "description": "当前 Octopus 用户名（如 baizh、test），系统自动映射为 OA 用户身份"
+        },
+        "destination": {
+          "type": "string",
+          "description": "出差地点（城市名）"
+        },
+        "purpose": {
+          "type": "string",
+          "description": "出差事由"
+        },
+        "start_date": {
+          "type": "string",
+          "description": "开始日期，格式 YYYY-MM-DD"
+        },
+        "end_date": {
+          "type": "string",
+          "description": "结束日期，格式 YYYY-MM-DD"
+        },
+        "days": {
+          "type": "number",
+          "description": "出差天数"
+        },
+        "budget": {
+          "type": "number",
+          "description": "预算金额（元）"
+        },
+        "transport": {
+          "type": "string",
+          "description": "交通方式: train(火车/高铁) / flight(飞机) / car(自驾) / other(其他)",
+          "enum": [
+            "train",
+            "flight",
+            "car",
+            "other"
+          ]
+        }
+      },
+      "required": [
+        "current_user",
+        "destination",
+        "purpose",
+        "start_date",
+        "end_date",
+        "days",
+        "budget",
+        "transport"
+      ]
+    }
+  },
+  {
+    "serverId": "mcp-nocobase-oa",
+    "serverName": "OA办公系统",
+    "toolName": "oa_approve_trip",
+    "nativeToolName": "mcp_mcp_nocobase_oa_oa_approve_trip",
+    "description": "审批出差申请。审批人根据 current_user 自动填充。",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "current_user": {
+          "type": "string",
+          "description": "当前 Octopus 用户名（如 baizh、test），系统自动映射为 OA 用户身份"
+        },
+        "record_id": {
+          "type": "integer",
+          "description": "出差记录 ID（从查询结果中获取）"
+        },
+        "status": {
+          "type": "string",
+          "description": "审批结果: approved(批准) / rejected(驳回)",
+          "enum": [
+            "approved",
+            "rejected"
+          ]
+        },
+        "approve_comment": {
+          "type": "string",
+          "description": "审批意见",
+          "default": ""
+        }
+      },
+      "required": [
+        "current_user",
+        "record_id",
+        "status"
+      ]
+    }
+  }
+]

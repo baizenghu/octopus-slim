@@ -48,6 +48,154 @@ export interface GatewayConfig {
 
 import * as path from 'path';
 
+// ─── 运行时配置（从 octopus.json enterprise 段读取，可在前端 SystemConfig 页配置） ───
+
+export interface RuntimeConfig {
+  /** 对话相关 */
+  chat: {
+    sseHeartbeatIntervalMs: number;
+    sessionPrefsTTLMs: number;
+    sessionPrefsCleanupIntervalMs: number;
+    maxAttachmentSizeBytes: number;
+    maxSessionTokensCache: number;
+    heartbeatSummaryMaxChars: number;
+  };
+  /** 上传限制 */
+  upload: {
+    maxFileSizeBytes: number;
+    maxSkillSizeBytes: number;
+    maxAvatarSizeBytes: number;
+  };
+  /** 安全与限流 */
+  security: {
+    loginFailThreshold: number;
+    loginFailWindowMs: number;
+    apiRateThreshold: number;
+    cleanupIntervalMs: number;
+    authCacheTTLMs: number;
+    authCacheMaxSize: number;
+    rateLimitWindowMs: number;
+    rateLimitMax: number;
+  };
+  /** 引擎交互 */
+  engine: {
+    port: number;
+    configBatchWindowMs: number;
+    maxConfigRetries: number;
+    agentInitTimeoutMs: number;
+  };
+  /** IM 相关 */
+  im: {
+    runTimeoutMs: number;
+    bindWindowMs: number;
+    bindMaxAttempts: number;
+    fileSizeLimitBytes: number;
+  };
+  /** 调度器 */
+  scheduler: {
+    defaultHeartbeatDelayMs: number;
+  };
+  /** 管理面板 */
+  admin: {
+    maxPageSize: number;
+    defaultAuditQueryLimit: number;
+    dashboardStatsDays: number;
+  };
+  /** 文件管理 */
+  files: {
+    tempLinkExpiryMs: number;
+  };
+  /** Skills */
+  skills: {
+    maxSkillMdChars: number;
+  };
+}
+
+const RUNTIME_DEFAULTS: RuntimeConfig = {
+  chat: {
+    sseHeartbeatIntervalMs: 15_000,
+    sessionPrefsTTLMs: 30 * 60 * 1000,
+    sessionPrefsCleanupIntervalMs: 5 * 60 * 1000,
+    maxAttachmentSizeBytes: 10 * 1024 * 1024,
+    maxSessionTokensCache: 2000,
+    heartbeatSummaryMaxChars: 2000,
+  },
+  upload: {
+    maxFileSizeBytes: 20 * 1024 * 1024,
+    maxSkillSizeBytes: 50 * 1024 * 1024,
+    maxAvatarSizeBytes: 2 * 1024 * 1024,
+  },
+  security: {
+    loginFailThreshold: 10,
+    loginFailWindowMs: 60 * 1000,
+    apiRateThreshold: 200,
+    cleanupIntervalMs: 5 * 60 * 1000,
+    authCacheTTLMs: 5 * 60 * 1000,
+    authCacheMaxSize: 1000,
+    rateLimitWindowMs: 60 * 1000,
+    rateLimitMax: 20,
+  },
+  engine: {
+    port: 19791,
+    configBatchWindowMs: 2000,
+    maxConfigRetries: 5,
+    agentInitTimeoutMs: 1500,
+  },
+  im: {
+    runTimeoutMs: 30 * 60 * 1000,
+    bindWindowMs: 15 * 60 * 1000,
+    bindMaxAttempts: 5,
+    fileSizeLimitBytes: 10 * 1024 * 1024,
+  },
+  scheduler: {
+    defaultHeartbeatDelayMs: 60_000,
+  },
+  admin: {
+    maxPageSize: 100,
+    defaultAuditQueryLimit: 50,
+    dashboardStatsDays: 7,
+  },
+  files: {
+    tempLinkExpiryMs: 5 * 60 * 1000,
+  },
+  skills: {
+    maxSkillMdChars: 8000,
+  },
+};
+
+let _runtimeConfig: RuntimeConfig = { ...RUNTIME_DEFAULTS };
+
+/** 从 octopus.json 的 enterprise 字段初始化运行时配置 */
+export function initRuntimeConfig(enterprise?: Record<string, any>): void {
+  if (!enterprise) {
+    _runtimeConfig = { ...RUNTIME_DEFAULTS };
+    return;
+  }
+  _runtimeConfig = {
+    chat: { ...RUNTIME_DEFAULTS.chat, ...enterprise.chat },
+    upload: { ...RUNTIME_DEFAULTS.upload, ...enterprise.upload },
+    security: { ...RUNTIME_DEFAULTS.security, ...enterprise.security },
+    engine: { ...RUNTIME_DEFAULTS.engine, ...enterprise.engine },
+    im: { ...RUNTIME_DEFAULTS.im, ...enterprise.im },
+    scheduler: { ...RUNTIME_DEFAULTS.scheduler, ...enterprise.scheduler },
+    admin: { ...RUNTIME_DEFAULTS.admin, ...enterprise.admin },
+    files: { ...RUNTIME_DEFAULTS.files, ...enterprise.files },
+    skills: { ...RUNTIME_DEFAULTS.skills, ...enterprise.skills },
+  };
+}
+
+/** 获取运行时配置 */
+export function getRuntimeConfig(): RuntimeConfig {
+  return _runtimeConfig;
+}
+
+/** 获取默认值（用于前端回显） */
+export function getRuntimeDefaults(): RuntimeConfig {
+  return RUNTIME_DEFAULTS;
+}
+
+// ─── 网关配置（从 .env 加载） ───
+
 /**
  * 从环境变量加载配置
  */

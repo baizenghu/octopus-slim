@@ -6,6 +6,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { cn } from '@/lib/utils';
 import type { AgentInfo, McpServerInfo, SkillInfo } from '../api';
+import type { Attachment } from '../types/chat';
 
 // shadcn/ui components
 import { Button } from '@/components/ui/button';
@@ -24,13 +25,6 @@ import {
   ChevronRight,
   Square,
 } from 'lucide-react';
-
-interface Attachment {
-  name: string;
-  content: string;  // 文本内容或 base64
-  type: string;     // MIME type
-  size: number;
-}
 
 /** 斜杠命令菜单项 */
 interface SlashMenuItem {

@@ -97,3 +97,12 @@ __pycache__/
 .octopus-state/feishu/
 .octopus-state/mcp-refresh-signal
 .octopus-state/extensions/
+
+# Browser data (engine sandbox browser)
+.octopus-state/browser/
+
+.octopus-state/sandboxes/
+.octopus-state/telegram/
+.octopus-state/media/
+.octopus-state/config-backups/
+.octopus-state/gateway/

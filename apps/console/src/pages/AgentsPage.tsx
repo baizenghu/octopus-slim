@@ -6,7 +6,7 @@
  * - 设置默认 Agent
  * - 配置系统提示、模型、工具过滤、Skills 过滤、MCP 过滤
  */
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Plus,
   Pencil,
@@ -18,6 +18,7 @@ import {
   Database,
   Loader2,
   ChevronDown,
+  Camera,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { adminApi, type AgentInfo, type SkillInfo, type McpServerInfo } from '../api';
@@ -46,6 +47,7 @@ import {
 } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 
 /** 内置 Emoji 快捷选择 */
 const EMOJI_OPTIONS = [
@@ -139,6 +141,9 @@ export default function AgentsPage({ onConfigAgent }: AgentsPageProps) {
   const [availableMcp, setAvailableMcp] = useState<McpServerInfo[]>([]);
   const [availableConnections, setAvailableConnections] = useState<{ name: string }[]>([]);
   const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
+  const [agentAvatarUrl, setAgentAvatarUrl] = useState<string | null>(null);
+  const [avatarUploading, setAvatarUploading] = useState(false);
+  const agentAvatarInputRef = useRef<HTMLInputElement>(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -202,6 +207,7 @@ export default function AgentsPage({ onConfigAgent }: AgentsPageProps) {
     setFormMcpFilter([]);
     setFormConnFilterEnabled(false);
     setFormAllowedConnections([]);
+    setAgentAvatarUrl(null);
   };
 
   const openCreateModal = async () => {
@@ -225,6 +231,33 @@ export default function AgentsPage({ onConfigAgent }: AgentsPageProps) {
     setModalOpen(true);
   };
 
+  const handleAgentAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !editingAgent) return;
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error('头像文件不能超过 2MB');
+      return;
+    }
+    setAvatarUploading(true);
+    try {
+      const res = await adminApi.uploadAgentAvatar(editingAgent.id, file);
+      setAgentAvatarUrl(res.avatarUrl + `?t=${Date.now()}`);
+      // 更新列表中的 agent identity
+      setAgents(prev => prev.map(a =>
+        a.id === editingAgent.id
+          ? { ...a, identity: { ...a.identity, avatar: res.avatarUrl } }
+          : a
+      ));
+      toast.success('Agent 头像已更新');
+    } catch (err: unknown) {
+      const error = err as Error;
+      toast.error(error.message || '头像上传失败');
+    } finally {
+      setAvatarUploading(false);
+      if (agentAvatarInputRef.current) agentAvatarInputRef.current.value = '';
+    }
+  };
+
   const openEditModal = (agent: AgentInfo) => {
     refreshModels();
     setEditingAgent(agent);
@@ -244,6 +277,12 @@ export default function AgentsPage({ onConfigAgent }: AgentsPageProps) {
     setFormMcpFilter(agent.mcpFilter || []);
     setFormConnFilterEnabled(Array.isArray(agent.allowedConnections) && agent.allowedConnections.length > 0);
     setFormAllowedConnections(agent.allowedConnections || []);
+    // 加载 agent 头像
+    if (agent.identity?.avatar) {
+      setAgentAvatarUrl(agent.identity.avatar + `?t=${Date.now()}`);
+    } else {
+      setAgentAvatarUrl(adminApi.getAgentAvatarUrl(agent.id) + `?t=${Date.now()}`);
+    }
     loadOptions();
     setModalOpen(true);
   };
@@ -568,6 +607,48 @@ export default function AgentsPage({ onConfigAgent }: AgentsPageProps) {
                   </div>
                 </div>
               </div>
+
+              {/* Agent 头像上传（仅编辑模式） */}
+              {editingAgent && (
+                <div className="space-y-2">
+                  <Label>Agent 头像</Label>
+                  <div className="flex items-center gap-4">
+                    <div className="relative group">
+                      <Avatar className="h-16 w-16">
+                        <AvatarImage
+                          src={agentAvatarUrl || undefined}
+                          alt={formIdentityName || formName}
+                          onError={() => setAgentAvatarUrl(null)}
+                        />
+                        <AvatarFallback className="text-xl bg-muted">
+                          {formIdentityEmoji || <Bot className="h-6 w-6 text-muted-foreground" />}
+                        </AvatarFallback>
+                      </Avatar>
+                      <button
+                        className="absolute inset-0 flex items-center justify-center rounded-full bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                        onClick={() => agentAvatarInputRef.current?.click()}
+                        disabled={avatarUploading}
+                      >
+                        {avatarUploading ? (
+                          <Loader2 className="h-4 w-4 text-white animate-spin" />
+                        ) : (
+                          <Camera className="h-4 w-4 text-white" />
+                        )}
+                      </button>
+                      <input
+                        ref={agentAvatarInputRef}
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp"
+                        className="hidden"
+                        onChange={handleAgentAvatarUpload}
+                      />
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      点击上传头像（限 2MB，PNG/JPG/WebP）
+                    </p>
+                  </div>
+                </div>
+              )}
 
               {/* Vibe（性格/风格描述） */}
               <div className="space-y-2">

@@ -6,10 +6,27 @@
 
 import type { Request, Response, NextFunction } from 'express';
 import type { AuthService, User, Role } from '@octopus/auth';
+import { getRuntimeConfig } from '../config';
 
 /** 扩展 Express Request 类型，附加 user 信息 */
 export interface AuthenticatedRequest extends Request {
   user?: User;
+}
+
+/** 检查用户是否具有管理员角色 */
+export function isAdmin(user?: { roles?: unknown }): boolean {
+  const roles = user?.roles;
+  if (!Array.isArray(roles)) return false;
+  return roles.some((r: unknown) => typeof r === 'string' && r.toLowerCase() === 'admin');
+}
+
+/** 管理员权限中间件，需配合 authMiddleware 使用 */
+export function adminOnly(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  if (!isAdmin(req.user)) {
+    res.status(403).json({ error: '需要管理员权限' });
+    return;
+  }
+  next();
 }
 
 /**
@@ -28,8 +45,8 @@ export function createAuthMiddleware(authService: AuthService, prisma?: { user: 
     expires: number;
   }
   const userIdCache = new Map<string, CacheEntry>();
-  const CACHE_TTL = 5 * 60 * 1000; // 5 分钟
-  const CACHE_MAX_SIZE = 1000;
+  const CACHE_TTL = getRuntimeConfig().security.authCacheTTLMs;
+  const CACHE_MAX_SIZE = getRuntimeConfig().security.authCacheMaxSize;
 
   function cacheGet(key: string): CacheEntry | undefined {
     const entry = userIdCache.get(key);

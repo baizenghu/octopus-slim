@@ -12,12 +12,15 @@
 
 import { Router } from 'express';
 import { randomUUID } from 'crypto';
+import * as fs from 'fs';
+import * as path from 'path';
 import type { AuthService } from '@octopus/auth';
 import type { WorkspaceManager } from '@octopus/workspace';
 import { createAuthMiddleware, type AuthenticatedRequest } from '../middleware/auth';
 import type { EngineAdapter } from '../services/EngineAdapter';
 import { syncAgentToEngine, ensureAndSyncNativeAgent } from '../services/AgentConfigSync';
 import { invalidatePromptCache } from '../services/SystemPromptBuilder';
+import { createAvatarUpload, mimeToExt } from '../utils/avatar';
 
 import type { AppPrismaClient } from '../types/prisma';
 import { resolve as pathResolve } from 'path';
@@ -160,6 +163,8 @@ export function createAgentsRouter(
   const defaultCheckedUsers = new Set<string>();
   async function ensureDefaultAgent(userId: string) {
     if (defaultCheckedUsers.has(userId)) return;
+    // 防止内存无限增长（超限时清空重来，最多导致多查一次 DB）
+    if (defaultCheckedUsers.size > 5000) defaultCheckedUsers.clear();
     defaultCheckedUsers.add(userId);
     const existing = await prisma.agent.findFirst({
       where: { ownerId: userId, name: 'default' },
@@ -574,6 +579,138 @@ export function createAgentsRouter(
       res.json({ agent });
     } catch (err) {
       next(err);
+    }
+  });
+
+  // ─── Agent 头像 ───
+
+  /**
+   * 上传 Agent 头像
+   */
+  router.post('/:id/avatar', authMiddleware, (req, res, next) => {
+    const { id } = req.params;
+
+    // 路径穿越防护：仅允许安全字符
+    if (!/^[\w-]+$/.test(id)) {
+      res.status(400).json({ error: 'Invalid agent ID' });
+      return;
+    }
+
+    createAvatarUpload().single('avatar')(req, res, (err: any) => {
+      if (err) {
+        res.status(400).json({ error: err.message });
+        return;
+      }
+      (async () => {
+        try {
+          const authReq = req as AuthenticatedRequest;
+          const user = authReq.user!;
+          const file = (req as any).file;
+
+          if (!file) {
+            res.status(400).json({ error: '请选择头像文件' });
+            return;
+          }
+
+          // 验证 agent 归属
+          const existing = await prisma.agent.findFirst({
+            where: { id, ownerId: user.id },
+          });
+          if (!existing) {
+            res.status(404).json({ error: 'Agent not found' });
+            return;
+          }
+
+          const ext = mimeToExt(file.mimetype);
+          const avatarDir = path.join(dataRoot || './data', 'avatars', 'agents', id);
+          await fs.promises.mkdir(avatarDir, { recursive: true });
+
+          // 删除旧头像（可能是不同扩展名）
+          try {
+            const files = await fs.promises.readdir(avatarDir);
+            for (const f of files) {
+              if (f.startsWith('avatar.')) {
+                await fs.promises.unlink(path.join(avatarDir, f));
+              }
+            }
+          } catch { /* ignore */ }
+
+          const avatarPath = path.join(avatarDir, `avatar.${ext}`);
+          await fs.promises.writeFile(avatarPath, file.buffer);
+
+          // 更新 DB identity JSON 中的 avatar 字段
+          const currentIdentity = (existing.identity as any) || {};
+          const avatarUrl = `/api/agents/${id}/avatar`;
+          const newIdentity = { ...currentIdentity, avatar: avatarUrl };
+          await prisma.agent.update({
+            where: { id },
+            data: { identity: newIdentity },
+          });
+
+          // 同步写入 IDENTITY.md 的 avatar 字段
+          if (bridge?.isConnected) {
+            try {
+              const { EngineAdapter: EA } = await import('../services/EngineAdapter');
+              const nativeAgentId = EA.userAgentId(user.id, existing.name);
+              // 读取现有 IDENTITY.md 内容
+              let identityContent = '';
+              try {
+                const result = await bridge.agentFilesGet(nativeAgentId, 'IDENTITY.md') as any;
+                if (typeof result === 'string') {
+                  identityContent = result;
+                } else if (result?.file) {
+                  identityContent = typeof result.file === 'string' ? result.file : (result.file?.content ?? '');
+                } else {
+                  identityContent = result?.content ?? '';
+                }
+              } catch { /* file not found */ }
+
+              // 更新或添加 avatar 行
+              const lines = identityContent.split('\n').filter((l: string) => !l.startsWith('avatar:'));
+              lines.push(`avatar: ${avatarUrl}`);
+              await bridge.agentFilesSet(nativeAgentId, 'IDENTITY.md', lines.join('\n'));
+            } catch (e: any) {
+              console.error('[agents] avatar IDENTITY.md sync failed:', e.message);
+            }
+          }
+
+          res.json({ ok: true, avatarUrl });
+        } catch (err) {
+          next(err);
+        }
+      })();
+    });
+  });
+
+  /**
+   * 获取 Agent 头像（无需 JWT，用于 img src 直接引用）
+   */
+  router.get('/:id/avatar', async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      // 路径穿越防护：仅允许安全字符
+      if (!/^[\w-]+$/.test(id)) {
+        res.status(400).json({ error: 'Invalid agent ID' });
+        return;
+      }
+
+      // 在 avatars 目录查找
+      const avatarDir = path.join(dataRoot || './data', 'avatars', 'agents', id);
+      try {
+        const files = await fs.promises.readdir(avatarDir);
+        const avatarFile = files.find(f => f.startsWith('avatar.'));
+        if (avatarFile) {
+          const fullPath = path.join(avatarDir, avatarFile);
+          res.setHeader('Cache-Control', 'public, max-age=3600');
+          res.sendFile(path.resolve(fullPath));
+          return;
+        }
+      } catch { /* directory not found */ }
+
+      res.status(404).json({ error: '头像不存在' });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || '获取头像失败' });
     }
   });
 

@@ -311,25 +311,6 @@ class AdminApi {
     return this.request<{ message: string }>(`/admin/users/${id}`, { method: 'DELETE' });
   }
 
-  // ─── Quotas ───
-
-  async getUserQuota(userId: string) {
-    return this.request<{
-      userId: string;
-      tokenDaily: number;
-      tokenMonthly: number;
-      requestHourly: number;
-      limits: Record<string, number>;
-    }>(`/quotas/${userId}`);
-  }
-
-  async setUserQuota(userId: string, type: string, limit: number) {
-    return this.request<{ message: string }>(`/quotas/${userId}`, {
-      method: 'PUT',
-      body: JSON.stringify({ type, limit }),
-    });
-  }
-
   // ─── Dashboard ───
 
   async getDashboard() {
@@ -643,6 +624,46 @@ class AdminApi {
     return this.request<{ message: string }>(`/skills/personal/${id}`, { method: 'DELETE' });
   }
 
+  // ─── Avatars ───
+
+  async uploadUserAvatar(file: File): Promise<{ ok: boolean; avatarUrl: string }> {
+    const formData = new FormData();
+    formData.append('avatar', file);
+    const res = await fetch(`${API_BASE}/auth/avatar`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${this.token}` },
+      body: formData,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: res.statusText }));
+      throw new Error(err.error || '头像上传失败');
+    }
+    return res.json();
+  }
+
+  async uploadAgentAvatar(agentId: string, file: File): Promise<{ ok: boolean; avatarUrl: string }> {
+    const formData = new FormData();
+    formData.append('avatar', file);
+    const res = await fetch(`${API_BASE}/agents/${agentId}/avatar`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${this.token}` },
+      body: formData,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: res.statusText }));
+      throw new Error(err.error || '头像上传失败');
+    }
+    return res.json();
+  }
+
+  getUserAvatarUrl(userId: string): string {
+    return `${API_BASE}/auth/avatar/${userId}`;
+  }
+
+  getAgentAvatarUrl(agentId: string): string {
+    return `${API_BASE}/agents/${agentId}/avatar`;
+  }
+
   // ─── Agents ───
 
   async getAgents() {
@@ -766,7 +787,7 @@ class AdminApi {
     });
   }
 
-  async updatePluginsConfig(data: { allow: string[]; entries: Record<string, any> }) {
+  async updatePluginsConfig(data: { allow?: string[]; entries: Record<string, any> }) {
     return this.request<{ ok: boolean }>('/admin/config/plugins', {
       method: 'PUT',
       body: JSON.stringify(data),
@@ -775,6 +796,13 @@ class AdminApi {
 
   async updateToolsConfig(data: { loopDetection: any; exec: any; fs: any }) {
     return this.request<{ ok: boolean }>('/admin/config/tools', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateRuntimeConfig(data: Record<string, any>) {
+    return this.request<{ ok: boolean }>('/admin/config/runtime', {
       method: 'PUT',
       body: JSON.stringify(data),
     });

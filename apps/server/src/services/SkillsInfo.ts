@@ -9,9 +9,7 @@
 import * as path from 'path';
 import * as fs from 'fs';
 import type { AppPrismaClient } from '../types/prisma';
-
-/** 每个技能 SKILL.md 内容的最大字符数（防止系统提示过长） */
-const MAX_SKILLMD_CHARS = 8000;
+import { getRuntimeConfig } from '../config';
 
 export interface SkillSummary {
   id: string;
@@ -79,8 +77,9 @@ export async function getSkillsForUser(
           const skillMdPath = path.join(skillDir, 'SKILL.md');
           if (fs.existsSync(skillMdPath)) {
             let content = fs.readFileSync(skillMdPath, 'utf-8');
-            if (content.length > MAX_SKILLMD_CHARS) {
-              content = content.substring(0, MAX_SKILLMD_CHARS) + '\n\n... (内容已截断)';
+            const maxChars = getRuntimeConfig().skills.maxSkillMdChars;
+            if (content.length > maxChars) {
+              content = content.substring(0, maxChars) + '\n\n... (内容已截断)';
             }
             skill.skillMdContent = content;
           }

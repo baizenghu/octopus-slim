@@ -32,7 +32,7 @@ import multer from 'multer';
 import { MCPRegistry, MCPExecutor, MCPSandbox } from '@octopus/mcp';
 import type { MCPServerConfig } from '@octopus/mcp';
 import type { AuthService } from '@octopus/auth';
-import { createAuthMiddleware, type AuthenticatedRequest } from '../middleware/auth';
+import { createAuthMiddleware, adminOnly, isAdmin, type AuthenticatedRequest } from '../middleware/auth';
 import type { AppPrismaClient } from '../types/prisma';
 import { validateMcpUrl } from '../utils/url-validator';
 
@@ -70,16 +70,6 @@ export function createMcpRouter(
   /** 用户工作空间基目录 */
   const usersBase = path.resolve(dataRoot, 'users');
 
-  // 管理员权限检查
-  const adminOnly = (req: AuthenticatedRequest, res: any, next: any) => {
-    const roles = req.user?.roles as string[] | undefined;
-    if (!roles?.some((r: string) => r.toLowerCase() === 'admin')) {
-      res.status(403).json({ error: '需要管理员权限' });
-      return;
-    }
-    next();
-  };
-
   // Prisma → MCPServerConfig 转换
   function toConfig(row: any): MCPServerConfig {
     return {
@@ -107,10 +97,10 @@ export function createMcpRouter(
   router.get('/servers', authMiddleware, async (req: AuthenticatedRequest, res, next) => {
     try {
       const user = req.user!;
-      const isAdmin = (user.roles as string[])?.some((r: string) => r.toLowerCase() === 'admin');
+      const userIsAdmin = isAdmin(user);
 
       let servers;
-      if (isAdmin) {
+      if (userIsAdmin) {
         servers = await prisma.mCPServer.findMany({ orderBy: { createdAt: 'desc' } });
       } else {
         servers = await prisma.mCPServer.findMany({
@@ -320,8 +310,7 @@ export function createMcpRouter(
 
       // 所有权校验：personal scope 需要 owner 或 admin
       if (row.scope === 'personal' && row.ownerId !== req.user!.id) {
-        const isAdmin = (req.user!.roles as string[])?.some((r: string) => r.toLowerCase() === 'admin');
-        if (!isAdmin) {
+        if (!isAdmin(req.user)) {
           res.status(403).json({ error: '无权操作此 MCP Server' });
           return;
         }
@@ -366,8 +355,7 @@ export function createMcpRouter(
 
       // 所有权校验：personal scope 需要 owner 或 admin
       if (row.scope === 'personal' && row.ownerId !== req.user!.id) {
-        const isAdmin = (req.user!.roles as string[])?.some((r: string) => r.toLowerCase() === 'admin');
-        if (!isAdmin) {
+        if (!isAdmin(req.user)) {
           res.status(403).json({ error: '无权操作此 MCP Server' });
           return;
         }

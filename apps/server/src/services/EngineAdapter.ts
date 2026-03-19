@@ -9,6 +9,7 @@
 import { createHash, randomUUID } from 'crypto';
 import { EventEmitter } from 'events';
 import { ConfigBatcher } from '../utils/config-batcher';
+import { getRuntimeConfig } from '../config';
 
 // 全局 Symbol，与引擎 server-plugins.ts 中一致
 const FALLBACK_GATEWAY_CONTEXT_KEY = Symbol.for("octopus.fallbackGatewayContextState");
@@ -39,6 +40,7 @@ export interface AgentStreamEvent {
   type: 'text_delta' | 'tool_call' | 'lifecycle' | 'thinking' | 'error' | 'done';
   content?: string;
   toolName?: string;
+  toolCallId?: string;
   toolArgs?: string;
   toolResult?: string;
   phase?: string;
@@ -62,13 +64,13 @@ export class EngineAdapter extends EventEmitter {
     super();
     this.configBatcher = new ConfigBatcher(
       (patch) => this.configApply(patch),
-      2000,
+      getRuntimeConfig().engine.configBatchWindowMs,
     );
   }
 
   // ---- 生命周期 ----
 
-  async initialize(port = 19791): Promise<void> {
+  async initialize(port = getRuntimeConfig().engine.port): Promise<void> {
     // 动态导入引擎的 gateway 启动函数（不透明导入避免 TS 追踪）
     const { startGatewayServer } = await opaqueImport(`${ENGINE_ROOT}gateway/server.js`);
 
@@ -105,6 +107,24 @@ export class EngineAdapter extends EventEmitter {
       }
     } catch (e: any) {
       console.warn('[engine] Heartbeat event listener failed:', e.message);
+    }
+
+    // 订阅 cron 事件（通过 fallback context 拿到 cron service）
+    try {
+      const state = (globalThis as any)[FALLBACK_GATEWAY_CONTEXT_KEY];
+      const cronService = state?.context?.cron;
+      if (cronService?._state?.deps) {
+        const originalOnEvent = cronService._state.deps.onEvent;
+        cronService._state.deps.onEvent = (evt: any) => {
+          originalOnEvent?.(evt);
+          if (evt.action === 'finished') {
+            this.emit('cron_finished', evt);
+          }
+        };
+        console.log('[engine] Cron event listener registered');
+      }
+    } catch (e: any) {
+      console.warn('[engine] Cron event listener failed:', e.message);
     }
 
     this.initialized = true;
@@ -221,20 +241,55 @@ export class EngineAdapter extends EventEmitter {
     // 订阅该次运行的事件
     let serverRunId: string | null = null;
     let cleaned = false;
+    // 追踪 pending tool calls，只在 result 阶段发出合并后的事件
+    const pendingToolCalls = new Map<string, { name: string; args: unknown }>();
     const cleanup = () => {
       if (cleaned) return;
       cleaned = true;
+      pendingToolCalls.clear();
       unsubscribe();
       this.off('_agent_async_error', asyncErrorHandler);
     };
 
     const unsubscribe = onAgentEvent((evt: any) => {
-      // 调试：记录 tool 事件
-      if (evt.stream === 'tool') {
-        console.log(`[engine] tool event: runId=${evt.runId}, tracked=${this.trackedRunIds.has(evt.runId)}, name=${evt.data?.toolName || evt.data?.name}`);
-      }
       // 只处理本次运行的事件
       if (!this.trackedRunIds.has(evt.runId)) return;
+
+      // tool 事件特殊处理：合并 start/update/result 为单次发送
+      if (evt.stream === 'tool') {
+        const data = evt.data || {};
+        const phase = data.phase as string;
+        const toolCallId = data.toolCallId as string | undefined;
+        const toolName = (data.name || data.toolName) as string;
+
+        if (phase === 'start' && toolCallId) {
+          // 存入 pending，不发事件
+          pendingToolCalls.set(toolCallId, { name: toolName, args: data.args });
+          return;
+        }
+        if (phase === 'update') {
+          // 忽略 update，不发事件
+          return;
+        }
+        if (phase === 'result' && toolCallId) {
+          // 从 pending 取出 args，合并 result，发出一次完整事件
+          const pending = pendingToolCalls.get(toolCallId);
+          pendingToolCalls.delete(toolCallId);
+          const args = pending?.args ?? data.args;
+          const name = pending?.name || toolName;
+          onEvent({
+            type: 'tool_call',
+            toolCallId,
+            toolName: name,
+            toolArgs: args ? (typeof args === 'string' ? args : JSON.stringify(args)) : undefined,
+            toolResult: data.result ? (typeof data.result === 'string' ? data.result : JSON.stringify(data.result)) : undefined,
+            runId: evt.runId,
+          });
+          return;
+        }
+        // fallback: 无 toolCallId 或未知 phase，走原有逻辑
+      }
+
       const mapped = this.mapEngineEvent(evt);
       if (mapped) {
         onEvent(mapped);
@@ -299,9 +354,10 @@ export class EngineAdapter extends EventEmitter {
       case 'tool':
         return {
           type: 'tool_call',
-          toolName: (data.toolName || (data as any).name) as string,
-          toolArgs: typeof data.args === 'string' ? data.args : JSON.stringify(data.args ?? ''),
-          toolResult: typeof data.result === 'string' ? data.result : JSON.stringify(data.result ?? ''),
+          toolName: ((data.toolName || data.name) as string) ?? 'unknown',
+          toolCallId: data.toolCallId as string | undefined,
+          toolArgs: data.args ? (typeof data.args === 'string' ? data.args : JSON.stringify(data.args)) : undefined,
+          toolResult: data.result ? (typeof data.result === 'string' ? data.result : JSON.stringify(data.result)) : undefined,
           runId,
         };
       case 'lifecycle':
@@ -408,7 +464,8 @@ export class EngineAdapter extends EventEmitter {
   }
 
   async configApplyFull(fullConfig: Record<string, unknown>): Promise<void> {
-    for (let attempt = 0; attempt < 5; attempt++) {
+    const maxRetries = getRuntimeConfig().engine.maxConfigRetries;
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
       const { config: latest, hash: baseHash } = await this.configGetParsed();
       if (!baseHash) throw new Error('config.get did not return hash');
       const merged = { ...fullConfig };
@@ -418,7 +475,7 @@ export class EngineAdapter extends EventEmitter {
         await this.call('config.set', { raw: JSON.stringify(merged), baseHash });
         return;
       } catch (e: any) {
-        if (attempt < 4 && (e.message?.includes('config changed since last load') || e.message?.includes('rate limit'))) {
+        if (attempt < maxRetries - 1 && (e.message?.includes('config changed since last load') || e.message?.includes('rate limit'))) {
           const delay = e.message?.includes('rate limit')
             ? (parseInt(e.message.match(/retry after (\d+)s/)?.[1] || '10', 10) * 1000 + 1000)
             : (500 * (attempt + 1));
@@ -433,7 +490,8 @@ export class EngineAdapter extends EventEmitter {
 
   async configApply(patch: Record<string, unknown>): Promise<void> {
     const { deepMerge } = await import('../utils/deep-merge');
-    for (let attempt = 0; attempt < 5; attempt++) {
+    const maxRetries = getRuntimeConfig().engine.maxConfigRetries;
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
       const { config, hash: baseHash } = await this.configGetParsed();
       if (!baseHash) throw new Error('config.get did not return hash');
       const merged = deepMerge(config, patch);
@@ -441,7 +499,7 @@ export class EngineAdapter extends EventEmitter {
         await this.call('config.set', { raw: JSON.stringify(merged), baseHash });
         return;
       } catch (e: any) {
-        if (attempt < 4 && (e.message?.includes('config changed since last load') || e.message?.includes('rate limit'))) {
+        if (attempt < maxRetries - 1 && (e.message?.includes('config changed since last load') || e.message?.includes('rate limit'))) {
           const delay = e.message?.includes('rate limit')
             ? (parseInt(e.message.match(/retry after (\d+)s/)?.[1] || '10', 10) * 1000 + 1000)
             : (500 * (attempt + 1));

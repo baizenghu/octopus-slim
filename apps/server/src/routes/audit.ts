@@ -12,23 +12,12 @@ import type { AuthService } from '@octopus/auth';
 import type { AuditLogger } from '@octopus/audit';
 import { AuditAction } from '@octopus/audit';
 import type { AuditExportFormat, AuditQueryFilters } from '@octopus/audit';
-import { createAuthMiddleware, type AuthenticatedRequest } from '../middleware/auth';
+import { createAuthMiddleware, adminOnly, type AuthenticatedRequest } from '../middleware/auth';
+import { getRuntimeConfig } from '../config';
 
 export function createAuditRouter(authService: AuthService, auditLogger: AuditLogger): Router {
   const router = Router();
   const authMiddleware = createAuthMiddleware(authService);
-
-  /**
-   * ADMIN 权限检查中间件
-   */
-  const adminOnly = (req: AuthenticatedRequest, res: any, next: any) => {
-    const user = req.user;
-    if (!user || !(user.roles as string[])?.some(r => r.toLowerCase() === 'admin')) {
-      res.status(403).json({ error: 'Admin access required' });
-      return;
-    }
-    next();
-  };
 
   /**
    * 查询审计日志
@@ -43,7 +32,10 @@ export function createAuditRouter(authService: AuthService, auditLogger: AuditLo
         endTime: req.query.endTime as string,
         success: req.query.success !== undefined ? req.query.success === 'true' : undefined,
         resource: req.query.resource as string,
-        limit: req.query.limit ? parseInt(req.query.limit as string, 10) : 50,
+        limit: Math.min(
+          req.query.limit ? parseInt(req.query.limit as string, 10) : getRuntimeConfig().admin.defaultAuditQueryLimit,
+          getRuntimeConfig().admin.maxPageSize,
+        ),
         offset: req.query.offset ? parseInt(req.query.offset as string, 10) : 0,
         orderBy: (req.query.orderBy as 'asc' | 'desc') || 'desc',
       };

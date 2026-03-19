@@ -1,6 +1,6 @@
 /**
  * 系统配置管理页面（Admin Only）
- * 3 个 Tab：模型管理 / 插件配置 / 安全与工具
+ * 4 个 Tab：模型管理 / 插件配置 / 安全与工具 / 运行参数
  */
 import { useState, useEffect, useCallback } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -11,6 +11,7 @@ import { adminApi } from '../api';
 import SystemConfigModels from './SystemConfigModels';
 import SystemConfigPlugins from './SystemConfigPlugins';
 import SystemConfigTools from './SystemConfigTools';
+import SystemConfigRuntime from './SystemConfigRuntime';
 
 export default function SystemConfigPage() {
   const [config, setConfig] = useState<Record<string, any> | null>(null);
@@ -51,6 +52,7 @@ export default function SystemConfigPage() {
           <TabsTrigger value="models">模型管理</TabsTrigger>
           <TabsTrigger value="plugins">插件配置</TabsTrigger>
           <TabsTrigger value="tools">安全与工具</TabsTrigger>
+          <TabsTrigger value="runtime">运行参数</TabsTrigger>
         </TabsList>
         <TabsContent value="models">
           <SystemConfigModels config={config} onSaved={loadConfig} />
@@ -60,6 +62,9 @@ export default function SystemConfigPage() {
         </TabsContent>
         <TabsContent value="tools">
           <SystemConfigTools config={config} onSaved={loadConfig} />
+        </TabsContent>
+        <TabsContent value="runtime">
+          <SystemConfigRuntime config={config} onSaved={loadConfig} />
         </TabsContent>
       </Tabs>
     </div>

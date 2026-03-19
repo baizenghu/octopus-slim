@@ -20,6 +20,7 @@ import * as fs from 'fs';
 import * as fsp from 'fs/promises';
 import { randomBytes } from 'crypto';
 import type { GatewayConfig } from '../config';
+import { getRuntimeConfig } from '../config';
 import { createAuthMiddleware, type AuthenticatedRequest } from '../middleware/auth';
 import type { AuthService } from '@octopus/auth';
 import type { WorkspaceManager } from '@octopus/workspace';
@@ -52,9 +53,6 @@ const ALLOWED_EXTENSIONS = new Set([
   '.zip', '.tar', '.gz',
 ]);
 
-/** 最大文件大小（字节） */
-const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB
-
 export function createFilesRouter(
   _config: GatewayConfig,
   authService: AuthService,
@@ -63,6 +61,9 @@ export function createFilesRouter(
 ): Router {
   const router = Router();
   const authMiddleware = createAuthMiddleware(authService);
+
+  /** 最大文件大小（字节），从运行时配置读取 */
+  const MAX_FILE_SIZE = getRuntimeConfig().upload.maxFileSizeBytes;
 
   // multer 配置：使用内存存储（先验证再写入）
   const upload = multer({
@@ -255,11 +256,18 @@ export function createFilesRouter(
     }
 
     const user = req.user!;
+
+    // 防止内存无限增长
+    if (downloadTokens.size >= 10000) {
+      res.status(429).json({ error: '下载令牌数量超限，请稍后重试' });
+      return;
+    }
+
     const token = randomBytes(16).toString('hex');
     downloadTokens.set(token, {
       userId: user.id,
       filePath,
-      expires: Date.now() + 5 * 60 * 1000, // 5 分钟
+      expires: Date.now() + getRuntimeConfig().files.tempLinkExpiryMs,
     });
 
     res.json({ token, expiresIn: 300 });

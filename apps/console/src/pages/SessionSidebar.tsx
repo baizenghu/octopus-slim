@@ -39,13 +39,10 @@ import {
   Search,
   Trash2,
   Pencil,
-  Download,
   PanelLeftClose,
   PanelLeft,
   MoreHorizontal,
   MessageSquare,
-  Sparkles,
-  FileText,
 } from 'lucide-react';
 
 export interface SessionSidebarProps {
@@ -58,8 +55,6 @@ export interface SessionSidebarProps {
   onNewSession: () => void;
   onDeleteSession: (sessionId: string) => Promise<void>;
   onRenameSession: (sessionId: string, title: string) => Promise<void>;
-  onGenerateTitle: (sessionId: string) => void;
-  onExport: (sessionId: string, format: string) => Promise<void>;
   isStreaming: boolean;
   collapsed: boolean;
   onToggleCollapse: () => void;
@@ -80,8 +75,6 @@ export default function SessionSidebar({
   onNewSession,
   onDeleteSession,
   onRenameSession,
-  onGenerateTitle,
-  onExport,
   isStreaming,
   collapsed,
   onToggleCollapse,
@@ -270,19 +263,6 @@ export default function SessionSidebar({
                         <DropdownMenuItem onClick={() => startRename(s.sessionId, s.title)}>
                           <Pencil className="mr-2 h-3.5 w-3.5" />
                           重命名
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => onGenerateTitle(s.sessionId)}>
-                          <Sparkles className="mr-2 h-3.5 w-3.5" />
-                          AI 生成标题
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem disabled title="功能开发中">
-                          <FileText className="mr-2 h-3.5 w-3.5" />
-                          导出 Markdown
-                        </DropdownMenuItem>
-                        <DropdownMenuItem disabled title="功能开发中">
-                          <Download className="mr-2 h-3.5 w-3.5" />
-                          导出 JSON
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem

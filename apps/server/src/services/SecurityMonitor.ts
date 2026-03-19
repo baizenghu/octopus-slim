@@ -1,4 +1,5 @@
 import { EventEmitter } from 'events';
+import { getRuntimeConfig } from '../config';
 
 interface SecurityEvent {
   type: 'login_failure_burst' | 'suspicious_api_pattern' | 'sandbox_anomaly' | 'auth_bypass_attempt';
@@ -16,12 +17,12 @@ export class SecurityMonitor extends EventEmitter {
   private loginFailures = new Map<string, { count: number; firstAt: number }>();
   private apiCallCounts = new Map<string, { count: number; windowStart: number }>();
 
-  // 阈值配置
-  private readonly LOGIN_BURST_THRESHOLD = 10; // 10 次失败
-  private readonly LOGIN_BURST_WINDOW = 60 * 1000; // 1 分钟内
-  private readonly API_RATE_THRESHOLD = 200; // 200 次调用
+  // 阈值配置（从运行时配置读取）
+  private get LOGIN_BURST_THRESHOLD() { return getRuntimeConfig().security.loginFailThreshold; }
+  private get LOGIN_BURST_WINDOW() { return getRuntimeConfig().security.loginFailWindowMs; }
+  private get API_RATE_THRESHOLD() { return getRuntimeConfig().security.apiRateThreshold; }
   private readonly API_RATE_WINDOW = 60 * 1000; // 1 分钟内
-  private readonly CLEANUP_INTERVAL = 5 * 60 * 1000; // 5 分钟清理
+  private get CLEANUP_INTERVAL() { return getRuntimeConfig().security.cleanupIntervalMs; }
 
   private cleanupTimer: NodeJS.Timeout | null = null;
   private alertCooldowns = new Map<string, number>(); // 防止告警风暴

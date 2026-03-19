@@ -58,10 +58,3 @@ export function decryptPassword(ciphertext: string): string {
     return ciphertext;
   }
 }
-
-/**
- * 判断密码是否已加密（格式为 hex:hex:hex）
- */
-export function isEncrypted(value: string): boolean {
-  return /^[0-9a-f]{24}:[0-9a-f]{32}:[0-9a-f]+$/.test(value);
-}

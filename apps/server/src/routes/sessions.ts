@@ -20,7 +20,6 @@ import { Router } from 'express';
 import type { AuthService } from '@octopus/auth';
 import type { WorkspaceManager } from '@octopus/workspace';
 import type { AuditLogger } from '@octopus/audit';
-import type { QuotaManager } from '@octopus/quota';
 import type { GatewayConfig } from '../config';
 import { createAuthMiddleware, type AuthenticatedRequest } from '../middleware/auth';
 import { EngineAdapter } from '../services/EngineAdapter';
@@ -69,6 +68,7 @@ export async function autoGenerateTitle(bridge: EngineAdapter, sessionId: string
 
     const trimmed = content.replace(/\s+/g, ' ');
     const title = trimmed.length > 24 ? trimmed.slice(0, 24) + '…' : trimmed;
+    console.log(`[TitleGen] generated title: "${title}"`);
 
     if (title && title !== '新对话') {
       // 尝试 patch 标题，遇到 label 重复时加时间戳后缀重试（最多 2 次）
@@ -100,6 +100,23 @@ export async function autoGenerateTitle(bridge: EngineAdapter, sessionId: string
   return null;
 }
 
+/** 加载用户的 Agent 配置（纯函数，供 chat.ts / sessions.ts 共享） */
+export async function loadAgentFromDb(
+  prisma: any,
+  userId: string,
+  agentId?: string,
+) {
+  if (!prisma) return null;
+  try {
+    if (agentId) {
+      return await prisma.agent.findFirst({ where: { id: agentId, ownerId: userId, enabled: true } });
+    }
+    return await prisma.agent.findFirst({ where: { ownerId: userId, isDefault: true, enabled: true } });
+  } catch {
+    return null;
+  }
+}
+
 export function createSessionsRouter(
   _config: GatewayConfig,
   authService: AuthService,
@@ -107,24 +124,11 @@ export function createSessionsRouter(
   bridge: EngineAdapter | undefined,
   prisma?: any,
   _auditLogger?: AuditLogger,
-  _reminderCache?: unknown,
-  _quotaManager?: QuotaManager,
 ): Router {
   const router = Router();
   const authMiddleware = createAuthMiddleware(authService, prisma);
 
-  /** 加载用户的 Agent 配置 */
-  async function loadAgent(userId: string, agentId?: string) {
-    if (!prisma) return null;
-    try {
-      if (agentId) {
-        return await prisma.agent.findFirst({ where: { id: agentId, ownerId: userId, enabled: true } });
-      }
-      return await prisma.agent.findFirst({ where: { ownerId: userId, isDefault: true, enabled: true } });
-    } catch {
-      return null;
-    }
-  }
+  // loadAgent 已提取为顶层 loadAgentFromDb
 
   /**
    * 获取可用模型
@@ -262,7 +266,7 @@ export function createSessionsRouter(
     // 短 ID 兜底：如果传来的不是完整 session key，根据 agentId 构造完整 key
     if (!sessionId.startsWith('agent:')) {
       const reqAgentId = req.query.agentId as string | undefined;
-      const agent = await loadAgent(user.id, reqAgentId);
+      const agent = await loadAgentFromDb(prisma, user.id, reqAgentId);
       const agentName = agent?.name || 'default';
       sessionId = EngineAdapter.userSessionKey(user.id, agentName, sessionId);
     }
@@ -343,7 +347,7 @@ export function createSessionsRouter(
     // 短 ID 兜底：构造完整 session key
     if (!sessionId.startsWith('agent:')) {
       const reqAgentId = req.query.agentId as string | undefined;
-      const agent = await loadAgent(user.id, reqAgentId);
+      const agent = await loadAgentFromDb(prisma, user.id, reqAgentId);
       const agentName = agent?.name || 'default';
       sessionId = EngineAdapter.userSessionKey(user.id, agentName, sessionId);
     }
@@ -402,7 +406,7 @@ export function createSessionsRouter(
     // 支持短 ID：若不是完整 session key，自动拼接
     if (!sessionId.startsWith('agent:')) {
       const { agentId: reqAgentId } = req.body || {};
-      const agent = await loadAgent(user.id, reqAgentId);
+      const agent = await loadAgentFromDb(prisma, user.id, reqAgentId);
       const agentName = agent?.name || 'default';
       sessionId = EngineAdapter.userSessionKey(user.id, agentName, sessionId);
     }
@@ -426,7 +430,7 @@ export function createSessionsRouter(
     let sessionId = req.params.sessionId;
     if (!sessionId.startsWith('agent:')) {
       const reqAgentId = req.query.agentId as string | undefined;
-      const agent = await loadAgent(user.id, reqAgentId);
+      const agent = await loadAgentFromDb(prisma, user.id, reqAgentId);
       const agentName = agent?.name || 'default';
       sessionId = EngineAdapter.userSessionKey(user.id, agentName, sessionId);
     }
@@ -509,7 +513,7 @@ export function createSessionsRouter(
       if (!sessionId.startsWith('agent:')) {
         // agentId 可能是 DB id，需要查出 name
         const reqAgentId = req.query.agentId as string | undefined;
-        const agent = await loadAgent(user.id, reqAgentId);
+        const agent = await loadAgentFromDb(prisma, user.id, reqAgentId);
         const agentName = agent?.name || 'default';
         sessionKey = EngineAdapter.userSessionKey(user.id, agentName, sessionId);
       } else if (!validateSessionOwnership(sessionId, user.id)) {

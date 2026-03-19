@@ -14,7 +14,8 @@ import bcrypt from 'bcryptjs';
 import type { AuthService } from '@octopus/auth';
 import type { AuditLogger } from '@octopus/audit';
 import type { WorkspaceManager } from '@octopus/workspace';
-import { createAuthMiddleware, type AuthenticatedRequest } from '../middleware/auth';
+import { createAuthMiddleware, adminOnly, type AuthenticatedRequest } from '../middleware/auth';
+import { getRuntimeConfig } from '../config';
 import { EngineAdapter } from '../services/EngineAdapter';
 import { validatePassword } from '../utils/password';
 
@@ -30,24 +31,12 @@ export function createAdminRouter(
   const router = Router();
   const authMiddleware = createAuthMiddleware(authService, prisma);
 
-  // 获取 authService 引用用于 MockLDAP 注册
-
-  /** ADMIN 权限检查 */
-  const adminOnly = (req: AuthenticatedRequest, res: any, next: any) => {
-    const user = req.user;
-    if (!user || !(user.roles as string[])?.some(r => r.toLowerCase() === 'admin')) {
-      res.status(403).json({ error: 'Admin access required' });
-      return;
-    }
-    next();
-  };
-
   // ─── 用户列表 ───────────────────────────────────
 
   router.get('/users', authMiddleware, adminOnly, async (req: AuthenticatedRequest, res, next: NextFunction) => {
     try {
       const page = Math.max(1, parseInt(req.query.page as string, 10) || 1);
-      const pageSize = Math.min(100, Math.max(1, parseInt(req.query.pageSize as string, 10) || 20));
+      const pageSize = Math.min(getRuntimeConfig().admin.maxPageSize, Math.max(1, parseInt(req.query.pageSize as string, 10) || 20));
       const search = (req.query.search as string) || '';
       const status = req.query.status as string;
 
@@ -404,7 +393,8 @@ export function createAdminRouter(
     try {
       const now = new Date();
       const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      const statsDays = getRuntimeConfig().admin.dashboardStatsDays;
+      const weekAgo = new Date(now.getTime() - statsDays * 24 * 60 * 60 * 1000);
 
       const [
         totalUsers, activeUsers, todayAuditCount, weekAuditCount,
@@ -426,8 +416,8 @@ export function createAdminRouter(
         prisma.scheduledTask.count({ where: { enabled: true } }).catch(() => 0),
       ]);
 
-      // 最近7天每日审计趋势（单次 GROUP BY 替代 7 次串行 COUNT）
-      const sevenDaysAgo = new Date(now.getTime() - 6 * 24 * 60 * 60 * 1000);
+      // 最近 N 天每日审计趋势（单次 GROUP BY）
+      const sevenDaysAgo = new Date(now.getTime() - (statsDays - 1) * 24 * 60 * 60 * 1000);
       sevenDaysAgo.setHours(0, 0, 0, 0);
       const rawTrend = await prisma.$queryRaw<Array<{ date: string; count: bigint }>>`
         SELECT DATE(created_at) as date, COUNT(*) as count
@@ -443,7 +433,7 @@ export function createAdminRouter(
         return [dateKey, Number(r.count)];
       }));
       const dailyTrend: { date: string; count: number }[] = [];
-      for (let i = 6; i >= 0; i--) {
+      for (let i = statsDays - 1; i >= 0; i--) {
         const d = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
         const dateStr = d.toISOString().slice(0, 10);
         dailyTrend.push({ date: dateStr, count: trendMap.get(dateStr) || 0 });

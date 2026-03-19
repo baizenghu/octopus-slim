@@ -20,6 +20,7 @@ model User {
   roles       Json      /// 角色列表 ["ADMIN","USER"]
   quotas      Json      /// 配额设置
   passwordHash String?  @map("password_hash") @db.VarChar(255) /// MockLDAP 模式下存储密码哈希
+  avatarPath  String?   @map("avatar_path") @db.VarChar(512) /// 用户头像文件路径
   status      String    @default("active") @db.VarChar(20)
   ldapDn      String?   @map("ldap_dn") @db.VarChar(512)
   lastLoginAt DateTime? @map("last_login_at")

@@ -280,7 +280,7 @@ export default function FilesPage() {
                 src={getPreviewUrl(activeTab, previewFile)}
                 className="w-full h-[60vh] rounded-md border"
                 title={previewFile}
-                sandbox="allow-scripts allow-same-origin"
+                sandbox="allow-scripts"
               />
             )}
           </div>

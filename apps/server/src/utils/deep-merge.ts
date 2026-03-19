@@ -9,6 +9,7 @@ export function deepMerge(
   const result = { ...target };
 
   for (const key of Object.keys(source)) {
+    if (key === '__proto__' || key === 'constructor' || key === 'prototype') continue;
     const targetVal = target[key];
     const sourceVal = source[key];
 

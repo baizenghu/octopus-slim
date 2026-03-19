@@ -19,8 +19,9 @@ import type { AuditLogger } from '@octopus/audit';
 import { AuditAction } from '@octopus/audit';
 import { randomUUID } from 'crypto';
 import { getSkillsForUser, buildSkillsSystemPromptSection } from '../SkillsInfo';
+import { getRuntimeConfig } from '../../config';
 
-const FILE_SIZE_LIMIT = 10 * 1024 * 1024; // 10MB
+// FILE_SIZE_LIMIT 现在通过 getRuntimeConfig().im.fileSizeLimitBytes 获取
 
 // IM activeAgents 持久化文件路径（重启后恢复用户的 agent 选择）
 const ACTIVE_AGENTS_FILE = path.join(
@@ -75,9 +76,9 @@ export class IMRouter {
 
   /** 活跃的 agent 调用跟踪（用于 /cancel 取消） */
   private activeRuns = new Map<string, { sessionKey: string; aborted: boolean }>();
-  private static readonly RUN_TIMEOUT_MS = 30 * 60 * 1000; // 30 分钟兜底超时
-  private static readonly BIND_MAX_ATTEMPTS = 5;
-  private static readonly BIND_WINDOW_MS = 15 * 60 * 1000; // 15 分钟窗口
+  private static get RUN_TIMEOUT_MS() { return getRuntimeConfig().im.runTimeoutMs; }
+  private static get BIND_MAX_ATTEMPTS() { return getRuntimeConfig().im.bindMaxAttempts; }
+  private static get BIND_WINDOW_MS() { return getRuntimeConfig().im.bindWindowMs; }
 
   /** 注册 adapter 的消息回调 */
   attach(adapter: IMAdapter): void {
@@ -453,7 +454,7 @@ export class IMRouter {
           const stat = await fs.promises.stat(filePath);
           if (!stat.isFile()) continue;
 
-          if (stat.size <= FILE_SIZE_LIMIT) {
+          if (stat.size <= getRuntimeConfig().im.fileSizeLimitBytes) {
             await adapter.sendFile!(imUserId, filePath, fileName);
             console.log(`[im-router] Sent file via IM: ${fileName} (${(stat.size / 1024).toFixed(0)}KB)`);
           } else {

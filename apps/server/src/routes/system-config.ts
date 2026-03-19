@@ -11,7 +11,7 @@ import { Router } from 'express';
 import { promises as fsPromises } from 'fs';
 import path from 'path';
 import type { AuthService } from '@octopus/auth';
-import { createAuthMiddleware, type AuthenticatedRequest } from '../middleware/auth';
+import { createAuthMiddleware, adminOnly, type AuthenticatedRequest } from '../middleware/auth';
 import type { EngineAdapter } from '../services/EngineAdapter';
 
 const projectRoot = path.resolve(__dirname, '..', '..', '..', '..');
@@ -19,11 +19,36 @@ const projectRoot = path.resolve(__dirname, '..', '..', '..', '..');
 /**
  * 直接读取 octopus.json 文件（绕过引擎 config.get 的 apiKey 脱敏）
  */
-async function readConfigFromFile(): Promise<Record<string, any>> {
+function getConfigPath(): string {
   const stateDir = process.env.OCTOPUS_STATE_DIR || path.join(projectRoot, '.octopus-state');
-  const configPath = path.join(stateDir, 'octopus.json');
-  const raw = await fsPromises.readFile(configPath, 'utf-8');
+  return path.join(stateDir, 'octopus.json');
+}
+
+async function readConfigFromFile(): Promise<Record<string, any>> {
+  const raw = await fsPromises.readFile(getConfigPath(), 'utf-8');
   return JSON.parse(raw);
+}
+
+/** 直接写入 octopus.json */
+async function writeConfigToFile(config: Record<string, any>): Promise<void> {
+  await fsPromises.writeFile(getConfigPath(), JSON.stringify(config, null, 2), 'utf-8');
+}
+
+/** 企业运行时配置独立文件（不能放 octopus.json，引擎会校验失败） */
+function getEnterprisePath(): string {
+  const stateDir = process.env.OCTOPUS_STATE_DIR || path.join(projectRoot, '.octopus-state');
+  return path.join(stateDir, 'enterprise.json');
+}
+
+async function readEnterpriseConfig(): Promise<Record<string, any>> {
+  try {
+    const raw = await fsPromises.readFile(getEnterprisePath(), 'utf-8');
+    return JSON.parse(raw);
+  } catch { return {}; }
+}
+
+async function writeEnterpriseConfig(config: Record<string, any>): Promise<void> {
+  await fsPromises.writeFile(getEnterprisePath(), JSON.stringify(config, null, 2), 'utf-8');
 }
 
 export function createSystemConfigRouter(
@@ -33,15 +58,6 @@ export function createSystemConfigRouter(
   const router = Router();
   const authMiddleware = createAuthMiddleware(authService);
 
-  const adminOnly = (req: AuthenticatedRequest, res: any, next: any) => {
-    const user = req.user;
-    if (!user || !(user.roles as string[])?.some(r => r.toLowerCase() === 'admin')) {
-      res.status(403).json({ error: 'Admin access required' });
-      return;
-    }
-    next();
-  };
-
   /**
    * GET /api/admin/config
    * 直接读取 octopus.json 文件，返回含明文 apiKey 的完整配置
@@ -50,6 +66,8 @@ export function createSystemConfigRouter(
   router.get('/', authMiddleware, adminOnly, async (_req: AuthenticatedRequest, res, next) => {
     try {
       const config = await readConfigFromFile();
+      // 合并独立的 enterprise.json（前端从 config.enterprise 读取运行参数）
+      config.enterprise = await readEnterpriseConfig();
       res.json({ config });
     } catch (err) {
       next(err);
@@ -103,10 +121,22 @@ export function createSystemConfigRouter(
         c.plugins.allow = allow;
       }
       if (entries && typeof entries === 'object') {
-        c.plugins.entries = entries;
+        // 保留已有 config，只覆盖前端发送的字段（防止丢失未在 UI 中展示的配置）
+        if (!c.plugins.entries) c.plugins.entries = {};
+        for (const [name, val] of Object.entries(entries)) {
+          c.plugins.entries[name] = {
+            ...c.plugins.entries[name],
+            ...(val as Record<string, any>),
+            config: {
+              ...(c.plugins.entries[name]?.config || {}),
+              ...((val as any)?.config || {}),
+            },
+          };
+        }
       }
 
-      await bridge.configApplyFull(c);
+      // 插件变更需要重启才能生效，直接写文件即可（不依赖引擎 RPC）
+      await writeConfigToFile(c);
       console.log(`[system-config] Plugins updated by ${req.user!.username}`);
       res.json({ ok: true });
     } catch (err) {
@@ -146,6 +176,40 @@ export function createSystemConfigRouter(
 
       await bridge.configApplyFull(c);
       console.log(`[system-config] Tools updated by ${req.user!.username}`);
+      res.json({ ok: true });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /**
+   * PUT /api/admin/config/runtime
+   * Body: Partial<RuntimeConfig> — 按类别更新企业运行时配置
+   */
+  router.put('/runtime', authMiddleware, adminOnly, async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const runtimeUpdate = req.body;
+      if (!runtimeUpdate || typeof runtimeUpdate !== 'object') {
+        res.status(400).json({ error: 'runtime config object is required' });
+        return;
+      }
+
+      const enterprise = await readEnterpriseConfig();
+
+      // 按类别 shallow merge
+      for (const key of Object.keys(runtimeUpdate)) {
+        if (typeof runtimeUpdate[key] === 'object' && runtimeUpdate[key] !== null) {
+          enterprise[key] = { ...enterprise[key], ...runtimeUpdate[key] };
+        }
+      }
+
+      await writeEnterpriseConfig(enterprise);
+
+      // 热更新内存中的运行时配置
+      const { initRuntimeConfig: init } = await import('../config');
+      init(enterprise);
+
+      console.log(`[system-config] Runtime config updated by ${req.user!.username}`);
       res.json({ ok: true });
     } catch (err) {
       next(err);

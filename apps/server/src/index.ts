@@ -13,6 +13,7 @@
 // 加载项目根 .env，确保不依赖外部 shell 注入环境变量
 import dotenv from 'dotenv';
 import * as fs from 'fs';
+import { promises as fsPromises } from 'fs';
 import * as path from 'path';
 
 dotenv.config({ path: path.resolve(__dirname, '..', '..', '..', '.env') });
@@ -33,7 +34,7 @@ import helmet from 'helmet';
 import { AuthService } from '@octopus/auth';
 import { WorkspaceManager } from '@octopus/workspace';
 import { AuditLogger, createAuditMiddleware } from '@octopus/audit';
-import { loadConfig } from './config';
+import { loadConfig, initRuntimeConfig, getRuntimeConfig } from './config';
 import { createAuthRouter } from './routes/auth';
 import { createChatRouter } from './routes/chat';
 import { createSessionsRouter } from './routes/sessions';
@@ -44,13 +45,10 @@ import { createMcpRouter } from './routes/mcp';
 import { createSkillsRouter } from './routes/skills';
 import { createAgentsRouter } from './routes/agents';
 import { createSchedulerRouter } from './routes/scheduler';
-import { createQuotasRouter } from './routes/quotas';
 import { createDbConnectionsRouter } from './routes/db-connections';
 import { createImInternalRouter } from './routes/im-internal';
 import { createSystemConfigRouter } from './routes/system-config';
 import { MCPRegistry, MCPExecutor } from '@octopus/mcp';
-import { QuotaManager } from '@octopus/quota';
-import { createQuotaMiddleware } from './middleware/quota';
 import { EngineAdapter } from './services/EngineAdapter';
 import { ensureAgentTemplates } from './services/SoulTemplate';
 import { IMService } from './services/im';
@@ -195,6 +193,17 @@ async function main() {
       await bridge.initialize(19791);
       console.log('   Engine: initialized (single-process)');
 
+      // 初始化运行时配置（从独立的 enterprise.json 读取，不放 octopus.json 避免引擎校验失败）
+      try {
+        const stateDir = process.env.OCTOPUS_STATE_DIR || path.join(projectRoot, '.octopus-state');
+        const raw = await fsPromises.readFile(path.join(stateDir, 'enterprise.json'), 'utf-8');
+        initRuntimeConfig(JSON.parse(raw));
+        console.log('[runtime-config] Loaded from enterprise.json');
+      } catch (err) {
+        console.warn('[runtime-config] enterprise.json not found, using defaults');
+        initRuntimeConfig();
+      }
+
       // 启动时将数据库中所有已启用的 Agent 并发同步到原生 Gateway
       if (prismaClient) {
         try {
@@ -250,7 +259,7 @@ async function main() {
             try {
               await imBridge.agentsCreate({ name: nativeAgentId, workspace: workspacePath });
               // 原生 gateway 异步初始化 workspace，等待就绪
-              await new Promise(r => setTimeout(r, 1500));
+              await new Promise(r => setTimeout(r, getRuntimeConfig().engine.agentInitTimeoutMs));
             } catch { /* 已存在则忽略 */ }
           },
         });
@@ -319,13 +328,6 @@ async function main() {
     console.log(`   MCP: created enterprise directory ${enterpriseMcpDir}`);
   }
 
-  // 初始化配额管理器（内部自动连接 Redis，不可用时降级放行）
-  const quotaManager = new QuotaManager({
-    redisUrl: process.env.REDIS_URL,
-    prisma: prismaClient,
-  });
-  const quotaMiddleware = createQuotaMiddleware(quotaManager);
-
   // 3. 创建 Express 应用
   const app = express();
 
@@ -367,8 +369,8 @@ async function main() {
       }
     }
 
-    // Redis 状态（通过 QuotaManager 暴露）
-    const redisStatus = quotaManager.getRedisStatus();
+    // Redis 状态
+    const redisStatus = redisClient ? 'connected' : 'not configured';
 
     // Native Gateway 状态
     const nativeGatewayStatus = bridge?.isConnected ? 'running' : 'stopped';
@@ -410,8 +412,8 @@ async function main() {
 
   // 登录/刷新接口频率限制
   const authLimiter = rateLimit({
-    windowMs: 60 * 1000,    // 1 分钟窗口
-    max: 20,                 // 每 IP 最多 20 次
+    windowMs: getRuntimeConfig().security.rateLimitWindowMs,
+    max: getRuntimeConfig().security.rateLimitMax,
     standardHeaders: true,
     legacyHeaders: false,
     message: { error: '请求过于频繁，请稍后再试' },
@@ -425,23 +427,21 @@ async function main() {
     console.error('❌ 数据库连接失败，Gateway 无法启动');
     process.exit(1);
   }
-  app.use('/api/auth', createAuthRouter(authService, workspaceManager, prismaClient));
-  // 配额中间件覆盖高频 API 路由（#17 修复：不仅限于 chat）
-  app.use('/api/chat', quotaMiddleware, createChatRouter(config, authService, workspaceManager, bridge, prismaClient, auditLogger, undefined, quotaManager));
-  app.use('/api/chat', quotaMiddleware, createSessionsRouter(config, authService, workspaceManager, bridge, prismaClient, auditLogger, undefined, quotaManager));
+  app.use('/api/auth', createAuthRouter(authService, workspaceManager, prismaClient, config.workspace.dataRoot));
+  app.use('/api/chat', createChatRouter(config, authService, workspaceManager, bridge, prismaClient, auditLogger));
+  app.use('/api/chat', createSessionsRouter(config, authService, workspaceManager, bridge, prismaClient, auditLogger));
   app.use('/api/audit', createAuditRouter(authService, auditLogger));
   app.use('/api/admin', createAdminRouter(authService, auditLogger, prismaClient!, workspaceManager, bridge));
   if (bridge) {
     app.use('/api/admin/config', createSystemConfigRouter(authService, bridge));
   }
-  app.use('/api/files', quotaMiddleware, createFilesRouter(config, authService, workspaceManager, prismaClient));
+  app.use('/api/files', createFilesRouter(config, authService, workspaceManager, prismaClient));
   if (prismaClient) {
-    app.use('/api/mcp', quotaMiddleware, createMcpRouter(authService, prismaClient, mcpRegistry, mcpExecutor, config.workspace.dataRoot));
+    app.use('/api/mcp', createMcpRouter(authService, prismaClient, mcpRegistry, mcpExecutor, config.workspace.dataRoot));
   }
-  app.use('/api/skills', quotaMiddleware, createSkillsRouter(authService, prismaClient!, config.workspace.dataRoot, bridge));
+  app.use('/api/skills', createSkillsRouter(authService, prismaClient!, config.workspace.dataRoot, bridge));
   app.use('/api/agents', createAgentsRouter(authService, prismaClient!, workspaceManager, bridge, config.workspace.dataRoot));
   app.use('/api/scheduler', createSchedulerRouter(authService, prismaClient!, bridge, imService));
-  app.use('/api/quotas', createQuotasRouter(authService, prismaClient, quotaManager));
   app.use('/api/user/db-connections', createDbConnectionsRouter(authService, prismaClient));
   if (imService) {
     app.use('/api/_internal/im', createImInternalRouter(imService));

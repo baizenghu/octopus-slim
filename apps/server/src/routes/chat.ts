@@ -20,41 +20,34 @@ import { randomUUID } from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 import type { GatewayConfig } from '../config';
-import { createAuthMiddleware, type AuthenticatedRequest } from '../middleware/auth';
-import { Role, type AuthService } from '@octopus/auth';
+import { getRuntimeConfig } from '../config';
+import { createAuthMiddleware, isAdmin, type AuthenticatedRequest } from '../middleware/auth';
+import { type AuthService } from '@octopus/auth';
 import type { WorkspaceManager } from '@octopus/workspace';
 import type { AuditLogger } from '@octopus/audit';
 import { EngineAdapter } from '../services/EngineAdapter';
 import { ensureAndSyncNativeAgent } from '../services/AgentConfigSync';
-import type { QuotaManager } from '@octopus/quota';
 
 import { validateSessionOwnership } from '../utils/ownership';
 import { sanitizeResponse } from '../utils/ContentSanitizer';
-import { autoGenerateTitle } from './sessions';
+import { autoGenerateTitle, loadAgentFromDb } from './sessions';
 import { buildEnterpriseSystemPrompt } from '../services/SystemPromptBuilder';
 
-/** Session 级偏好存储（进程级，重启清空，30 分钟 TTL） */
+/** Session 级偏好存储（进程级，重启清空，TTL 可配置） */
 const sessionPrefs = new Map<string, { mcpId?: string; skillId?: string; updatedAt: number }>();
 
-// 清理过期条目（30 分钟 TTL）
+// 清理过期条目
 setInterval(() => {
   const now = Date.now();
   for (const [key, val] of sessionPrefs) {
-    if (now - val.updatedAt > 30 * 60 * 1000) sessionPrefs.delete(key);
+    if (now - val.updatedAt > getRuntimeConfig().chat.sessionPrefsTTLMs) sessionPrefs.delete(key);
   }
-}, 5 * 60 * 1000);
-
-/** Session 级已计量 Token 总数缓存（用于增量计费，重启归零，上限 2000 条） */
-const sessionTokens = new Map<string, number>();
-const SESSION_TOKENS_MAX = 2000;
-function setSessionTokens(key: string, value: number) {
-  sessionTokens.delete(key); // 重新插入以保持 Map 顺序
-  sessionTokens.set(key, value);
-  if (sessionTokens.size > SESSION_TOKENS_MAX) {
-    const oldest = sessionTokens.keys().next().value;
-    if (oldest !== undefined) sessionTokens.delete(oldest);
+  // 安全上限：防止内存无限增长
+  while (sessionPrefs.size > 10000) {
+    const oldest = sessionPrefs.keys().next().value;
+    if (oldest) sessionPrefs.delete(oldest); else break;
   }
-}
+}, getRuntimeConfig().chat.sessionPrefsCleanupIntervalMs);
 
 export function createChatRouter(
   _config: GatewayConfig,
@@ -63,8 +56,6 @@ export function createChatRouter(
   bridge: EngineAdapter | undefined,
   prisma?: any,
   auditLogger?: AuditLogger,
-  _reminderCache?: unknown,
-  quotaManager?: QuotaManager,
 ): Router {
   const router = Router();
   const authMiddleware = createAuthMiddleware(authService, prisma);
@@ -77,7 +68,7 @@ export function createChatRouter(
    */
   async function handleSlashCommand(
     message: string,
-    userId: string,
+    _userId: string,
     sessionId: string,
     agent?: { mcpFilter?: string[] | null; skillsFilter?: string[] | null } | null,
   ): Promise<{ reply: string; passthrough?: string } | null> {
@@ -93,25 +84,9 @@ export function createChatRouter(
         return { reply: [
           '**可用命令：**',
           '- `/help` — 显示此帮助信息',
-          '- `/quota` — 查看当前配额使用情况',
           '- `/mcp <名称> [问题]` — 使用指定 MCP 工具（可直接附带问题）',
           '- `/skill <名称> [问题]` — 使用指定 Skill（可直接附带问题）',
         ].join('\n') };
-
-      case '/quota': {
-        if (!quotaManager) return { reply: '配额系统未启用' };
-        try {
-          const usage = await quotaManager.getUsage(userId);
-          return { reply: [
-            '**当前配额使用情况：**',
-            `- 今日 Token: ${usage.tokenDaily} / ${usage.limits.token_daily === -1 ? '无限制' : usage.limits.token_daily}`,
-            `- 本月 Token: ${usage.tokenMonthly} / ${usage.limits.token_monthly === -1 ? '无限制' : usage.limits.token_monthly}`,
-            `- 本小时请求: ${usage.requestHourly} / ${usage.limits.request_hourly === -1 ? '无限制' : usage.limits.request_hourly}`,
-          ].join('\n') };
-        } catch (err: any) {
-          return { reply: `配额查询失败: ${err.message}` };
-        }
-      }
 
       case '/mcp': {
         const mcpParts = arg.split(/\s+/);
@@ -209,7 +184,6 @@ export function createChatRouter(
   }
 
   /** 附件处理：保存到 agent workspace 并返回相对路径列表 */
-  const MAX_ATTACHMENT_SIZE = 10 * 1024 * 1024; // 10MB base64 (~7.5MB 实际文件)
   async function processAttachments(
     attachments: Array<{ name: string; content: string; type?: string }>,
     wsRoot: string,
@@ -220,8 +194,8 @@ export function createChatRouter(
     const savedPaths: string[] = [];
     for (const att of attachments) {
       if (!att.name || !att.content) continue;
-      if (att.content.length > MAX_ATTACHMENT_SIZE) {
-        return { savedPaths: [], error: `附件 "${att.name}" 超过大小限制（最大 10MB）` };
+      if (att.content.length > getRuntimeConfig().chat.maxAttachmentSizeBytes) {
+        return { savedPaths: [], error: `附件 "${att.name}" 超过大小限制（最大 ${getRuntimeConfig().chat.maxAttachmentSizeBytes / 1024 / 1024}MB）` };
       }
       const safeName = att.name.replace(/[^a-zA-Z0-9._\u4e00-\u9fa5-]/g, '_');
       let targetPath = path.join(filesDir, safeName);
@@ -241,18 +215,7 @@ export function createChatRouter(
     return { savedPaths };
   }
 
-  /** 加载用户的 Agent 配置 */
-  async function loadAgent(userId: string, agentId?: string) {
-    if (!prisma) return null;
-    try {
-      if (agentId) {
-        return await prisma.agent.findFirst({ where: { id: agentId, ownerId: userId, enabled: true } });
-      }
-      return await prisma.agent.findFirst({ where: { ownerId: userId, isDefault: true, enabled: true } });
-    } catch {
-      return null;
-    }
-  }
+  // loadAgent 已提取为 sessions.ts 的 loadAgentFromDb
 
   /**
    * 流式对话（SSE）— 通过 Native Gateway agent RPC
@@ -267,7 +230,7 @@ export function createChatRouter(
     }
 
     // 入口统一加载 Agent 配置（避免后续重复查询）
-    const agent = await loadAgent(user.id, reqAgentId);
+    const agent = await loadAgentFromDb(prisma, user.id, reqAgentId);
     const agentName = agent?.name || 'default';
 
     // 处理附件
@@ -286,7 +249,7 @@ export function createChatRouter(
 
     // 斜杠命令拦截
     const sid0 = rawSessionId || 'tmp';
-    const slashResult = await handleSlashCommand(message.trim(), user.id, sid0, agent);
+    const slashResult = await handleSlashCommand(message?.trim() || '', user.id, sid0, agent);
     if (slashResult !== null) {
       if (slashResult.passthrough) {
         // 有附带问题：先发偏好提示，再用剩余文本继续走正常对话流程
@@ -351,7 +314,7 @@ export function createChatRouter(
     // 心跳保活
     const heartbeat = setInterval(() => {
       try { if (!streamDone) res.write(': heartbeat\n\n'); } catch { /* closed */ }
-    }, 15000);
+    }, getRuntimeConfig().chat.sseHeartbeatIntervalMs);
     res.on('close', () => {
       if (!streamDone) {
         streamDone = true;
@@ -395,7 +358,7 @@ export function createChatRouter(
           sessionKey,
           extraSystemPrompt: extraPrompt,
           deliver: false,
-          isAdmin: Array.isArray(user.roles) && user.roles.includes(Role.ADMIN),
+          isAdmin: isAdmin(user),
         },
         (event) => {
           if (streamDone) return;
@@ -454,7 +417,7 @@ export function createChatRouter(
                 hasDelegation = true;
                 console.log(`[chat] sessions_spawn detected, hasDelegation=true`);
               }
-              res.write(`data: ${JSON.stringify({ content: '', toolCall: true, tools: [event.toolName], done: false })}\n\n`);
+              res.write(`data: ${JSON.stringify({ content: '', toolCall: true, tools: [event.toolName], toolCallId: event.toolCallId, toolArgs: event.toolArgs, toolResult: event.toolResult, done: false })}\n\n`);
               break;
             case 'thinking': {
               // 原生 thinking stream：直接推送思考内容增量
@@ -503,22 +466,6 @@ export function createChatRouter(
               res.end();
               // 异步生成标题（不阻塞响应）
               autoGenerateTitle(bridge!, sessionKey).catch(err => console.error('[TitleGen] Failed:', err));
-              // 异步 token 计费：获取会话 token 用量增量，消费 token_daily/token_monthly
-              if (quotaManager && bridge?.isConnected) {
-                bridge.sessionsUsage({ key: sessionKey }).then((usage: any) => {
-                  const sessions = Array.isArray(usage) ? usage : (usage?.sessions || [usage]);
-                  const s = sessions.find((x: any) => x?.key === sessionKey || x?.sessionKey === sessionKey) || sessions[0];
-                  if (s?.totalTokens) {
-                    const prev = sessionTokens.get(sessionKey) || 0;
-                    const delta = Math.max(0, s.totalTokens - prev);
-                    setSessionTokens(sessionKey, s.totalTokens);
-                    if (delta > 0) {
-                      quotaManager!.consumeQuota(user.id, 'token_daily', delta).catch(() => {});
-                      quotaManager!.consumeQuota(user.id, 'token_monthly', delta).catch(() => {});
-                    }
-                  }
-                }).catch(() => {});
-              }
               break;
             }
             case 'error':
@@ -558,7 +505,7 @@ export function createChatRouter(
     }
 
     // 入口统一加载 Agent 配置（避免后续重复查询）
-    const agentNS = await loadAgent(user.id, reqAgentId);
+    const agentNS = await loadAgentFromDb(prisma, user.id, reqAgentId);
     const agentNameNS = agentNS?.name || 'default';
 
     // 处理附件
@@ -625,7 +572,7 @@ export function createChatRouter(
     try {
       await new Promise<void>((resolve, reject) => {
         bridge!.callAgent(
-          { message: finalMsgNonStream, agentId: nativeAgentId, sessionKey, extraSystemPrompt: extraPrompt, deliver: false, isAdmin: Array.isArray(user.roles) && user.roles.includes(Role.ADMIN) },
+          { message: finalMsgNonStream, agentId: nativeAgentId, sessionKey, extraSystemPrompt: extraPrompt, deliver: false, isAdmin: isAdmin(user) },
           (event) => {
             // native data.text 是累积全量文本（不是增量片段），直接替换
             if (event.type === 'text_delta') fullContent = event.content || fullContent;
@@ -640,22 +587,6 @@ export function createChatRouter(
 
       // 异步尝试生成标题（不阻塞对话响应）
       autoGenerateTitle(bridge!, sessionKey).catch(err => console.error('[TitleGen] Failed:', err));
-      // 异步 token 计费
-      if (quotaManager && bridge?.isConnected) {
-        bridge.sessionsUsage({ key: sessionKey }).then((usage: any) => {
-          const sessions = Array.isArray(usage) ? usage : (usage?.sessions || [usage]);
-          const s = sessions.find((x: any) => x?.key === sessionKey || x?.sessionKey === sessionKey) || sessions[0];
-          if (s?.totalTokens) {
-            const prev = sessionTokens.get(sessionKey) || 0;
-            const delta = Math.max(0, s.totalTokens - prev);
-            setSessionTokens(sessionKey, s.totalTokens);
-            if (delta > 0) {
-              quotaManager!.consumeQuota(user.id, 'token_daily', delta).catch(() => {});
-              quotaManager!.consumeQuota(user.id, 'token_monthly', delta).catch(() => {});
-            }
-          }
-        }).catch(() => {});
-      }
 
       res.json({ message: purified, sessionId: sessionKey });
     } catch (err) {

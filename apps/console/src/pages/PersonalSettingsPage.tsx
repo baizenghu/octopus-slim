@@ -6,26 +6,24 @@
  * - Tab 2: 我的技能（只读列表，展示所有可用技能）
  * - Tab 3: 个人信息（用户名/角色/部门 + 修改密码）
  */
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  Zap,
-  Cable,
   User,
   Lock,
   Key,
   Loader2,
+  Camera,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { adminApi, type SkillInfo } from '../api';
+import { adminApi } from '../api';
 import { useAuthStore } from '../store';
-import PersonalMcpManager from '@/components/PersonalMcpManager';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import {
   Dialog,
   DialogContent,
@@ -36,82 +34,7 @@ import {
 } from '@/components/ui/dialog';
 
 // ====================================
-// Tab 2: 我的技能（只读）
-// ====================================
-
-function PersonalSkillsTab() {
-  const [skills, setSkills] = useState<SkillInfo[]>([]);
-  const [loading, setLoading] = useState(false);
-
-  const loadData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await adminApi.getSkills();
-      setSkills(res.data);
-    } catch { /* ignore */ }
-    setLoading(false);
-  }, []);
-
-  useEffect(() => { loadData(); }, [loadData]);
-
-  const scopeLabel: Record<string, { text: string; variant: 'default' | 'secondary' | 'outline' }> = {
-    enterprise: { text: '企业', variant: 'default' },
-    personal: { text: '个人', variant: 'secondary' },
-  };
-
-  const statusLabel: Record<string, string> = {
-    pending: '待审批',
-    approved: '已通过',
-    rejected: '已拒绝',
-    active: '已激活',
-    disabled: '已禁用',
-  };
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
-
-  if (skills.length === 0) {
-    return <div className="text-center py-12 text-muted-foreground">暂无可用技能</div>;
-  }
-
-  return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-      {skills.map((skill) => (
-        <Card key={skill.id}>
-          <CardContent className="pt-4 pb-3">
-            <div className="flex items-start justify-between mb-2">
-              <span className="font-medium text-sm">{skill.name}</span>
-              <div className="flex gap-1">
-                <Badge variant={scopeLabel[skill.scope]?.variant || 'outline'}>
-                  {scopeLabel[skill.scope]?.text || skill.scope}
-                </Badge>
-                <Badge variant={skill.enabled ? 'default' : 'secondary'}>
-                  {skill.enabled ? '启用' : '禁用'}
-                </Badge>
-              </div>
-            </div>
-            {skill.description && (
-              <p className="text-xs text-muted-foreground mb-2">{skill.description}</p>
-            )}
-            <div className="flex items-center gap-3 text-xs text-muted-foreground">
-              {skill.version && <span>v{skill.version}</span>}
-              <span>状态: {statusLabel[skill.status] || skill.status}</span>
-              {skill.command && <span>命令: <code>{skill.command}</code></span>}
-            </div>
-          </CardContent>
-        </Card>
-      ))}
-    </div>
-  );
-}
-
-// ====================================
-// Tab 3: 个人信息
+// 个人信息
 // ====================================
 
 function ProfileTab() {
@@ -121,6 +44,39 @@ function ProfileTab() {
   const [oldPassword, setOldPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [avatarUploading, setAvatarUploading] = useState(false);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+
+  // 加载用户头像 URL
+  useEffect(() => {
+    if (user?.id) {
+      setAvatarUrl(adminApi.getUserAvatarUrl(user.id) + `?t=${Date.now()}`);
+    }
+  }, [user?.id]);
+
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error('头像文件不能超过 2MB');
+      return;
+    }
+    setAvatarUploading(true);
+    try {
+      await adminApi.uploadUserAvatar(file);
+      // 刷新头像显示（加时间戳破缓存）
+      setAvatarUrl(adminApi.getUserAvatarUrl(user!.id) + `?t=${Date.now()}`);
+      toast.success('头像已更新');
+    } catch (err: unknown) {
+      const error = err as Error;
+      toast.error(error.message || '头像上传失败');
+    } finally {
+      setAvatarUploading(false);
+      // 重置 input 以允许重复上传相同文件
+      if (avatarInputRef.current) avatarInputRef.current.value = '';
+    }
+  };
 
   const resetPasswordForm = () => {
     setOldPassword('');
@@ -164,6 +120,51 @@ function ProfileTab() {
 
   return (
     <div className="max-w-[600px] space-y-6">
+      {/* 头像卡片 */}
+      <Card>
+        <CardContent className="pt-6">
+          <div className="flex items-center gap-6">
+            <div className="relative group">
+              <Avatar className="h-20 w-20">
+                <AvatarImage
+                  src={avatarUrl || undefined}
+                  alt={user?.username}
+                  onError={() => setAvatarUrl(null)}
+                />
+                <AvatarFallback className="text-2xl bg-primary/10 text-primary font-medium">
+                  {user?.username?.charAt(0)?.toUpperCase() || 'U'}
+                </AvatarFallback>
+              </Avatar>
+              <button
+                className="absolute inset-0 flex items-center justify-center rounded-full bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                onClick={() => avatarInputRef.current?.click()}
+                disabled={avatarUploading}
+              >
+                {avatarUploading ? (
+                  <Loader2 className="h-5 w-5 text-white animate-spin" />
+                ) : (
+                  <Camera className="h-5 w-5 text-white" />
+                )}
+              </button>
+              <input
+                ref={avatarInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                className="hidden"
+                onChange={handleAvatarUpload}
+              />
+            </div>
+            <div>
+              <p className="font-medium">{user?.username || '-'}</p>
+              <p className="text-sm text-muted-foreground">{user?.email || '-'}</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                点击头像上传新图片（限 2MB，支持 PNG/JPG/WebP）
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* 个人信息卡片 */}
       <Card>
         <CardContent className="pt-6">
@@ -286,32 +287,7 @@ export default function PersonalSettingsPage() {
         个人设置
       </h2>
 
-      <Tabs defaultValue="mcp">
-        <TabsList>
-          <TabsTrigger value="mcp" className="gap-1.5">
-            <Cable className="h-3.5 w-3.5" />
-            我的 MCP
-          </TabsTrigger>
-          <TabsTrigger value="skills" className="gap-1.5">
-            <Zap className="h-3.5 w-3.5" />
-            我的技能
-          </TabsTrigger>
-          <TabsTrigger value="profile" className="gap-1.5">
-            <User className="h-3.5 w-3.5" />
-            个人信息
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="mcp" className="mt-4">
-          <PersonalMcpManager />
-        </TabsContent>
-        <TabsContent value="skills" className="mt-4">
-          <PersonalSkillsTab />
-        </TabsContent>
-        <TabsContent value="profile" className="mt-4">
-          <ProfileTab />
-        </TabsContent>
-      </Tabs>
+      <ProfileTab />
     </div>
   );
 }

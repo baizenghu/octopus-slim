@@ -26,19 +26,8 @@ import SessionSidebar from './SessionSidebar';
 import ChatMessages from './ChatMessages';
 import ChatInput from './ChatInput';
 
-interface ChatMessage {
-  role: 'user' | 'assistant';
-  content: string;
-  thinking?: string;
-  ts?: string;
-}
-
-interface Attachment {
-  name: string;
-  content: string;  // 文本内容或 base64
-  type: string;     // MIME type
-  size: number;
-}
+// 共享类型
+import type { ToolCallInfo, ChatMessage, Attachment } from '../types/chat';
 
 /** 将后端附件格式还原为前端显示格式 */
 function restoreAttachmentDisplay(content: string): string {
@@ -231,29 +220,6 @@ export default function ChatPage() {
     } catch { /* ignore */ }
   };
 
-  // AI 生成标题
-  const handleGenerateTitle = async (sid: string) => {
-    try {
-      await adminApi.generateTitle(sid, currentAgentId);
-      loadSessions();
-      toast.success('标题已生成');
-    } catch { toast.error('生成失败'); }
-  };
-
-  // 导出
-  const handleExport = async (sid: string, format: string) => {
-    try {
-      const blob = await adminApi.exportSession(sid, format as 'md' | 'json', currentAgentId);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${sid}.${format}`;
-      a.click();
-      URL.revokeObjectURL(url);
-      toast.success('导出成功');
-    } catch { toast.error('导出失败'); }
-  };
-
   // 搜索
   const handleSearch = async (query: string) => {
     if (!query.trim()) return;
@@ -284,9 +250,9 @@ export default function ChatPage() {
 
     setInput('');
     setAttachments([]);
-    setMessages((prev) => [...prev, { role: 'user', content: displayMsg }]);
+    setMessages((prev) => [...prev, { role: 'user', content: displayMsg, ts: new Date().toISOString() }]);
     setIsStreaming(true);
-    setMessages((prev) => [...prev, { role: 'assistant', content: '' }]);
+    setMessages((prev) => [...prev, { role: 'assistant', content: '', ts: new Date().toISOString() }]);
 
     const token = localStorage.getItem('admin_token');
 
@@ -338,6 +304,39 @@ export default function ChatPage() {
               if (parsed.sessionId && parsed.done) {
                 sid = parsed.sessionId;
                 setCurrentSession(parsed.sessionId);
+              }
+              // 处理工具调用事件（后端已合并 start/update/result，每个 toolCallId 只发一次）
+              if (parsed.toolCall && Array.isArray(parsed.tools)) {
+                setMessages((prev) => {
+                  const updated = [...prev];
+                  const last = updated[updated.length - 1];
+                  if (last.role === 'assistant') {
+                    const toolName = parsed.tools[0] || 'unknown';
+                    const newCall: ToolCallInfo = {
+                      name: toolName,
+                      toolCallId: parsed.toolCallId,
+                      args: parsed.toolArgs,
+                      result: parsed.toolResult,
+                    };
+                    // 如果有 toolCallId，检查是否已存在（防止重复）
+                    const existingCalls = last.toolCalls || [];
+                    if (parsed.toolCallId) {
+                      const existingIdx = existingCalls.findIndex(tc => tc.toolCallId === parsed.toolCallId);
+                      if (existingIdx >= 0) {
+                        // 更新已有条目
+                        const updatedCalls = [...existingCalls];
+                        updatedCalls[existingIdx] = newCall;
+                        updated[updated.length - 1] = { ...last, toolCalls: updatedCalls };
+                        return updated;
+                      }
+                    }
+                    updated[updated.length - 1] = {
+                      ...last,
+                      toolCalls: [...existingCalls, newCall],
+                    };
+                  }
+                  return updated;
+                });
               }
               const content = parsed.choices?.[0]?.delta?.content || parsed.content || '';
               const thinking = parsed.thinking || '';
@@ -447,9 +446,11 @@ export default function ChatPage() {
         delegationPollRef.current = pollTimer;
       }
 
-      // 发送完成后稍作延迟（等待 native gateway 持久化会话），再刷新列表
-      // 标题由后端 autoGenerateTitle 自动生成，前端不再重复调用
+      // 发送完成后刷新列表（标题由后端 autoGenerateTitle 异步生成）
+      // 首次刷新：800ms 后获取 session 列表（可能还没有标题）
+      // 二次刷新：3s 后再次获取（确保 autoGenerateTitle 完成，特别是 skill 执行耗时场景）
       setTimeout(() => loadSessions(), 800);
+      setTimeout(() => loadSessions(), 3000);
     } catch (err: any) {
       if (err.name === 'AbortError') {
         // 用户主动终止，不显示错误
@@ -516,8 +517,6 @@ export default function ChatPage() {
           onNewSession={createSession}
           onDeleteSession={handleDeleteSession}
           onRenameSession={handleRenameSession}
-          onGenerateTitle={handleGenerateTitle}
-          onExport={handleExport}
           isStreaming={isStreaming}
           collapsed={sidebarCollapsed}
           onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}

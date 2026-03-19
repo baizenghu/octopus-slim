@@ -29,7 +29,8 @@ import AdmZip from 'adm-zip';
 import { SkillScanner } from '@octopus/skills';
 import type { ScanReport } from '@octopus/skills';
 import type { AuthService } from '@octopus/auth';
-import { createAuthMiddleware, type AuthenticatedRequest } from '../middleware/auth';
+import { createAuthMiddleware, adminOnly, isAdmin, type AuthenticatedRequest } from '../middleware/auth';
+import { getRuntimeConfig } from '../config';
 import { Prisma } from '@prisma/client';
 import type { AppPrismaClient } from '../types/prisma';
 
@@ -70,7 +71,7 @@ export function createSkillsRouter(
   // multer 配置 — 临时存储 zip 文件
   const upload = multer({
     dest: path.join(dataRoot, 'tmp'),
-    limits: { fileSize: 50 * 1024 * 1024 }, // 50MB
+    limits: { fileSize: getRuntimeConfig().upload.maxSkillSizeBytes },
     fileFilter: (_req, file, cb) => {
       if (file.mimetype === 'application/zip' ||
           file.mimetype === 'application/x-zip-compressed' ||
@@ -81,16 +82,6 @@ export function createSkillsRouter(
       }
     },
   });
-
-  // 管理员权限检查
-  const adminOnly = (req: AuthenticatedRequest, res: any, next: any) => {
-    const roles = req.user?.roles as string[] | undefined;
-    if (!roles?.some((r: string) => r.toLowerCase() === 'admin')) {
-      res.status(403).json({ error: '需要管理员权限' });
-      return;
-    }
-    next();
-  };
 
   /**
    * 解压 zip 到目标目录（使用 adm-zip，避免 execSync 命令注入风险）
@@ -193,10 +184,10 @@ export function createSkillsRouter(
   router.get('/', authMiddleware, async (req: AuthenticatedRequest, res, next) => {
     try {
       const user = req.user!;
-      const isAdmin = (user.roles as string[])?.some((r: string) => r.toLowerCase() === 'admin');
+      const userIsAdmin = isAdmin(user);
 
       let skills;
-      if (isAdmin) {
+      if (userIsAdmin) {
         skills = await prisma.skill.findMany({ orderBy: { createdAt: 'desc' } });
       } else {
         skills = await prisma.skill.findMany({

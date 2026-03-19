@@ -1,5 +1,5 @@
 /**
- * 用户管理页面 — 列表 + CRUD + 配额管理
+ * 用户管理页面 — 列表 + CRUD
  */
 import { useEffect, useState } from 'react';
 import {
@@ -7,8 +7,6 @@ import {
   Search,
   Pencil,
   Trash2,
-  LayoutDashboard,
-  Loader2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { adminApi, type UserInfo } from '../api';
@@ -17,7 +15,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Switch } from '@/components/ui/switch';
 import {
   Table,
   TableBody,
@@ -48,25 +45,6 @@ const ROLE_OPTIONS = [
   { label: '高级用户', value: 'POWER_USER' },
 ];
 
-const QUOTA_LABELS: Record<string, string> = {
-  token_daily: '每日 Token',
-  token_monthly: '每月 Token',
-  request_hourly: '每小时请求',
-};
-
-const QUOTA_DEFAULTS: Record<string, number> = {
-  token_daily: 200000,
-  token_monthly: 5000000,
-  request_hourly: 60,
-};
-
-interface QuotaData {
-  tokenDaily: number;
-  tokenMonthly: number;
-  requestHourly: number;
-  limits: Record<string, number>;
-}
-
 interface FormValues {
   username: string;
   password: string;
@@ -90,21 +68,6 @@ export default function UsersPage() {
   const [editingUser, setEditingUser] = useState<UserInfo | null>(null);
   const [formValues, setFormValues] = useState<FormValues>({
     username: '', password: '', email: '', displayName: '', department: '', roles: ['POWER_USER'], status: 'active',
-  });
-
-  // 配额弹窗
-  const [quotaModalOpen, setQuotaModalOpen] = useState(false);
-  const [quotaUser, setQuotaUser] = useState<UserInfo | null>(null);
-  const [quotaData, setQuotaData] = useState<QuotaData | null>(null);
-  const [quotaLoading, setQuotaLoading] = useState(false);
-  const [quotaSaving, setQuotaSaving] = useState(false);
-  const [quotaEnabled, setQuotaEnabled] = useState<Record<string, boolean>>({
-    token_daily: false, token_monthly: false, request_hourly: false,
-  });
-  const [quotaValues, setQuotaValues] = useState<Record<string, number>>({
-    token_daily: QUOTA_DEFAULTS.token_daily,
-    token_monthly: QUOTA_DEFAULTS.token_monthly,
-    request_hourly: QUOTA_DEFAULTS.request_hourly,
   });
 
   // 删除确认弹窗
@@ -193,73 +156,6 @@ export default function UsersPage() {
     } catch (err: any) {
       toast.error(err.message);
     }
-  };
-
-  // ─── 配额管理 ───
-
-  const openQuotaModal = async (user: UserInfo) => {
-    setQuotaUser(user);
-    setQuotaData(null);
-    setQuotaModalOpen(true);
-    setQuotaLoading(true);
-    try {
-      const data = await adminApi.getUserQuota(user.userId);
-      setQuotaData(data);
-      const enabled: Record<string, boolean> = {};
-      const values: Record<string, number> = {};
-      for (const type of ['token_daily', 'token_monthly', 'request_hourly']) {
-        const limit = data.limits[type] ?? -1;
-        enabled[type] = limit !== -1;
-        values[type] = enabled[type] ? data.limits[type] : QUOTA_DEFAULTS[type];
-      }
-      setQuotaEnabled(enabled);
-      setQuotaValues(values);
-    } catch (err: any) {
-      toast.error('加载配额失败: ' + err.message);
-    } finally {
-      setQuotaLoading(false);
-    }
-  };
-
-  const handleQuotaToggle = (type: string, checked: boolean) => {
-    setQuotaEnabled((prev) => ({ ...prev, [type]: checked }));
-    if (checked) {
-      setQuotaValues((prev) => ({ ...prev, [type]: QUOTA_DEFAULTS[type] }));
-    }
-  };
-
-  const handleQuotaSave = async () => {
-    if (!quotaUser) return;
-    setQuotaSaving(true);
-    try {
-      const types = ['token_daily', 'token_monthly', 'request_hourly'] as const;
-      for (const type of types) {
-        const newLimit = quotaEnabled[type] ? quotaValues[type] : -1;
-        const oldLimit = quotaData?.limits[type];
-        if (newLimit !== oldLimit) {
-          await adminApi.setUserQuota(quotaUser.userId, type, newLimit);
-        }
-      }
-      toast.success('配额限额已更新');
-      const updated = await adminApi.getUserQuota(quotaUser.userId);
-      setQuotaData(updated);
-    } catch (err: any) {
-      if (err.message) toast.error(err.message);
-    } finally {
-      setQuotaSaving(false);
-    }
-  };
-
-  const formatQuotaValue = (used: number, limit: number) => {
-    if (limit === -1) return <span>{used.toLocaleString()} / 无限制</span>;
-    const pct = limit > 0 ? Math.round((used / limit) * 100) : 0;
-    const colorClass = pct >= 90 ? 'bg-red-100 text-red-700' : pct >= 70 ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700';
-    return (
-      <span className="flex items-center gap-2">
-        {used.toLocaleString()} / {limit.toLocaleString()}
-        <Badge className={colorClass}>{pct}%</Badge>
-      </span>
-    );
   };
 
   const roleColorMap: Record<string, string> = {
@@ -353,9 +249,6 @@ export default function UsersPage() {
                       <div className="flex items-center justify-end gap-1">
                         <Button variant="ghost" size="sm" onClick={() => openEditModal(user)}>
                           <Pencil className="h-4 w-4" />
-                        </Button>
-                        <Button variant="ghost" size="sm" onClick={() => openQuotaModal(user)}>
-                          <LayoutDashboard className="h-4 w-4" />
                         </Button>
                         <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={() => confirmDelete(user)}>
                           <Trash2 className="h-4 w-4" />
@@ -491,84 +384,6 @@ export default function UsersPage() {
         </DialogContent>
       </Dialog>
 
-      {/* 配额管理弹窗 */}
-      <Dialog open={quotaModalOpen} onOpenChange={setQuotaModalOpen}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>配额管理 — {quotaUser?.username || ''}</DialogTitle>
-            <DialogDescription>查看用量和设置限额</DialogDescription>
-          </DialogHeader>
-
-          {quotaLoading ? (
-            <div className="flex items-center justify-center py-10">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-            </div>
-          ) : quotaData ? (
-            <div className="space-y-6">
-              {/* 当前用量 */}
-              <div>
-                <h4 className="text-sm font-medium mb-3">当前用量</h4>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">{QUOTA_LABELS.token_daily}</span>
-                    {formatQuotaValue(quotaData.tokenDaily, quotaData.limits.token_daily)}
-                  </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">{QUOTA_LABELS.token_monthly}</span>
-                    {formatQuotaValue(quotaData.tokenMonthly, quotaData.limits.token_monthly)}
-                  </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">{QUOTA_LABELS.request_hourly}</span>
-                    {formatQuotaValue(quotaData.requestHourly, quotaData.limits.request_hourly)}
-                  </div>
-                </div>
-              </div>
-
-              {/* 限额设置 */}
-              <div>
-                <h4 className="text-sm font-medium mb-3">限额设置</h4>
-                <div className="space-y-4">
-                  {(['token_daily', 'token_monthly', 'request_hourly'] as const).map((type) => (
-                    <div key={type} className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <Label>{QUOTA_LABELS[type]}</Label>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-muted-foreground">
-                            {quotaEnabled[type] ? '限额' : '不限'}
-                          </span>
-                          <Switch
-                            checked={quotaEnabled[type]}
-                            onCheckedChange={(checked: boolean) => handleQuotaToggle(type, checked)}
-                          />
-                        </div>
-                      </div>
-                      {quotaEnabled[type] && (
-                        <Input
-                          type="number"
-                          min={0}
-                          value={quotaValues[type]}
-                          onChange={(e) => setQuotaValues((prev) => ({ ...prev, [type]: Number(e.target.value) }))}
-                          placeholder={`默认 ${QUOTA_DEFAULTS[type].toLocaleString()}`}
-                        />
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          ) : (
-            <p className="text-sm text-muted-foreground py-4">加载失败</p>
-          )}
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setQuotaModalOpen(false)}>取消</Button>
-            <Button onClick={handleQuotaSave} disabled={quotaSaving}>
-              {quotaSaving && <Loader2 className="h-4 w-4 animate-spin mr-1" />}
-              保存
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

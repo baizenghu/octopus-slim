@@ -13,7 +13,8 @@
 import { randomUUID } from 'crypto';
 import { Router } from 'express';
 import type { AuthService } from '@octopus/auth';
-import { createAuthMiddleware, type AuthenticatedRequest } from '../middleware/auth';
+import { createAuthMiddleware, isAdmin, type AuthenticatedRequest } from '../middleware/auth';
+import { getRuntimeConfig } from '../config';
 import { EngineAdapter } from '../services/EngineAdapter';
 import type { EngineAdapter as BridgeType } from '../services/EngineAdapter';
 import { syncAgentToEngine } from '../services/AgentConfigSync';
@@ -81,7 +82,7 @@ async function verifyTaskOwnership(
   bridge: BridgeType,
   taskId: string,
   userId: string,
-  isAdmin = false,
+  userIsAdmin = false,
 ): Promise<{ ok: boolean; status: number; error?: string }> {
   try {
     // NOTE: cron.list RPC 不支持 agentId 过滤，全量拉取后客户端校验归属
@@ -92,7 +93,7 @@ async function verifyTaskOwnership(
       return { ok: false, status: 404, error: 'Task not found' };
     }
     const agentId = job.agentId || job.agent || '';
-    if (!agentId.startsWith(`ent_${userId}_`) && !isAdmin) {
+    if (!agentId.startsWith(`ent_${userId}_`) && !userIsAdmin) {
       return { ok: false, status: 403, error: 'Access denied' };
     }
     return { ok: true, status: 200 };
@@ -228,7 +229,7 @@ export function createSchedulerRouter(
         const message = taskConfig?.message || `执行定时任务: ${name}`;
         const schedule = cronExpr
           ? { kind: 'cron' as const, expr: cronExpr }
-          : { kind: 'at' as const, at: taskConfig?.at || new Date(Date.now() + 60000).toISOString() };
+          : { kind: 'at' as const, at: taskConfig?.at || new Date(Date.now() + getRuntimeConfig().scheduler.defaultHeartbeatDelayMs).toISOString() };
 
         const job = await bridge.cronAdd({
           name: name.trim(),
@@ -367,7 +368,7 @@ export function createSchedulerRouter(
       // ---- 普通定时任务更新 ----
       if (bridge?.isConnected) {
         // 归属校验：确保任务属于当前用户
-        const ownership = await verifyTaskOwnership(bridge, id, user.id, (user.roles as string[])?.some(r => r.toLowerCase() === 'admin'));
+        const ownership = await verifyTaskOwnership(bridge, id, user.id, isAdmin(user));
         if (!ownership.ok) {
           res.status(ownership.status).json({ error: ownership.error });
           return;
@@ -379,7 +380,7 @@ export function createSchedulerRouter(
         const job = await bridge.cronAdd({
           name: name?.trim() || id,
           agentId: nativeAgentId,
-          schedule: cronExpr ? { kind: 'cron' as const, expr: cronExpr } : { kind: 'at' as const, at: new Date(Date.now() + 60000).toISOString() },
+          schedule: cronExpr ? { kind: 'cron' as const, expr: cronExpr } : { kind: 'at' as const, at: new Date(Date.now() + getRuntimeConfig().scheduler.defaultHeartbeatDelayMs).toISOString() },
           sessionTarget: 'isolated',
           payload: { kind: 'agentTurn', message: taskConfig?.message || `执行定时任务: ${name}` },
         });
@@ -450,7 +451,7 @@ export function createSchedulerRouter(
       // ---- 普通定时任务删除 ----
       if (bridge?.isConnected) {
         // 归属校验：确保任务属于当前用户
-        const ownership = await verifyTaskOwnership(bridge, id, user.id, (user.roles as string[])?.some(r => r.toLowerCase() === 'admin'));
+        const ownership = await verifyTaskOwnership(bridge, id, user.id, isAdmin(user));
         if (!ownership.ok) {
           res.status(ownership.status).json({ error: ownership.error });
           return;
@@ -520,7 +521,7 @@ export function createSchedulerRouter(
         }
 
         const isOk = heartbeatReply.includes('HEARTBEAT_OK');
-        const resultSummary = isOk ? 'HEARTBEAT_OK' : heartbeatReply.slice(0, 2000);
+        const resultSummary = isOk ? 'HEARTBEAT_OK' : heartbeatReply.slice(0, getRuntimeConfig().chat.heartbeatSummaryMaxChars);
 
         // 心跳结果推送：不含 HEARTBEAT_OK → 有异常，自动推 IM
         if (imService && resultSummary && !isOk) {
@@ -562,7 +563,7 @@ export function createSchedulerRouter(
 
       if (bridge?.isConnected) {
         // 归属校验：确保任务属于当前用户
-        const ownership = await verifyTaskOwnership(bridge, req.params.id, user.id, (user.roles as string[])?.some(r => r.toLowerCase() === 'admin'));
+        const ownership = await verifyTaskOwnership(bridge, req.params.id, user.id, isAdmin(user));
         if (!ownership.ok) {
           res.status(ownership.status).json({ error: ownership.error });
           return;
@@ -619,7 +620,7 @@ export function createSchedulerRouter(
       if (bridge?.isConnected) {
         // 归属校验：确保提醒属于当前用户
         const user = req.user!;
-        const ownership = await verifyTaskOwnership(bridge, req.params.id, user.id, (user.roles as string[])?.some(r => r.toLowerCase() === 'admin'));
+        const ownership = await verifyTaskOwnership(bridge, req.params.id, user.id, isAdmin(user));
         if (!ownership.ok) {
           res.status(ownership.status).json({ error: ownership.error });
           return;

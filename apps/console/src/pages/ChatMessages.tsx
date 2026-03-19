@@ -3,13 +3,16 @@
  *
  * 从 ChatPage.tsx 提取，不含任何新业务逻辑。
  */
-import { useRef, useEffect, useCallback } from 'react';
+import { useRef, useEffect, useCallback, useMemo } from 'react';
+import Markdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import rehypeHighlight from 'rehype-highlight';
 import { cn } from '@/lib/utils';
 
 // shadcn/ui components
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import {
   Collapsible,
   CollapsibleContent,
@@ -23,6 +26,7 @@ import {
   Brain,
   BellRing,
   User,
+  Wrench,
 } from 'lucide-react';
 import { OctopusIcon } from '@/components/OctopusIcon';
 
@@ -44,12 +48,8 @@ function filterInternalTags(text: string): string {
     .trim();
 }
 
-interface ChatMessage {
-  role: 'user' | 'assistant';
-  content: string;
-  thinking?: string;
-  ts?: string;
-}
+// 共享类型
+import type { ToolCallInfo, ChatMessage } from '../types/chat';
 
 const TIPS = [
   '帮我分析今日的电力负荷数据趋势',
@@ -58,10 +58,112 @@ const TIPS = [
   '帮我起草一份技术评审报告',
 ];
 
+// Markdown 渲染插件（组件外声明避免每次渲染重建数组）
+const remarkPlugins = [remarkGfm];
+const rehypePlugins = [rehypeHighlight];
+
+/** 代码块组件：显示语言标签 + 语法高亮 */
+function CodeBlock({ className, children, node, ...props }: React.ComponentPropsWithoutRef<'code'> & { node?: unknown }) {
+  // rehype-highlight 会在 className 中注入 "hljs language-xxx"
+  const match = /language-(\w+)/.exec(className || '');
+  const isInline = !match && typeof children === 'string' && !children.includes('\n');
+
+  if (isInline) {
+    return <code className="md-inline-code" {...props}>{children}</code>;
+  }
+
+  const lang = match?.[1] || '';
+  return (
+    <div className="md-code-block">
+      {lang && <div className="md-code-lang">{lang}</div>}
+      <pre><code className={className} {...props}>{children}</code></pre>
+    </div>
+  );
+}
+
+/** Markdown 渲染组件（assistant 消息专用） */
+function MarkdownContent({ content }: { content: string }) {
+  const components = useMemo(() => ({
+    // 链接在新标签页打开
+    a: ({ children, node, ...props }: React.ComponentPropsWithoutRef<'a'> & { node?: unknown }) => (
+      <a target="_blank" rel="noopener noreferrer" {...props}>{children}</a>
+    ),
+    code: CodeBlock,
+  }), []);
+
+  return (
+    <div className="md-prose">
+      <Markdown remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins} components={components}>
+        {content}
+      </Markdown>
+    </div>
+  );
+}
+
+/** 截断过长的工具名，保留前 40 字符 */
+function truncateToolName(name: string, maxLen = 40): string {
+  if (name.length <= maxLen) return name;
+  return name.slice(0, maxLen) + '...';
+}
+
+/** 格式化 JSON 字符串，用于展示工具参数和结果 */
+function formatJsonDisplay(raw?: string): string {
+  if (!raw) return '';
+  try {
+    const parsed = JSON.parse(raw);
+    return JSON.stringify(parsed, null, 2);
+  } catch {
+    return raw;
+  }
+}
+
+/** 工具调用卡片列表 */
+function ToolCallCards({ toolCalls }: { toolCalls: ToolCallInfo[] }) {
+  if (toolCalls.length === 0) return null;
+  return (
+    <div className="space-y-1.5 mb-2">
+      {toolCalls.map((tc, idx) => (
+        <Collapsible key={tc.toolCallId || `tool-${idx}`}>
+          <CollapsibleTrigger className="flex items-center gap-1.5 text-xs opacity-70 hover:opacity-100 cursor-pointer group w-full">
+            <Wrench className="h-3.5 w-3.5 shrink-0 text-indigo-500" />
+            <span className="font-mono truncate" title={tc.name}>
+              {truncateToolName(tc.name)}
+            </span>
+            <ChevronRight className="h-3 w-3 ml-auto shrink-0 transition-transform [[data-state=open]_&]:rotate-90" />
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <div className="text-xs pl-5 mt-1 space-y-1.5">
+              {tc.args && (
+                <div>
+                  <span className="text-muted-foreground font-medium">参数</span>
+                  <pre className="mt-0.5 p-2 rounded-lg bg-background/60 border text-[11px] leading-relaxed overflow-x-auto max-h-48 whitespace-pre-wrap break-all">
+                    {formatJsonDisplay(tc.args)}
+                  </pre>
+                </div>
+              )}
+              {tc.result && (
+                <div>
+                  <span className="text-muted-foreground font-medium">结果</span>
+                  <pre className="mt-0.5 p-2 rounded-lg bg-background/60 border text-[11px] leading-relaxed overflow-x-auto max-h-48 whitespace-pre-wrap break-all">
+                    {formatJsonDisplay(tc.result)}
+                  </pre>
+                </div>
+              )}
+              {!tc.args && !tc.result && (
+                <span className="text-muted-foreground italic">执行中...</span>
+              )}
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
+      ))}
+    </div>
+  );
+}
+
 export interface ChatMessagesProps {
   messages: ChatMessage[];
-  currentAgent: { identity?: { name?: string; emoji?: string; avatar?: string; vibe?: string }; name?: string } | undefined;
-  user: { username?: string } | null;
+  currentAgent: { id?: string; identity?: { name?: string; emoji?: string; avatar?: string; vibe?: string }; name?: string } | undefined;
+  user: { id?: string; username?: string } | null;
   isStreaming: boolean;
   onSendTip: (text: string) => void;
   activeReminder: { id: string; title: string; text?: string } | null;
@@ -121,17 +223,37 @@ export default function ChatMessages({
             /* ── 消息列表 ── */
             <div className="space-y-6">
               {messages.map((msg, i) => (
-                <div key={i} className={cn('flex gap-3', msg.role === 'user' ? 'flex-row-reverse' : '')}>
+                <div key={`${msg.role}-${msg.ts || i}`} className={cn('flex gap-3', msg.role === 'user' ? 'flex-row-reverse' : '')}>
                   {/* Avatar */}
                   <Avatar className={cn('h-8 w-8 shrink-0', msg.role === 'user' ? 'bg-primary' : 'bg-muted')}>
+                    {msg.role === 'user' && user?.id && (
+                      <AvatarImage
+                        src={`/api/auth/avatar/${user.id}`}
+                        alt={user.username}
+                      />
+                    )}
+                    {msg.role === 'assistant' && currentAgent?.id && (
+                      <AvatarImage
+                        src={currentAgent.identity?.avatar || `/api/agents/${currentAgent.id}/avatar`}
+                        alt={agentName}
+                      />
+                    )}
                     <AvatarFallback className={cn(
                       'text-xs',
                       msg.role === 'user' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'
                     )}>
                       {msg.role === 'user' ? (
-                        <User className="h-4 w-4" />
+                        user?.username ? (
+                          <span className="text-xs font-medium">{user.username.charAt(0).toUpperCase()}</span>
+                        ) : (
+                          <User className="h-4 w-4" />
+                        )
                       ) : (
-                        <OctopusIcon className="h-5 w-5 text-indigo-600" />
+                        currentAgent?.identity?.emoji ? (
+                          <span className="text-sm">{currentAgent.identity.emoji}</span>
+                        ) : (
+                          <OctopusIcon className="h-5 w-5 text-indigo-600" />
+                        )
                       )}
                     </AvatarFallback>
                   </Avatar>
@@ -170,11 +292,20 @@ export default function ChatMessages({
                         </Collapsible>
                       )}
 
+                      {/* Tool calls */}
+                      {msg.role === 'assistant' && msg.toolCalls && msg.toolCalls.length > 0 && (
+                        <ToolCallCards toolCalls={msg.toolCalls} />
+                      )}
+
                       {/* Message content */}
                       {msg.content ? (
-                        filterInternalTags(msg.content).split('\n').map((line, j) => (
-                          <p key={j} className="min-h-[1.2em]">{line || '\u00A0'}</p>
-                        ))
+                        msg.role === 'assistant' ? (
+                          <MarkdownContent content={filterInternalTags(msg.content)} />
+                        ) : (
+                          filterInternalTags(msg.content).split('\n').map((line, j) => (
+                            <p key={j} className="min-h-[1.2em]">{line || '\u00A0'}</p>
+                          ))
+                        )
                       ) : !msg.thinking ? (
                         <div className="flex items-center gap-1 py-1">
                           <span className="w-1.5 h-1.5 rounded-full bg-current animate-bounce [animation-delay:0ms]" />

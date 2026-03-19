@@ -32,27 +32,11 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 export default function SystemConfigPlugins({ config, onSaved }: Props) {
   const plugins = config.plugins || {};
-  const allow: string[] = plugins.allow || [];
   const entries: Record<string, any> = plugins.entries || {};
 
-  // 深拷贝 entries 用于编辑
+  // 深拷贝 entries 用于编辑（仅修改 config，不改 enabled/allow）
   const [editEntries, setEditEntries] = useState<Record<string, any>>(() => JSON.parse(JSON.stringify(entries)));
-  const [editAllow, setEditAllow] = useState<string[]>([...allow]);
   const [saving, setSaving] = useState(false);
-
-  const toggleAllow = (name: string, enabled: boolean) => {
-    if (enabled && !editAllow.includes(name)) {
-      setEditAllow([...editAllow, name]);
-    } else if (!enabled) {
-      setEditAllow(editAllow.filter(a => a !== name));
-    }
-    // 同步 entries enabled（防御性初始化）
-    const existing = editEntries[name] || { config: {} };
-    setEditEntries({
-      ...editEntries,
-      [name]: { ...existing, enabled },
-    });
-  };
 
   const updateEntry = (pluginName: string, path: string, value: any) => {
     const updated = JSON.parse(JSON.stringify(editEntries));
@@ -72,7 +56,6 @@ export default function SystemConfigPlugins({ config, onSaved }: Props) {
     setSaving(true);
     try {
       await adminApi.updatePluginsConfig({
-        allow: editAllow,
         entries: editEntries,
       });
       toast.success('插件配置已保存');
@@ -97,10 +80,7 @@ export default function SystemConfigPlugins({ config, onSaved }: Props) {
               <CardTitle className="text-lg">memory-lancedb-pro</CardTitle>
               <Badge variant="outline">记忆引擎</Badge>
             </div>
-            <Switch
-              checked={getEntry('memory-lancedb-pro').enabled}
-              onCheckedChange={(v) => toggleAllow('memory-lancedb-pro', v)}
-            />
+            <Badge variant="secondary" className="text-xs">运行中</Badge>
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -241,10 +221,7 @@ export default function SystemConfigPlugins({ config, onSaved }: Props) {
               <CardTitle className="text-lg">enterprise-audit</CardTitle>
               <Badge variant="outline">审计日志</Badge>
             </div>
-            <Switch
-              checked={getEntry('enterprise-audit').enabled}
-              onCheckedChange={(v) => toggleAllow('enterprise-audit', v)}
-            />
+            <Badge variant="secondary" className="text-xs">运行中</Badge>
           </div>
         </CardHeader>
         <CardContent>
@@ -270,10 +247,7 @@ export default function SystemConfigPlugins({ config, onSaved }: Props) {
               <CardTitle className="text-lg">enterprise-mcp</CardTitle>
               <Badge variant="outline">工具协议</Badge>
             </div>
-            <Switch
-              checked={getEntry('enterprise-mcp').enabled}
-              onCheckedChange={(v) => toggleAllow('enterprise-mcp', v)}
-            />
+            <Badge variant="secondary" className="text-xs">运行中</Badge>
           </div>
         </CardHeader>
         <CardContent>

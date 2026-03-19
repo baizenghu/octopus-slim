@@ -8,13 +8,16 @@
  */
 
 import { Router } from 'express';
+import * as fs from 'fs';
+import * as path from 'path';
 import type { AuthService } from '@octopus/auth';
 import type { WorkspaceManager } from '@octopus/workspace';
 import { createAuthMiddleware, type AuthenticatedRequest } from '../middleware/auth';
 import { securityMonitor } from '../services/SecurityMonitor';
 import { validatePassword } from '../utils/password';
+import { createAvatarUpload, mimeToExt } from '../utils/avatar';
 
-export function createAuthRouter(authService: AuthService, workspaceManager: WorkspaceManager, prisma?: any): Router {
+export function createAuthRouter(authService: AuthService, workspaceManager: WorkspaceManager, prisma?: any, dataRoot?: string): Router {
   const router = Router();
   const authMiddleware = createAuthMiddleware(authService, prisma);
 
@@ -203,6 +206,96 @@ export function createAuthRouter(authService: AuthService, workspaceManager: Wor
       roles: user.roles,
       status: user.status,
     });
+  });
+
+  // ─── 用户头像 ───
+
+  /**
+   * 上传用户头像
+   */
+  router.post('/avatar', authMiddleware, (req, res) => {
+    createAvatarUpload().single('avatar')(req, res, (err: any) => {
+      if (err) {
+        res.status(400).json({ error: err.message });
+        return;
+      }
+      (async () => {
+        try {
+          const authReq = req as AuthenticatedRequest;
+          const user = authReq.user!;
+          const file = (req as any).file;
+          if (!file) {
+            res.status(400).json({ error: '请选择头像文件' });
+            return;
+          }
+
+          const ext = mimeToExt(file.mimetype);
+          const avatarDir = path.join(dataRoot || './data', 'avatars', 'users', user.id);
+          await fs.promises.mkdir(avatarDir, { recursive: true });
+
+          // 删除旧头像（可能是不同扩展名）
+          try {
+            const files = await fs.promises.readdir(avatarDir);
+            for (const f of files) {
+              if (f.startsWith('avatar.')) {
+                await fs.promises.unlink(path.join(avatarDir, f));
+              }
+            }
+          } catch { /* ignore */ }
+
+          const avatarPath = path.join(avatarDir, `avatar.${ext}`);
+          await fs.promises.writeFile(avatarPath, file.buffer);
+
+          // 更新 DB
+          if (prisma) {
+            await prisma.user.update({
+              where: { userId: user.id },
+              data: { avatarPath: `avatars/users/${user.id}/avatar.${ext}` },
+            });
+          }
+
+          res.json({ ok: true, avatarUrl: `/api/auth/avatar/${user.id}` });
+        } catch (err: any) {
+          res.status(500).json({ error: err.message || '头像上传失败' });
+        }
+      })();
+    });
+  });
+
+  /**
+   * 获取用户头像（无需 JWT，用于 img src 直接引用）
+   */
+  router.get('/avatar/:userId', async (req, res) => {
+    try {
+      const { userId } = req.params;
+
+      // 路径穿越防护：仅允许安全字符
+      if (!/^[\w-]+$/.test(userId)) {
+        res.status(400).json({ error: 'Invalid user ID' });
+        return;
+      }
+
+      if (prisma) {
+        const dbUser = await prisma.user.findUnique({
+          where: { userId },
+          select: { avatarPath: true },
+        });
+        if (dbUser?.avatarPath) {
+          const fullPath = path.join(dataRoot || './data', dbUser.avatarPath);
+          try {
+            await fs.promises.access(fullPath);
+            // 设置缓存头（1小时）
+            res.setHeader('Cache-Control', 'public, max-age=3600');
+            res.sendFile(path.resolve(fullPath));
+            return;
+          } catch { /* file not found */ }
+        }
+      }
+
+      res.status(404).json({ error: '头像不存在' });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || '获取头像失败' });
+    }
   });
 
   return router;

@@ -1,7 +1,7 @@
 {
   "meta": {
     "lastTouchedVersion": "1.0.0",
-    "lastTouchedAt": "2026-03-18T15:17:31.419Z"
+    "lastTouchedAt": "2026-03-17T08:41:28.815Z"
   },
   "update": {
     "channel": "beta"
@@ -11,14 +11,6 @@
       "remote": {
         "cdpUrl": "http://10.0.0.42:9222",
         "color": "#0066CC"
-      }
-    }
-  },
-  "auth": {
-    "profiles": {
-      "openai-codex:default": {
-        "provider": "openai-codex",
-        "mode": "oauth"
       }
     }
   },
@@ -61,14 +53,6 @@
       },
       "compaction": {
         "mode": "safeguard"
-      },
-      "sandbox": {
-        "mode": "all",
-        "workspaceAccess": "rw",
-        "scope": "agent",
-        "docker": {
-          "image": "octopus-sandbox:enterprise"
-        }
       }
     },
     "list": [
@@ -82,31 +66,19 @@
         "agentDir": "/home/baizh/octopus/.octopus-state/agents/ent_user-admin_default/agent"
       },
       {
+        "id": "ent_user-admin_____",
+        "name": "ent_user-admin_____",
+        "workspace": "/home/baizh/octopus/data/users/user-admin/agents/财务助手",
+        "agentDir": "/home/baizh/octopus/.octopus-state/agents/ent_user-admin_____/agent"
+      },
+      {
         "id": "ent_user-test_default",
         "name": "ent_user-test_default",
         "workspace": "/home/baizh/octopus/data/users/user-test/workspace",
         "agentDir": "/home/baizh/octopus/.octopus-state/agents/ent_user-test_default/agent",
-        "model": "openai-codex/gpt-5.2",
         "subagents": {
           "allowAgents": [
             "ent_user-test_shuju"
-          ]
-        },
-        "tools": {
-          "allow": [
-            "read",
-            "write",
-            "exec",
-            "memory_search",
-            "memory_get",
-            "sessions_list",
-            "sessions_history",
-            "sessions_send",
-            "sessions_spawn",
-            "agents_list",
-            "cron",
-            "image",
-            "group:plugins"
           ]
         }
       },
@@ -153,9 +125,6 @@
       "criticalThreshold": 15,
       "globalCircuitBreakerThreshold": 25
     },
-    "exec": {
-      "host": "sandbox"
-    },
     "fs": {
       "workspaceOnly": true
     },
@@ -172,13 +141,6 @@
     "nativeSkills": "auto",
     "restart": true,
     "ownerDisplay": "raw"
-  },
-  "skills": {
-    "load": {
-      "extraDirs": [
-        "/home/baizh/octopus/data/skills"
-      ]
-    }
   },
   "plugins": {
     "allow": [
@@ -235,11 +197,7 @@
           "autoRecall": true,
           "scopes": {
             "default": "global",
-            "agentAccess": {
-              "ent_user-admin_default": [
-                "ent_user-admin_default"
-              ]
-            }
+            "agentAccess": {}
           }
         }
       },
@@ -255,20 +213,16 @@
         "enabled": true,
         "config": {
           "databaseUrl": "mysql://octopus:YOUR_DB_PASSWORD_URLENCODED@localhost:3306/octopus_enterprise",
-          "dataRoot": "/home/baizh/octopus/data",
-          "sandbox": {
-            "mcp": {
-              "memory": "256m",
-              "cpus": "0.5",
-              "network": "octopus-internal"
-            },
-            "skill": {
-              "memory": "512m",
-              "cpus": "1",
-              "network": "none"
-            }
-          }
+          "dataRoot": "/home/baizh/octopus/data"
         }
+      }
+    }
+  },
+  "auth": {
+    "profiles": {
+      "openai-codex:default": {
+        "provider": "openai-codex",
+        "mode": "oauth"
       }
     }
   }
