@@ -450,6 +450,38 @@ async function main() {
   // 全局错误处理（5xx 不泄漏内部信息，4xx 保留业务消息）
   app.use(globalErrorHandler);
 
+  // ── 启动时清理孤儿 Skill 目录 ──
+  // 引擎通过 skills.load.extraDirs 自动发现 data/skills/ 下的目录并注册为工具，
+  // 但如果 DB 中没有对应记录（手动放入或删除后残留），会导致不一致。
+  // 这里扫描目录，删除没有 DB 记录的孤儿 skill。
+  if (prismaClient) {
+    const enterpriseSkillsDir = path.resolve(config.workspace.dataRoot, 'skills');
+    try {
+      const entries = fs.readdirSync(enterpriseSkillsDir, { withFileTypes: true });
+      const skillDirs = entries.filter(e => e.isDirectory() && e.name.startsWith('skill-'));
+      if (skillDirs.length > 0) {
+        const dbSkills = await prismaClient.skill.findMany({
+          where: { scope: 'enterprise' },
+          select: { id: true },
+        });
+        const dbIds = new Set(dbSkills.map(s => s.id));
+        let cleaned = 0;
+        for (const dir of skillDirs) {
+          if (!dbIds.has(dir.name)) {
+            fs.rmSync(path.join(enterpriseSkillsDir, dir.name), { recursive: true, force: true });
+            cleaned++;
+            console.log(`[skills] Cleaned orphan skill directory: ${dir.name}`);
+          }
+        }
+        if (cleaned > 0) {
+          console.log(`[skills] Cleaned ${cleaned} orphan skill director${cleaned > 1 ? 'ies' : 'y'}`);
+        }
+      }
+    } catch (e: any) {
+      console.warn('[skills] Orphan cleanup failed:', e.message);
+    }
+  }
+
   // 4. 启动服务器
   const bindHost = process.env.BIND_HOST || '127.0.0.1';
   console.log(`[gateway] Attempting to listen on ${bindHost}:${config.port} (PID: ${process.pid})...`);
