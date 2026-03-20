@@ -419,7 +419,7 @@ export function createAdminRouter(
       // 最近 N 天每日审计趋势（单次 GROUP BY）
       const sevenDaysAgo = new Date(now.getTime() - (statsDays - 1) * 24 * 60 * 60 * 1000);
       sevenDaysAgo.setHours(0, 0, 0, 0);
-      const rawTrend = await prisma.$queryRaw<Array<{ date: string; count: bigint }>>`
+      const rawTrend = await prisma.$queryRaw<Array<{ date: string | Date; count: bigint }>>`
         SELECT DATE(created_at) as date, COUNT(*) as count
         FROM audit_logs
         WHERE created_at >= ${sevenDaysAgo}

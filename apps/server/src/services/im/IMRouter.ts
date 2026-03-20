@@ -484,6 +484,7 @@ export class IMRouter {
     const sessionId = `im-${msg.channel}-${msg.imUserId}`;
     const sessionKey = EngineAdapter.userSessionKey(userId, agentName, sessionId);
 
+    let timeoutTimer: ReturnType<typeof setTimeout> | undefined;
     try {
       // 非 default agent：验证 agent 仍然存在且启用，否则自动回落 default
       if (agentName !== 'default') {
@@ -591,7 +592,7 @@ export class IMRouter {
       this.activeRuns.set(imKey, runState);
 
       // 30 分钟兜底超时
-      const timeoutTimer = setTimeout(() => {
+      timeoutTimer = setTimeout(() => {
         if (!runState.aborted) {
           runState.aborted = true;
           this.bridge.chatAbort(sessionKey).catch(() => {});
