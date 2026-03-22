@@ -1,7 +1,7 @@
 {
   "meta": {
     "lastTouchedVersion": "1.0.0",
-    "lastTouchedAt": "2026-03-22T12:28:30.201Z"
+    "lastTouchedAt": "2026-03-22T13:00:31.129Z"
   },
   "update": {
     "channel": "beta"
@@ -188,7 +188,6 @@
         "model": "minimax-portal/MiniMax-M2.7",
         "subagents": {
           "allowAgents": [
-            "ent_user-baizh_shuju",
             "ent_user-baizh_baozi"
           ]
         },
@@ -211,41 +210,12 @@
         }
       },
       {
-        "id": "ent_user-baizh_shuju",
-        "name": "ent_user-baizh_shuju",
-        "workspace": "/home/baizh/octopus/data/users/user-baizh/agents/shuju/workspace",
-        "agentDir": "/home/baizh/octopus/.octopus-state/agents/ent_user-baizh_shuju/agent",
-        "model": "minimax-portal/MiniMax-M2.7",
-        "subagents": {
-          "allowAgents": []
-        },
-        "tools": {
-          "allow": [
-            "read",
-            "write",
-            "exec",
-            "memory_search",
-            "memory_get",
-            "sessions_list",
-            "sessions_history",
-            "sessions_send",
-            "sessions_spawn",
-            "agents_list",
-            "cron",
-            "image"
-          ],
-          "deny": [
-            "run_skill"
-          ]
-        },
-        "skills": []
-      },
-      {
         "id": "ent_user-baizh_baozi",
         "name": "ent_user-baizh_baozi",
         "workspace": "/home/baizh/octopus/data/users/user-baizh/agents/baozi/workspace",
         "agentDir": "/home/baizh/octopus/.octopus-state/agents/ent_user-baizh_baozi/agent",
-        "model": "minimax-portal/MiniMax-M2.7",
+        "model": "openai-codex/gpt-5.2",
+        "skills": [],
         "subagents": {
           "allowAgents": []
         },
@@ -259,13 +229,13 @@
             "sessions_spawn",
             "agents_list",
             "cron",
-            "image"
+            "image",
+            "group:plugins"
           ],
           "deny": [
             "run_skill"
           ]
-        },
-        "skills": []
+        }
       }
     ]
   },
@@ -365,12 +335,7 @@
               ],
               "ent_user-baizh_default": [
                 "ent_user-baizh_default",
-                "ent_user-baizh_shuju",
                 "ent_user-baizh_baozi"
-              ],
-              "ent_user-baizh_shuju": [
-                "ent_user-baizh_shuju",
-                "ent_user-baizh_default"
               ],
               "ent_user-baizh_baozi": [
                 "ent_user-baizh_baozi",

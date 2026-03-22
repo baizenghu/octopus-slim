@@ -116,16 +116,17 @@ export async function syncAgentToEngine(
       // toolsFilter → 引擎 tools.allow 硬限制
       if (opts.toolsFilter !== undefined) {
         const tf = opts.toolsFilter;
-        // P1-14: 只有 default agent 获得 group:plugins（可访问所有插件工具）
-        // 专业 agent 只能使用通过 engineNames 显式授权的工具，遵循最小权限原则
-        const isDefault = opts.agentName === 'default';
+        // group:plugins 授权 agent 调用 MCP 插件工具。
+        // 所有有工具权限的 agent 都需要 group:plugins，否则 MCP 工具描述注入了但实际调用被引擎拒绝。
+        // MCP 级别的权限控制由 enterprise-mcp 插件内部的 mcpFilter 白名单负责。
         let newAllow: string[];
         if (Array.isArray(tf) && tf.length > 0) {
-          // 白名单模式：映射为引擎原生工具名 + 基础工具
           const engineTools = mapToolsToEngine(tf);
-          newAllow = [...engineTools, ...BASE_TOOLS, ...(isDefault ? ['group:plugins'] : [])];
+          newAllow = [...engineTools, ...BASE_TOOLS, 'group:plugins'];
         } else {
-          // 空数组 / null = 全部禁用工作空间工具，但保留基础工具
+          // 无工具权限的 agent（如小包无赋权状态）也需要 group:plugins 以支持 MCP
+          // default agent 一定有；专业 agent 根据是否有 mcpFilter 决定
+          const isDefault = opts.agentName === 'default';
           newAllow = [...BASE_TOOLS, ...(isDefault ? ['group:plugins'] : [])];
         }
         const oldAllow = JSON.stringify(entry.tools?.allow);
