@@ -29,19 +29,16 @@ async function buildMCPToolsSection(
   userId: string | undefined,
   allowedConnections: string[] | null | undefined,
   prisma?: any,
+  dataRoot?: string,
 ): Promise<string> {
   // null 或 [] = 全部禁用，不注入任何 MCP 工具
   if (!Array.isArray(mcpFilter) || mcpFilter.length === 0) return '';
 
-  // tools-cache.json 路径：从 src/services/ 向上推导项目根目录
-  // apps/server/src/services/ → ../../../../ = 项目根目录
-  const thisDir = path.dirname(new URL(import.meta.url).pathname);
-  const projectRoot = process.env['PROJECT_DIR'] || path.resolve(thisDir, '..', '..', '..', '..');
+  // tools-cache.json 路径：dataRoot (data/) 的父目录即项目根
+  const projectRoot = dataRoot ? path.resolve(dataRoot, '..') : process.cwd();
   const cacheCandidates = [
     path.join(projectRoot, '.octopus-state/tools-cache.json'),
     path.join(projectRoot, 'plugins/mcp/tools-cache.json'),
-    // cwd fallback（如果从项目根目录启动）
-    path.join(process.cwd(), '.octopus-state/tools-cache.json'),
   ];
   const cachePath = cacheCandidates.find(p => fs.existsSync(p)) || cacheCandidates[0];
   try {
@@ -210,7 +207,7 @@ export async function buildEnterpriseSystemPrompt(
 
   // 注入 MCP 工具说明
   // 权限逻辑：null/[] = 全部禁用，有值数组 = 白名单
-  const mcpSection = await buildMCPToolsSection(agent?.mcpFilter as string[] | null | undefined, user.id, agent?.allowedConnections as string[] | null | undefined, prisma);
+  const mcpSection = await buildMCPToolsSection(agent?.mcpFilter as string[] | null | undefined, user.id, agent?.allowedConnections as string[] | null | undefined, prisma, dataRoot);
   if (mcpSection) sections.push(mcpSection);
 
   // 工作空间工具权限（按组描述，避免暴露内部工具名）
