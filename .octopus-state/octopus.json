@@ -1,7 +1,7 @@
 {
   "meta": {
     "lastTouchedVersion": "1.0.0",
-    "lastTouchedAt": "2026-03-18T15:17:31.419Z"
+    "lastTouchedAt": "2026-03-22T12:28:30.201Z"
   },
   "update": {
     "channel": "beta"
@@ -48,6 +48,43 @@
             "name": "GPT-5.2"
           }
         ]
+      },
+      "minimax-portal": {
+        "baseUrl": "https://api.minimaxi.com/anthropic",
+        "apiKey": "YOUR_MINIMAX_API_KEY",
+        "api": "anthropic-messages",
+        "models": [
+          {
+            "id": "MiniMax-M2.7",
+            "name": "MiniMax M2.7",
+            "reasoning": false,
+            "input": [
+              "text"
+            ],
+            "contextWindow": 200000,
+            "maxTokens": 8192
+          },
+          {
+            "id": "MiniMax-M2.7-highspeed",
+            "name": "MiniMax M2.7 Highspeed",
+            "reasoning": true,
+            "input": [
+              "text"
+            ],
+            "contextWindow": 200000,
+            "maxTokens": 8192
+          },
+          {
+            "id": "MiniMax-M2.7-Lightning",
+            "name": "MiniMax M2.7 Lightning",
+            "reasoning": true,
+            "input": [
+              "text"
+            ],
+            "contextWindow": 200000,
+            "maxTokens": 8192
+          }
+        ]
       }
     }
   },
@@ -79,7 +116,13 @@
         "id": "ent_user-admin_default",
         "name": "ent_user-admin_default",
         "workspace": "/home/baizh/octopus/data/users/user-admin/agents/default",
-        "agentDir": "/home/baizh/octopus/.octopus-state/agents/ent_user-admin_default/agent"
+        "agentDir": "/home/baizh/octopus/.octopus-state/agents/ent_user-admin_default/agent",
+        "skills": [],
+        "tools": {
+          "deny": [
+            "run_skill"
+          ]
+        }
       },
       {
         "id": "ent_user-test_default",
@@ -142,7 +185,87 @@
         "name": "ent_user-baizh_default",
         "workspace": "/home/baizh/octopus/data/users/user-baizh/workspace",
         "agentDir": "/home/baizh/octopus/.octopus-state/agents/ent_user-baizh_default/agent",
-        "model": "openai-codex/gpt-5.2"
+        "model": "minimax-portal/MiniMax-M2.7",
+        "subagents": {
+          "allowAgents": [
+            "ent_user-baizh_shuju",
+            "ent_user-baizh_baozi"
+          ]
+        },
+        "tools": {
+          "allow": [
+            "read",
+            "write",
+            "exec",
+            "memory_search",
+            "memory_get",
+            "sessions_list",
+            "sessions_history",
+            "sessions_send",
+            "sessions_spawn",
+            "agents_list",
+            "cron",
+            "image",
+            "group:plugins"
+          ]
+        }
+      },
+      {
+        "id": "ent_user-baizh_shuju",
+        "name": "ent_user-baizh_shuju",
+        "workspace": "/home/baizh/octopus/data/users/user-baizh/agents/shuju/workspace",
+        "agentDir": "/home/baizh/octopus/.octopus-state/agents/ent_user-baizh_shuju/agent",
+        "model": "minimax-portal/MiniMax-M2.7",
+        "subagents": {
+          "allowAgents": []
+        },
+        "tools": {
+          "allow": [
+            "read",
+            "write",
+            "exec",
+            "memory_search",
+            "memory_get",
+            "sessions_list",
+            "sessions_history",
+            "sessions_send",
+            "sessions_spawn",
+            "agents_list",
+            "cron",
+            "image"
+          ],
+          "deny": [
+            "run_skill"
+          ]
+        },
+        "skills": []
+      },
+      {
+        "id": "ent_user-baizh_baozi",
+        "name": "ent_user-baizh_baozi",
+        "workspace": "/home/baizh/octopus/data/users/user-baizh/agents/baozi/workspace",
+        "agentDir": "/home/baizh/octopus/.octopus-state/agents/ent_user-baizh_baozi/agent",
+        "model": "minimax-portal/MiniMax-M2.7",
+        "subagents": {
+          "allowAgents": []
+        },
+        "tools": {
+          "allow": [
+            "memory_search",
+            "memory_get",
+            "sessions_list",
+            "sessions_history",
+            "sessions_send",
+            "sessions_spawn",
+            "agents_list",
+            "cron",
+            "image"
+          ],
+          "deny": [
+            "run_skill"
+          ]
+        },
+        "skills": []
       }
     ]
   },
@@ -184,7 +307,8 @@
     "allow": [
       "memory-lancedb-pro",
       "enterprise-audit",
-      "enterprise-mcp"
+      "enterprise-mcp",
+      "enterprise-email"
     ],
     "load": {
       "paths": [
@@ -238,6 +362,19 @@
             "agentAccess": {
               "ent_user-admin_default": [
                 "ent_user-admin_default"
+              ],
+              "ent_user-baizh_default": [
+                "ent_user-baizh_default",
+                "ent_user-baizh_shuju",
+                "ent_user-baizh_baozi"
+              ],
+              "ent_user-baizh_shuju": [
+                "ent_user-baizh_shuju",
+                "ent_user-baizh_default"
+              ],
+              "ent_user-baizh_baozi": [
+                "ent_user-baizh_baozi",
+                "ent_user-baizh_default"
               ]
             }
           }
@@ -268,6 +405,16 @@
               "network": "none"
             }
           }
+        }
+      },
+      "enterprise-email": {
+        "enabled": true,
+        "config": {
+          "smtpHost": "smtp.qq.com",
+          "smtpPort": 465,
+          "smtpUser": "your-email@example.com",
+          "smtpPass": "YOUR_SMTP_PASSWORD",
+          "fromName": "Octopus AI"
         }
       }
     }

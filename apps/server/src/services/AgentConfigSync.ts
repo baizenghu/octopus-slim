@@ -145,9 +145,9 @@ export async function syncAgentToEngine(
         const hasRunSkillDeny = currentDeny.includes('run_skill');
 
         if (!hasSkills && !hasRunSkillDeny) {
-          // 技能禁用 → deny run_skill + 引擎级 skills.allow=[]
+          // 技能禁用 → deny run_skill + 引擎级 skills=[]（空数组禁止注入）
           entry.tools = { ...entry.tools, deny: [...currentDeny, 'run_skill'] };
-          (entry as any).skills = { allow: [] };
+          (entry as any).skills = [];
           changed = true;
           console.log(`[AgentConfigSync] skills disabled: ${targetId} → deny run_skill + skills.allow=[]`);
         } else if (hasSkills && hasRunSkillDeny) {
@@ -155,7 +155,7 @@ export async function syncAgentToEngine(
           const newDeny = currentDeny.filter(t => t !== 'run_skill');
           entry.tools = { ...entry.tools, deny: newDeny.length > 0 ? newDeny : undefined };
           if (!entry.tools.deny) delete entry.tools.deny;
-          delete (entry as any).skills;
+          delete (entry as any).skills;  // 移除限制，恢复引擎默认（注入所有 skill）
           changed = true;
           console.log(`[AgentConfigSync] skills enabled: ${targetId} → removed deny + skills restriction`);
         }
