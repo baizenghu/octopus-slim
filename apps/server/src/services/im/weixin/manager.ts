@@ -79,6 +79,13 @@ export class WeixinManager {
     return this.adapters.has(userId);
   }
 
+  /** 向指定用户的微信推送消息（需用户之前发过消息才有 contextToken） */
+  async sendToUser(userId: string, text: string): Promise<number> {
+    const adapter = this.adapters.get(userId);
+    if (!adapter) return 0;
+    return adapter.broadcastText(text);
+  }
+
   /** 停止所有 adapter */
   async stopAll(): Promise<void> {
     for (const adapter of this.adapters.values()) {

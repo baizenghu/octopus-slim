@@ -71,6 +71,20 @@ export class WeixinAdapter implements IMAdapter {
     }
   }
 
+  /** 向所有有 contextToken 的微信用户发送消息（用于主动推送场景） */
+  async broadcastText(text: string): Promise<number> {
+    let sent = 0;
+    for (const [imUserId, _token] of this.contextTokens) {
+      try {
+        await this.sendText(imUserId, text);
+        sent++;
+      } catch (e: any) {
+        console.error(`[wechat] broadcastText failed for ${imUserId}: ${e.message}`);
+      }
+    }
+    return sent;
+  }
+
   onMessage(handler: (msg: IMIncomingMessage) => void): void {
     this.messageHandler = handler;
   }

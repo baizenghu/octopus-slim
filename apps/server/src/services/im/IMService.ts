@@ -100,9 +100,17 @@ export class IMService {
       }
     }
 
-    // 微信渠道：通过 WeixinManager 检查该用户是否有微信连接
-    // （微信不走 IMUserBinding 表，直接通过 adapter 发送）
-    // 注：微信消息是被动回复，sendToUser 场景下暂不支持微信主动推送
+    // 微信渠道：通过 WeixinManager 主动推送
+    // 前提：用户之前在微信中发过消息（adapter 缓存了 contextToken）
+    if (this.weixinManager) {
+      try {
+        const weixinSent = await this.weixinManager.sendToUser(userId, text);
+        sent += weixinSent;
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error(`[im-service] Failed to send to wechat/${userId}: ${msg}`);
+      }
+    }
 
     return sent;
   }
