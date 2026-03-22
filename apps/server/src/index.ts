@@ -47,6 +47,8 @@ import { createAgentsRouter } from './routes/agents';
 import { createSchedulerRouter } from './routes/scheduler';
 import { createDbConnectionsRouter } from './routes/db-connections';
 import { createImInternalRouter } from './routes/im-internal';
+import { createChatInternalRouter } from './routes/chat-internal';
+import { createWeixinRoutes } from './routes/weixin';
 import { createSystemConfigRouter } from './routes/system-config';
 import { MCPRegistry, MCPExecutor } from '@octopus/mcp';
 import { EngineAdapter } from './services/EngineAdapter';
@@ -443,8 +445,14 @@ async function main() {
   app.use('/api/agents', createAgentsRouter(authService, prismaClient!, workspaceManager, bridge, config.workspace.dataRoot));
   app.use('/api/scheduler', createSchedulerRouter(authService, prismaClient!, bridge, imService));
   app.use('/api/user/db-connections', createDbConnectionsRouter(authService, prismaClient));
+  if (imService?.weixinManager) {
+    app.use('/api/user/weixin', createWeixinRoutes({ authService, prisma: prismaClient, weixinManager: imService.weixinManager }));
+  }
   if (imService) {
     app.use('/api/_internal/im', createImInternalRouter(imService));
+  }
+  if (bridge) {
+    app.use('/api/_internal/chat', createChatInternalRouter(bridge, workspaceManager, config.workspace.dataRoot));
   }
 
   // 全局错误处理（5xx 不泄漏内部信息，4xx 保留业务消息）
