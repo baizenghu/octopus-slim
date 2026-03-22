@@ -33,8 +33,15 @@ async function buildMCPToolsSection(
   // null 或 [] = 全部禁用，不注入任何 MCP 工具
   if (!Array.isArray(mcpFilter) || mcpFilter.length === 0) return '';
 
-  const ocHome = process.env['OCTOPUS_HOME'] || path.join(process.env['HOME'] || '/tmp', '.octopus-enterprise');
-  const cachePath = path.join(ocHome, 'plugins/enterprise-mcp/tools-cache.json');
+  // tools-cache.json 位置：优先 .octopus-state/，fallback 到 plugins/mcp/
+  const projectRoot = process.env['PROJECT_DIR'] || process.cwd();
+  const cacheCandidates = [
+    path.join(projectRoot, '.octopus-state/tools-cache.json'),
+    path.join(projectRoot, 'plugins/mcp/tools-cache.json'),
+    // legacy paths
+    path.join(process.env['OCTOPUS_HOME'] || path.join(process.env['HOME'] || '/tmp', '.octopus-enterprise'), 'plugins/enterprise-mcp/tools-cache.json'),
+  ];
+  const cachePath = cacheCandidates.find(p => fs.existsSync(p)) || cacheCandidates[0];
   try {
     const raw = fs.readFileSync(cachePath, 'utf8');
     let tools: Array<{
