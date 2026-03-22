@@ -173,7 +173,6 @@
             "sessions_list",
             "sessions_history",
             "sessions_send",
-            "sessions_spawn",
             "agents_list",
             "cron",
             "image"
@@ -226,7 +225,6 @@
             "sessions_list",
             "sessions_history",
             "sessions_send",
-            "sessions_spawn",
             "agents_list",
             "cron",
             "image",

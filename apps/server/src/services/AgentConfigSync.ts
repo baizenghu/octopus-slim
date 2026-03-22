@@ -24,9 +24,12 @@ const TOOL_NAME_TO_ENGINE: Record<string, string> = {
 /** 基础工具（所有 agent 都需要的非文件类工具） */
 const BASE_TOOLS = [
   'memory_search', 'memory_get',
-  'sessions_list', 'sessions_history', 'sessions_send', 'sessions_spawn',
+  'sessions_list', 'sessions_history', 'sessions_send',
   'agents_list', 'cron', 'image',
 ];
+
+/** 仅主 agent 拥有的额外工具（委派/派生子 agent） */
+const DEFAULT_ONLY_TOOLS = ['sessions_spawn'];
 
 /** 将企业 toolsFilter 名称转换为引擎原生工具名（去重） */
 function mapToolsToEngine(tools: string[]): string[] {
@@ -119,15 +122,13 @@ export async function syncAgentToEngine(
         // group:plugins 授权 agent 调用 MCP 插件工具。
         // 所有有工具权限的 agent 都需要 group:plugins，否则 MCP 工具描述注入了但实际调用被引擎拒绝。
         // MCP 级别的权限控制由 enterprise-mcp 插件内部的 mcpFilter 白名单负责。
+        const isDefault = opts.agentName === 'default';
         let newAllow: string[];
         if (Array.isArray(tf) && tf.length > 0) {
           const engineTools = mapToolsToEngine(tf);
-          newAllow = [...engineTools, ...BASE_TOOLS, 'group:plugins'];
+          newAllow = [...engineTools, ...BASE_TOOLS, 'group:plugins', ...(isDefault ? DEFAULT_ONLY_TOOLS : [])];
         } else {
-          // 无工具权限的 agent（如小包无赋权状态）也需要 group:plugins 以支持 MCP
-          // default agent 一定有；专业 agent 根据是否有 mcpFilter 决定
-          const isDefault = opts.agentName === 'default';
-          newAllow = [...BASE_TOOLS, ...(isDefault ? ['group:plugins'] : [])];
+          newAllow = [...BASE_TOOLS, 'group:plugins', ...(isDefault ? DEFAULT_ONLY_TOOLS : [])];
         }
         const oldAllow = JSON.stringify(entry.tools?.allow);
         if (oldAllow !== JSON.stringify(newAllow)) {
