@@ -125,8 +125,27 @@ async function main() {
       console.log(`\n✅ 微信连接成功！`);
       console.log(`   Bot ID: ${status.ilink_bot_id}`);
       console.log(`   绑定用户: ${userId}`);
-      console.log(`   请在 .env 中设置 WEIXIN_ENABLED=true`);
-      console.log(`   然后重启 gateway: ./start.sh restart`);
+
+      // 尝试通知运行中的 gateway 热加载该用户的 adapter
+      try {
+        const gatewayPort = process.env.GATEWAY_PORT || '18790';
+        const internalToken = process.env.INTERNAL_TOKEN || '';
+        const notifyRes = await fetch(`http://localhost:${gatewayPort}/api/user/weixin/reload`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Internal-Token': internalToken,
+          },
+          body: JSON.stringify({ userId }),
+        });
+        if (notifyRes.ok) {
+          console.log(`   已通知 gateway 热加载，无需重启`);
+        } else {
+          console.log(`   提示: gateway 未运行或未启用微信，请确保 WEIXIN_ENABLED=true 后重启`);
+        }
+      } catch {
+        console.log(`   提示: 如 gateway 正在运行，请重启以加载新账号: ./start.sh restart`);
+      }
       return;
     }
 

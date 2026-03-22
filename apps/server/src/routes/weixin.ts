@@ -86,5 +86,26 @@ export function createWeixinRoutes(params: {
     }
   });
 
+  // 内部 API：CLI 扫码成功后通知 gateway 热加载
+  router.post('/reload', async (req, res) => {
+    const internalToken = process.env.INTERNAL_TOKEN || process.env.OCTOPUS_GATEWAY_TOKEN || '';
+    const reqToken = req.headers['x-internal-token'] as string || '';
+    if (!internalToken || reqToken !== internalToken) {
+      res.status(403).json({ error: 'Unauthorized' });
+      return;
+    }
+    const { userId } = req.body as { userId?: string };
+    if (!userId) {
+      res.status(400).json({ error: 'Missing userId' });
+      return;
+    }
+    try {
+      await weixinManager.startUser(userId);
+      res.json({ success: true, message: `Adapter started for ${userId}` });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   return router;
 }
