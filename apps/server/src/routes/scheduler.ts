@@ -523,11 +523,13 @@ export function createSchedulerRouter(
         const isOk = heartbeatReply.includes('HEARTBEAT_OK');
         const resultSummary = isOk ? 'HEARTBEAT_OK' : heartbeatReply.slice(0, getRuntimeConfig().chat.heartbeatSummaryMaxChars);
 
-        // 心跳结果推送：不含 HEARTBEAT_OK → 有异常，自动推 IM
-        if (imService && resultSummary && !isOk) {
-          const alertText = `🚨 心跳巡检告警\nAgent: ${agent.name}\n时间: ${new Date().toLocaleString('zh-CN')}\n\n${resultSummary}`;
+        // 心跳结果推送到 IM（飞书走引擎原生 cron delivery，微信走企业网关 sendToUser）
+        if (imService) {
+          const alertText = isOk
+            ? `✅ 心跳巡检正常\nAgent: ${agent.name}\n时间: ${new Date().toLocaleString('zh-CN')}`
+            : `🚨 心跳巡检告警\nAgent: ${agent.name}\n时间: ${new Date().toLocaleString('zh-CN')}\n\n${resultSummary}`;
           imService.sendToUser(user.id, alertText).then(sent => {
-            if (sent > 0) console.log(`[scheduler] Heartbeat alert sent to ${user.id} via IM`);
+            if (sent > 0) console.log(`[scheduler] Heartbeat result sent to ${user.id} via IM (${sent} channel(s))`);
           }).catch(e => console.warn(`[scheduler] IM send failed: ${e.message}`));
         }
 
