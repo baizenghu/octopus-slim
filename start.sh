@@ -312,8 +312,12 @@ case "${1:-start}" in
       *)        tail -f "$LOG_DIR"/*.log ;;
     esac
     ;;
+  weixin-login)
+    echo "[weixin] 正在启动微信扫码登录..."
+    cd "$PROJECT_DIR" && npx tsx scripts/weixin-login.ts
+    ;;
   *)
-    echo "用法: $0 {start|stop|restart|status|logs [gateway|admin]}"
+    echo "用法: $0 {start|stop|restart|status|logs|weixin-login}"
     exit 1
     ;;
 esac

@@ -6,7 +6,7 @@
  */
 
 export interface IMIncomingMessage {
-  /** 渠道标识: 'feishu' | 'wangxuntong' */
+  /** 渠道标识: 'feishu' | 'wechat' */
   channel: string;
   /** 平台用户 ID（飞书 open_id 等） */
   imUserId: string;

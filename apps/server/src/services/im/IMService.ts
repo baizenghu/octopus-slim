@@ -8,6 +8,8 @@
 import type { IMAdapter } from './IMAdapter';
 import { IMRouter } from './IMRouter';
 import { FeishuAdapter } from './FeishuAdapter';
+import { WeixinAdapter } from './WeixinAdapter';
+import { loadWeixinAccount } from './weixin/account';
 import type { EngineAdapter } from '../EngineAdapter';
 import type { AuthService } from '@octopus/auth';
 import type { AppPrismaClient } from '../../types/prisma';
@@ -54,6 +56,24 @@ export class IMService {
         console.log('   IM: Feishu adapter started');
       } catch (e: any) {
         console.error('   IM: Feishu adapter failed to start:', e.message);
+      }
+    }
+
+    // 微信 Adapter：检查环境变量 + account.json
+    if (process.env.WEIXIN_ENABLED === 'true') {
+      const account = loadWeixinAccount();
+      if (account) {
+        const weixin = new WeixinAdapter(account);
+        this.router.attach(weixin);
+        try {
+          await weixin.start();
+          this.adapters.push(weixin);
+          console.log('   IM: WeChat adapter started');
+        } catch (e: any) {
+          console.error('   IM: WeChat adapter failed to start:', e.message);
+        }
+      } else {
+        console.warn('   IM: WEIXIN_ENABLED=true but no account found. Run: ./start.sh weixin-login');
       }
     }
   }

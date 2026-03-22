@@ -106,3 +106,4 @@ __pycache__/
 .octopus-state/media/
 .octopus-state/config-backups/
 .octopus-state/gateway/
+data/weixin/

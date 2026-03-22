@@ -216,6 +216,9 @@ importers:
       openai:
         specifier: ^4.70.0
         version: 4.104.0(ws@8.19.0)(zod@4.3.6)
+      qrcode-terminal:
+        specifier: ^0.12.0
+        version: 0.12.0
       ws:
         specifier: ^8.19.0
         version: 8.19.0
@@ -560,6 +563,12 @@ importers:
       typescript:
         specifier: ^5.4.0
         version: 5.9.3
+
+  plugins/email:
+    dependencies:
+      nodemailer:
+        specifier: ^6.10.1
+        version: 6.10.1
 
   plugins/mcp:
     dependencies:
@@ -4697,6 +4706,10 @@ packages:
 
   node-releases@2.0.36:
     resolution: {integrity: sha512-TdC8FSgHz8Mwtw9g5L4gR/Sh9XhSP/0DEkQxfEFXOpiul5IiHgHan2VhYYb6agDSfp4KuvltmGApc8HMgUrIkA==}
+
+  nodemailer@6.10.1:
+    resolution: {integrity: sha512-Z+iLaBGVaSjbIzQ4pX6XV41HrooLsQ10ZWPUehGmuantvzWoDVBnmsdUcOIDM1t+yPor5pDhVlDESgOMEGxhHA==}
+    engines: {node: '>=6.0.0'}
 
   nth-check@2.1.1:
     resolution: {integrity: sha512-lqjrjmaOoAnWfMmBPL+XNnynZh2+swxiX3WUE0s4yEHI6m+AwrK2UZOimIRl3X/4QctVqS8AiZjFqyOGrMXb/w==}
@@ -10628,6 +10641,8 @@ snapshots:
     optional: true
 
   node-releases@2.0.36: {}
+
+  nodemailer@6.10.1: {}
 
   nth-check@2.1.1:
     dependencies:
