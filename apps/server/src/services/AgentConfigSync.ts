@@ -53,6 +53,7 @@ function mapToolsToEngine(tools: string[]): string[] {
  *   - toolsFilter: 工具白名单（企业语义名），null 表示不改变
  *   - enabledAgentNames: 该用户所有 enabled 的 agent 名称列表（用于 allowAgents 同步）
  *   - deleteAgentName: 要从 agents.list 中删除的 agent 名称
+ *   - skillsFilter: 技能白名单（空数组 = 禁用所有技能 → deny run_skill）
  */
 export async function syncAgentToEngine(
   bridge: EngineAdapter,
@@ -63,6 +64,8 @@ export async function syncAgentToEngine(
     toolsFilter?: string[] | null;
     enabledAgentNames?: string[];
     deleteAgentName?: string;
+    /** 技能白名单（空数组 = 禁用技能 → deny run_skill，有值 = 启用 → 移除 deny） */
+    skillsFilter?: string[];
     /** 心跳配置同步。传对象 = 创建/更新心跳，null = 删除心跳 */
     heartbeat?: { every: string; prompt: string } | null;
   },
@@ -91,7 +94,7 @@ export async function syncAgentToEngine(
   const currentList: any[] = (config as any)?.agents?.list || [];
 
   // 2. 更新 model + tools.allow
-  if (opts.agentName && (opts.model !== undefined || opts.toolsFilter !== undefined)) {
+  if (opts.agentName && (opts.model !== undefined || opts.toolsFilter !== undefined || opts.skillsFilter !== undefined)) {
     const targetId = EA.userAgentId(userId, opts.agentName);
     const entry = currentList.find((a: any) => a.id === targetId);
     if (entry) {
@@ -130,6 +133,31 @@ export async function syncAgentToEngine(
           entry.tools = { ...entry.tools, allow: newAllow };
           changed = true;
           console.log(`[AgentConfigSync] tools.allow: ${targetId} → [${newAllow.join(', ')}]`);
+        }
+      }
+
+      // skillsFilter → 双重隔离
+      //   1. tools.deny: run_skill（阻止调用）
+      //   2. skills.allow: []（阻止引擎注入 <available_skills> 到 system prompt）
+      if (opts.skillsFilter !== undefined) {
+        const hasSkills = Array.isArray(opts.skillsFilter) && opts.skillsFilter.length > 0;
+        const currentDeny: string[] = entry.tools?.deny || [];
+        const hasRunSkillDeny = currentDeny.includes('run_skill');
+
+        if (!hasSkills && !hasRunSkillDeny) {
+          // 技能禁用 → deny run_skill + 引擎级 skills.allow=[]
+          entry.tools = { ...entry.tools, deny: [...currentDeny, 'run_skill'] };
+          (entry as any).skills = { allow: [] };
+          changed = true;
+          console.log(`[AgentConfigSync] skills disabled: ${targetId} → deny run_skill + skills.allow=[]`);
+        } else if (hasSkills && hasRunSkillDeny) {
+          // 技能启用 → 移除 deny + 移除引擎级限制
+          const newDeny = currentDeny.filter(t => t !== 'run_skill');
+          entry.tools = { ...entry.tools, deny: newDeny.length > 0 ? newDeny : undefined };
+          if (!entry.tools.deny) delete entry.tools.deny;
+          delete (entry as any).skills;
+          changed = true;
+          console.log(`[AgentConfigSync] skills enabled: ${targetId} → removed deny + skills restriction`);
         }
       }
     }
