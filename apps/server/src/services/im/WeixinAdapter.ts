@@ -19,6 +19,8 @@ function sleep(ms: number): Promise<void> {
 
 export class WeixinAdapter implements IMAdapter {
   readonly channel = 'wechat';
+  /** 绑定的 Octopus 用户 ID */
+  readonly octopusUserId: string;
 
   private running = false;
   private abortController: AbortController | null = null;
@@ -29,8 +31,9 @@ export class WeixinAdapter implements IMAdapter {
   private processedMsgIds = new Set<string>();
   private readonly MSG_DEDUP_MAX = 1000;
 
-  constructor(private account: WeixinAccount) {
-    this.cursor = loadSyncBuf();
+  constructor(octopusUserId: string, private account: WeixinAccount) {
+    this.octopusUserId = octopusUserId;
+    this.cursor = loadSyncBuf(octopusUserId);
   }
 
   // --- IMAdapter 接口实现 ---
@@ -39,14 +42,14 @@ export class WeixinAdapter implements IMAdapter {
     this.running = true;
     this.abortController = new AbortController();
     this.pollLoop();
-    console.log('[wechat] Long-poll started');
+    console.log(`[wechat] Long-poll started for user ${this.octopusUserId}`);
   }
 
   async stop(): Promise<void> {
     this.running = false;
     this.abortController?.abort();
     this.processedMsgIds.clear();
-    console.log('[wechat] Adapter stopped');
+    console.log(`[wechat] Adapter stopped for user ${this.octopusUserId}`);
   }
 
   async sendText(imUserId: string, text: string): Promise<void> {
@@ -103,7 +106,7 @@ export class WeixinAdapter implements IMAdapter {
 
         // Session 过期（errcode -14）
         if (result.errcode === -14) {
-          console.error('[wechat] Session 已过期，请执行 ./start.sh weixin-login 重新扫码');
+          console.error(`[wechat] Session 已过期 (user: ${this.octopusUserId})，请重新扫码绑定`);
           await sleep(3600000); // 暂停 1 小时
           continue;
         }
@@ -111,7 +114,7 @@ export class WeixinAdapter implements IMAdapter {
         // 更新并持久化游标
         if (result.cursor) {
           this.cursor = result.cursor;
-          saveSyncBuf(result.cursor);
+          saveSyncBuf(this.octopusUserId, result.cursor);
         }
         this.retryCount = 0;
 
@@ -128,10 +131,11 @@ export class WeixinAdapter implements IMAdapter {
           // 缓存 contextToken
           this.contextTokens.set(msg.fromUserId, msg.contextToken);
 
-          // 交给 IMRouter
+          // 交给 IMRouter（imUserName 携带 octopusUserId 用于预绑定识别）
           this.messageHandler?.({
             channel: 'wechat',
             imUserId: msg.fromUserId,
+            imUserName: this.octopusUserId,
             text: msg.text,
             messageId: msg.msgId,
           });

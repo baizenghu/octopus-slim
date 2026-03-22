@@ -18,6 +18,7 @@ import type { WorkspaceManager } from '@octopus/workspace';
 import type { AuditLogger } from '@octopus/audit';
 import { AuditAction } from '@octopus/audit';
 import { randomUUID } from 'crypto';
+import { stripReasoningTagsFromText } from '../../utils/reasoning-tags';
 import { getSkillsForUser, buildSkillsSystemPromptSection } from '../SkillsInfo';
 import { getRuntimeConfig } from '../../config';
 
@@ -48,13 +49,9 @@ function saveActiveAgents(map: Map<string, string>): void {
   }
 }
 
-/** 清理模型输出中的 <think> 标签 */
+/** 清理模型输出中的 thinking/final 标签（兼容多种模型格式） */
 function stripThinkTags(text: string): string {
-  const thinkOpen = text.indexOf('<think>');
-  if (thinkOpen === -1) return text;
-  const thinkClose = text.indexOf('</think>');
-  if (thinkClose === -1) return '';
-  return text.slice(thinkClose + 8).replace(/<\/?final>/g, '').trim();
+  return stripReasoningTagsFromText(text, { mode: 'strict', trim: 'both' });
 }
 
 export class IMRouter {
@@ -92,6 +89,14 @@ export class IMRouter {
   /** 处理收到的 IM 消息 */
   private async handleMessage(adapter: IMAdapter, msg: IMIncomingMessage): Promise<void> {
     const { text, imUserId, channel } = msg;
+
+    // 解析用户身份：微信多账号模式通过 imUserName 预绑定，飞书走 DB 查询
+    let userId: string | null = null;
+    if (channel === 'wechat' && msg.imUserName) {
+      // 微信预绑定模式：imUserName 即 Octopus userId（扫码时已绑定）
+      userId = msg.imUserName;
+    }
+
     // 斜杠命令处理
     if (text.startsWith('/')) {
       const parts = text.split(/\s+/);
@@ -99,6 +104,11 @@ export class IMRouter {
 
       switch (cmd) {
         case '/bind':
+          // 微信预绑定用户不需要 /bind
+          if (userId) {
+            await adapter.sendText(imUserId, '你已通过扫码绑定，无需再次绑定。');
+            return;
+          }
           await this.handleBind(adapter, msg, parts);
           return;
         case '/unbind':
@@ -113,15 +123,17 @@ export class IMRouter {
       }
     }
 
-    // 普通消息 → 查绑定 → 路由到 agent
-    // 普通消息 → 查绑定 → 路由到 agent
-    const binding = await this.prisma.iMUserBinding.findUnique({
-      where: {
-        channel_imUserId: { channel, imUserId },
-      },
-    });
+    // 非微信预绑定用户：查 DB 绑定
+    if (!userId) {
+      const binding = await this.prisma.iMUserBinding.findUnique({
+        where: {
+          channel_imUserId: { channel, imUserId },
+        },
+      });
+      userId = binding?.userId ?? null;
+    }
 
-    if (!binding) {
+    if (!userId) {
       await adapter.sendText(
         imUserId,
         '你还没有绑定企业账户。请发送：/bind 用户名 密码',
@@ -129,13 +141,13 @@ export class IMRouter {
       return;
     }
 
-    // /agent 指令：需要 userId，放在 binding 查询之后（精确匹配，避免 /agents 等误触发）
+    // /agent 指令
     if (text === '/agent' || text.startsWith('/agent ')) {
-      await this.handleAgentSwitch(adapter, msg, binding.userId);
+      await this.handleAgentSwitch(adapter, msg, userId);
       return;
     }
 
-    await this.routeToAgent(adapter, binding.userId, msg);
+    await this.routeToAgent(adapter, userId, msg);
   }
 
   /**

@@ -313,8 +313,13 @@ case "${1:-start}" in
     esac
     ;;
   weixin-login)
-    echo "[weixin] 正在启动微信扫码登录..."
-    cd "$PROJECT_DIR" && npx tsx scripts/weixin-login.ts
+    if [ -z "$2" ]; then
+      echo "用法: $0 weixin-login <userId>"
+      echo "示例: $0 weixin-login user-zhangsan"
+      exit 1
+    fi
+    echo "[weixin] 正在为用户 $2 启动微信扫码登录..."
+    cd "$PROJECT_DIR" && node scripts/weixin-login.mjs --user "$2"
     ;;
   *)
     echo "用法: $0 {start|stop|restart|status|logs|weixin-login}"

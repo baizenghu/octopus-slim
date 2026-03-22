@@ -8,8 +8,7 @@
 import type { IMAdapter } from './IMAdapter';
 import { IMRouter } from './IMRouter';
 import { FeishuAdapter } from './FeishuAdapter';
-import { WeixinAdapter } from './WeixinAdapter';
-import { loadWeixinAccount } from './weixin/account';
+import { WeixinManager } from './weixin/manager';
 import type { EngineAdapter } from '../EngineAdapter';
 import type { AuthService } from '@octopus/auth';
 import type { AppPrismaClient } from '../../types/prisma';
@@ -20,6 +19,8 @@ export class IMService {
   private adapters: IMAdapter[] = [];
   private router: IMRouter;
   private prisma: AppPrismaClient;
+  /** 微信多账号管理器（外部可访问，供 API 路由使用） */
+  weixinManager: WeixinManager | null = null;
 
   constructor(params: {
     prisma: AppPrismaClient;
@@ -44,7 +45,7 @@ export class IMService {
 
   /** 启动所有已配置的 IM Adapter */
   async start(): Promise<void> {
-    // 飞书 Adapter：检查环境变量
+    // 飞书 Adapter
     const feishuAppId = process.env.FEISHU_APP_ID;
     const feishuAppSecret = process.env.FEISHU_APP_SECRET;
     if (feishuAppId && feishuAppSecret) {
@@ -59,22 +60,10 @@ export class IMService {
       }
     }
 
-    // 微信 Adapter：检查环境变量 + account.json
+    // 微信多账号 Adapter
     if (process.env.WEIXIN_ENABLED === 'true') {
-      const account = loadWeixinAccount();
-      if (account) {
-        const weixin = new WeixinAdapter(account);
-        this.router.attach(weixin);
-        try {
-          await weixin.start();
-          this.adapters.push(weixin);
-          console.log('   IM: WeChat adapter started');
-        } catch (e: any) {
-          console.error('   IM: WeChat adapter failed to start:', e.message);
-        }
-      } else {
-        console.warn('   IM: WEIXIN_ENABLED=true but no account found. Run: ./start.sh weixin-login');
-      }
+      this.weixinManager = new WeixinManager(this.router);
+      await this.weixinManager.startAll();
     }
   }
 
@@ -84,30 +73,24 @@ export class IMService {
       await adapter.stop().catch(() => {});
     }
     this.adapters = [];
+    await this.weixinManager?.stopAll();
   }
 
   /**
    * 向指定企业用户发送消息（查询所有 IM 绑定并逐一发送）
-   *
-   * @param userId 企业用户 ID
-   * @param text 消息文本
-   * @returns 成功发送的渠道数
    */
   async sendToUser(userId: string, text: string): Promise<number> {
-    if (this.adapters.length === 0) return 0;
+    if (this.adapters.length === 0 && !this.weixinManager) return 0;
 
-    // 查询该用户的所有 IM 绑定
+    // 查询飞书等渠道的 IM 绑定
     const bindings = await this.prisma.iMUserBinding.findMany({
       where: { userId },
     });
-    if (bindings.length === 0) return 0;
 
     let sent = 0;
     for (const binding of bindings) {
-      // 找到对应 channel 的 adapter
       const adapter = this.adapters.find(a => a.channel === binding.channel);
       if (!adapter) continue;
-
       try {
         await adapter.sendText(binding.imUserId, text);
         sent++;
@@ -116,6 +99,11 @@ export class IMService {
         console.error(`[im-service] Failed to send to ${binding.channel}/${binding.imUserId}: ${msg}`);
       }
     }
+
+    // 微信渠道：通过 WeixinManager 检查该用户是否有微信连接
+    // （微信不走 IMUserBinding 表，直接通过 adapter 发送）
+    // 注：微信消息是被动回复，sendToUser 场景下暂不支持微信主动推送
+
     return sent;
   }
 }
