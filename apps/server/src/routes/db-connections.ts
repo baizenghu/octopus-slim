@@ -12,6 +12,7 @@ import { randomUUID } from 'crypto';
 import type { AuthService } from '@octopus/auth';
 import { createAuthMiddleware, type AuthenticatedRequest } from '../middleware/auth';
 import { encryptPassword } from '../utils/crypto';
+import { invalidatePromptCache } from '../services/SystemPromptBuilder';
 
 export function createDbConnectionsRouter(authService: AuthService, prisma: any): Router {
   const router = Router();
@@ -53,6 +54,7 @@ export function createDbConnectionsRouter(authService: AuthService, prisma: any)
       const conn = await prisma.databaseConnection.create({
         data: { id: randomUUID(), userId, name, dbType, host, port: Number(port), dbUser, dbPassword: encryptPassword(dbPassword), dbName },
       });
+      invalidatePromptCache(userId);
 
       res.json({ data: { ...conn, dbPassword: '••••••' } });
     } catch (err: any) {
@@ -81,6 +83,7 @@ export function createDbConnectionsRouter(authService: AuthService, prisma: any)
       if (dbName !== undefined) updateData.dbName = dbName;
       if (enabled !== undefined) updateData.enabled = enabled;
       const conn = await prisma.databaseConnection.update({ where: { id }, data: updateData });
+      invalidatePromptCache(userId);
 
       res.json({ data: { ...conn, dbPassword: '••••••' } });
     } catch (err: any) {
@@ -115,6 +118,7 @@ export function createDbConnectionsRouter(authService: AuthService, prisma: any)
       }
 
       await prisma.databaseConnection.delete({ where: { id } });
+      invalidatePromptCache(userId);
 
       res.json({ ok: true });
     } catch (err: any) {

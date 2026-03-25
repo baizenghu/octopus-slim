@@ -467,7 +467,14 @@ export class IMRouter {
           if (!stat.isFile()) continue;
 
           if (stat.size <= getRuntimeConfig().im.fileSizeLimitBytes) {
-            await adapter.sendFile!(imUserId, filePath, fileName);
+            // 发送文件，失败后重试 1 次
+            try {
+              await adapter.sendFile!(imUserId, filePath, fileName);
+            } catch (firstErr) {
+              console.warn(`[im-router] sendFile first attempt failed for ${fileName}:`, firstErr);
+              await new Promise(r => setTimeout(r, 1000));
+              await adapter.sendFile!(imUserId, filePath, fileName);
+            }
             console.log(`[im-router] Sent file via IM: ${fileName} (${(stat.size / 1024).toFixed(0)}KB)`);
           } else {
             const sizeMB = (stat.size / 1024 / 1024).toFixed(1);
@@ -552,7 +559,7 @@ export class IMRouter {
             `临时工作目录: ${tempPath}\n\n` +
             `**文件管理规范（必须遵守）：**\n` +
             `- files/：用户上传的文件，只读取不修改\n` +
-            `- outputs/：需要交付给用户的最终成果文件（报告、文档等）\n` +
+            `- outputs/：需要交付给用户的最终成果文件（报告、文档等）。系统会在你回复后**自动**将 outputs/ 中的新文件发送给用户（包括当前 IM 渠道），无需你手动发送\n` +
             `- temp/：你的中间产物（脚本、临时数据、草稿等）必须写入此目录\n` +
             `- 严禁在工作空间根目录直接创建文件\n\n` +
             `**安全约束（必须遵守）：**\n` +

@@ -8,6 +8,7 @@
 
 import { createHash, randomUUID } from 'crypto';
 import { EventEmitter } from 'events';
+import { Mutex } from 'async-mutex';
 import { ConfigBatcher } from '../utils/config-batcher';
 import { getRuntimeConfig } from '../config';
 
@@ -52,6 +53,7 @@ export interface AgentStreamEvent {
 
 export class EngineAdapter extends EventEmitter {
   private initialized = false;
+  private configMutex = new Mutex();
   private configBatcher: ConfigBatcher;
   private engineServer: { close: (opts?: Record<string, unknown>) => Promise<void> } | null = null;
   private unsubAgentEvents: (() => void) | null = null;
@@ -263,8 +265,15 @@ export class EngineAdapter extends EventEmitter {
         const toolName = (data.name || data.toolName) as string;
 
         if (phase === 'start' && toolCallId) {
-          // 存入 pending，不发事件
+          // 存入 pending，同时发一个不含 result 的事件（让前端感知工具开始执行）
           pendingToolCalls.set(toolCallId, { name: toolName, args: data.args });
+          onEvent({
+            type: 'tool_call',
+            toolCallId,
+            toolName,
+            toolArgs: data.args ? (typeof data.args === 'string' ? data.args : JSON.stringify(data.args)) : undefined,
+            runId: evt.runId,
+          });
           return;
         }
         if (phase === 'update') {
@@ -464,52 +473,56 @@ export class EngineAdapter extends EventEmitter {
   }
 
   async configApplyFull(fullConfig: Record<string, unknown>): Promise<void> {
-    const maxRetries = getRuntimeConfig().engine.maxConfigRetries;
-    for (let attempt = 0; attempt < maxRetries; attempt++) {
-      const { config: latest, hash: baseHash } = await this.configGetParsed();
-      if (!baseHash) throw new Error('config.get did not return hash');
-      const merged = { ...fullConfig };
-      if ((latest as any).messages) merged.messages = (latest as any).messages;
-      if ((latest as any).meta) merged.meta = (latest as any).meta;
-      try {
-        await this.call('config.set', { raw: JSON.stringify(merged), baseHash });
-        return;
-      } catch (e: any) {
-        if (attempt < maxRetries - 1 && (e.message?.includes('config changed since last load') || e.message?.includes('rate limit'))) {
-          const delay = e.message?.includes('rate limit')
-            ? (parseInt(e.message.match(/retry after (\d+)s/)?.[1] || '10', 10) * 1000 + 1000)
-            : (500 * (attempt + 1));
-          console.warn(`[engine] configApplyFull attempt ${attempt + 1} failed: ${e.message}, retrying in ${delay}ms`);
-          await new Promise(r => setTimeout(r, delay));
-          continue;
+    return this.configMutex.runExclusive(async () => {
+      const maxRetries = getRuntimeConfig().engine.maxConfigRetries;
+      for (let attempt = 0; attempt < maxRetries; attempt++) {
+        const { config: latest, hash: baseHash } = await this.configGetParsed();
+        if (!baseHash) throw new Error('config.get did not return hash');
+        const merged = { ...fullConfig };
+        if ((latest as any).messages) merged.messages = (latest as any).messages;
+        if ((latest as any).meta) merged.meta = (latest as any).meta;
+        try {
+          await this.call('config.set', { raw: JSON.stringify(merged), baseHash });
+          return;
+        } catch (e: any) {
+          if (attempt < maxRetries - 1 && (e.message?.includes('config changed since last load') || e.message?.includes('rate limit'))) {
+            const delay = e.message?.includes('rate limit')
+              ? (parseInt(e.message.match(/retry after (\d+)s/)?.[1] || '10', 10) * 1000 + 1000)
+              : (500 * (attempt + 1));
+            console.warn(`[engine] configApplyFull attempt ${attempt + 1} failed: ${e.message}, retrying in ${delay}ms`);
+            await new Promise(r => setTimeout(r, delay));
+            continue;
+          }
+          throw e;
         }
-        throw e;
       }
-    }
+    });
   }
 
   async configApply(patch: Record<string, unknown>): Promise<void> {
-    const { deepMerge } = await import('../utils/deep-merge');
-    const maxRetries = getRuntimeConfig().engine.maxConfigRetries;
-    for (let attempt = 0; attempt < maxRetries; attempt++) {
-      const { config, hash: baseHash } = await this.configGetParsed();
-      if (!baseHash) throw new Error('config.get did not return hash');
-      const merged = deepMerge(config, patch);
-      try {
-        await this.call('config.set', { raw: JSON.stringify(merged), baseHash });
-        return;
-      } catch (e: any) {
-        if (attempt < maxRetries - 1 && (e.message?.includes('config changed since last load') || e.message?.includes('rate limit'))) {
-          const delay = e.message?.includes('rate limit')
-            ? (parseInt(e.message.match(/retry after (\d+)s/)?.[1] || '10', 10) * 1000 + 1000)
-            : (500 * (attempt + 1));
-          console.warn(`[engine] configApply attempt ${attempt + 1} failed: ${e.message}, retrying in ${delay}ms`);
-          await new Promise(r => setTimeout(r, delay));
-          continue;
+    return this.configMutex.runExclusive(async () => {
+      const { deepMerge } = await import('../utils/deep-merge');
+      const maxRetries = getRuntimeConfig().engine.maxConfigRetries;
+      for (let attempt = 0; attempt < maxRetries; attempt++) {
+        const { config, hash: baseHash } = await this.configGetParsed();
+        if (!baseHash) throw new Error('config.get did not return hash');
+        const merged = deepMerge(config, patch);
+        try {
+          await this.call('config.set', { raw: JSON.stringify(merged), baseHash });
+          return;
+        } catch (e: any) {
+          if (attempt < maxRetries - 1 && (e.message?.includes('config changed since last load') || e.message?.includes('rate limit'))) {
+            const delay = e.message?.includes('rate limit')
+              ? (parseInt(e.message.match(/retry after (\d+)s/)?.[1] || '10', 10) * 1000 + 1000)
+              : (500 * (attempt + 1));
+            console.warn(`[engine] configApply attempt ${attempt + 1} failed: ${e.message}, retrying in ${delay}ms`);
+            await new Promise(r => setTimeout(r, delay));
+            continue;
+          }
+          throw e;
         }
-        throw e;
       }
-    }
+    });
   }
 
   async configGetParsed(): Promise<{ config: Record<string, unknown>; hash: string }> {

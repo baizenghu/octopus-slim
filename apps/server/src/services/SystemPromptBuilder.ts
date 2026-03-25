@@ -150,7 +150,7 @@ export async function buildEnterpriseSystemPrompt(
       `临时工作目录: ${tempPath}\n\n` +
       `**文件管理规范（必须遵守）：**\n` +
       `- files/：用户上传的文件，只读取不修改\n` +
-      `- outputs/：需要交付给用户的最终成果文件（报告、文档等）\n` +
+      `- outputs/：需要交付给用户的最终成果文件（报告、文档等）。系统会在你回复后**自动**将 outputs/ 中的新文件发送给用户（包括 IM 渠道：飞书、微信等），无需你手动发送\n` +
       `- temp/：你的中间产物（脚本、临时数据、草稿等）必须写入此目录\n` +
       `- 严禁在工作空间根目录直接创建文件\n\n` +
       `**安全约束（必须遵守）：**\n` +
@@ -257,9 +257,9 @@ export async function buildEnterpriseSystemPrompt(
 
   sections.push(
     `## 定时提醒\n` +
-    `如果用户要求在指定时间后提醒某件事，请在回复末尾（单独一行）加入以下标签，并告知用户提醒已设置：\n` +
-    `<enterprise-reminder delay_seconds="180" message="提醒内容" />\n\n` +
-    `其中 delay_seconds 为距当前时刻的秒数。`
+    `如果用户要求设置提醒或定时任务，请直接使用 cron 工具（已授权）。\n` +
+    `示例：调用 cron 工具的 add action，设置 schedule.kind="at"，payload.kind="systemEvent"。\n` +
+    `不要使用任何 XML/HTML 标签来设置提醒。`
   );
 
   // 数据库连接信息注入到系统提示（从 DB 读取）

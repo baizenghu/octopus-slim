@@ -15,10 +15,15 @@ const TIMESTAMP_PREFIX_GLOBAL_RE = /^\[[A-Za-z]{3}\s\d{4}-\d{2}-\d{2}.*?\]\s*/gm
 const SKILL_INJECT_RE = /^\[请(?:使用|严格按照|优先使用)\s+[^\]]*(?:\]|\S*…)\s*/gm;
 const LESSON_PREFIX_RE = /^\/lesson\s+/m;
 const ATTACHMENT_PREFIX_RE = /^\[用户上传了 \d+ 个文件，已保存到工作空间\]\n(?:- .+\n?)+\n?/m;
+// Legacy: 保留用于清理旧 session 中残留的 reminder 标签，新提醒走 cron 工具
+// Legacy: 保留用于清理旧 session 中残留的 reminder 标签，新提醒走 cron 工具
 const REMINDER_TAG_RE = /<enterprise-reminder[^>]*\/?>(<\/enterprise-reminder>)?/g;
 const RUNTIME_CONTEXT_RE = /Octopus runtime context/;
 const INTERNAL_EVENT_RE = /\[Internal task completion event\]/;
-const THINK_TAG_RE = /<think>([\s\S]*?)<\/think>/;
+// 兼容多种模型的 thinking 标签格式（与引擎 reasoning-tags.ts 保持一致）
+const THINKING_TAG_RE = /<\s*(\/?)\s*(?:think(?:ing)?|thought|antthinking)\b[^<>]*>/gi;
+
+import { stripReasoningTagsFromText } from './reasoning-tags';
 
 /** 净化用户消息（history 和 title 共用） */
 export function sanitizeUserContent(content: string): string {
@@ -32,15 +37,29 @@ export function sanitizeUserContent(content: string): string {
     .trim();
 }
 
-/** 净化助手消息（剔除 reminder 标签 + 分离 thinking） */
+/** 净化助手消息（剔除 reminder 标签 + 分离 thinking，用引擎方式处理各种模型标签） */
 export function sanitizeAssistantContent(content: string): { content: string; thinking?: string } {
   let cleaned = content.replace(REMINDER_TAG_RE, '').trim();
-  const thinkMatch = cleaned.match(THINK_TAG_RE);
-  let thinking: string | undefined;
-  if (thinkMatch) {
-    thinking = thinkMatch[1].trim();
-    cleaned = cleaned.replace(/<think>[\s\S]*?<\/think>\s*/, '').replace(/<\/?final>/g, '').trim();
+
+  // 提取 thinking 内容（兼容 <think>/<thinking>/<thought>/<antthinking>）
+  THINKING_TAG_RE.lastIndex = 0;
+  const thinkingParts: string[] = [];
+  let inThink = false;
+  let thinkStart = 0;
+  for (const match of cleaned.matchAll(THINKING_TAG_RE)) {
+    const isClose = match[1] === '/';
+    if (!inThink && !isClose) {
+      inThink = true;
+      thinkStart = (match.index ?? 0) + match[0].length;
+    } else if (inThink && isClose) {
+      thinkingParts.push(cleaned.slice(thinkStart, match.index ?? 0).trim());
+      inThink = false;
+    }
   }
+  const thinking = thinkingParts.length > 0 ? thinkingParts.join('\n') : undefined;
+
+  // 用引擎方式剥离所有 thinking + final 标签
+  cleaned = stripReasoningTagsFromText(cleaned, { mode: 'preserve', trim: 'both' });
   return { content: cleaned, thinking };
 }
 

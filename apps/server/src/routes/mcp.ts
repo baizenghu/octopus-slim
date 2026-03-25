@@ -1,3 +1,5 @@
+import { invalidatePromptCache } from '../services/SystemPromptBuilder';
+
 /**
  * MCP 管理路由
  *
@@ -452,6 +454,7 @@ export function createMcpRouter(
 
       mcpRegistry.register(toConfig(server));
       notifyMCPRegistryChanged();
+      invalidatePromptCache(user.id);
       res.json({ message: '个人 MCP Server 已注册', server });
     } catch (err) {
       next(err);
@@ -678,6 +681,7 @@ export function createMcpRouter(
       mcpRegistry.register(toConfig(server));
       notifyMCPRegistryChanged();
 
+      invalidatePromptCache(user.id);
       res.json({
         message: entryFile
           ? `MCP 项目 "${projectName}" 上传安装成功`
@@ -759,6 +763,7 @@ export function createMcpRouter(
       mcpRegistry.unregister(id);
       mcpRegistry.register(toConfig(server));
       notifyMCPRegistryChanged();
+      invalidatePromptCache(user.id);
 
       res.json({ message: '个人 MCP Server 已更新', server });
     } catch (err) {
@@ -802,6 +807,7 @@ export function createMcpRouter(
       // 通知 plugin 侧刷新工具注册表
       notifyMCPRegistryChanged();
 
+      invalidatePromptCache(user.id);
       res.json({ message: '个人 MCP Server 已删除' });
     } catch (err) {
       next(err);

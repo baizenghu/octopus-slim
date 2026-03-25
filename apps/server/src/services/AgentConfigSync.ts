@@ -8,6 +8,8 @@
  * 合并 chat.ts ensureNativeAgent 与 agents.ts syncToNative 的共享逻辑。
  */
 
+import * as fs from 'fs';
+import * as path from 'path';
 import type { EngineAdapter } from './EngineAdapter';
 import type { WorkspaceManager } from '@octopus/workspace';
 import { getSoulTemplate, getMemoryTemplate } from './SoulTemplate';
@@ -24,12 +26,14 @@ const TOOL_NAME_TO_ENGINE: Record<string, string> = {
 /** 基础工具（所有 agent 都需要的非文件类工具） */
 const BASE_TOOLS = [
   'memory_search', 'memory_get',
-  'sessions_list', 'sessions_history', 'sessions_send',
-  'agents_list', 'cron', 'image',
+  'cron', 'image',
 ];
 
-/** 仅主 agent 拥有的额外工具（委派/派生子 agent） */
-const DEFAULT_ONLY_TOOLS = ['sessions_spawn'];
+/** 仅主 agent 拥有的额外工具（会话管理/委派/列出 agent） */
+const DEFAULT_ONLY_TOOLS = [
+  'sessions_list', 'sessions_history', 'sessions_send', 'sessions_spawn',
+  'agents_list',
+];
 
 /** 将企业 toolsFilter 名称转换为引擎原生工具名（去重） */
 function mapToolsToEngine(tools: string[]): string[] {
@@ -38,6 +42,34 @@ function mapToolsToEngine(tools: string[]): string[] {
     mapped.add(TOOL_NAME_TO_ENGINE[t] || t);
   }
   return [...mapped];
+}
+
+/** 从 tools-cache.json 读取所有 MCP 工具，返回 { serverId, nativeToolName }[] */
+function readMcpToolsCache(): Array<{ serverId: string; nativeToolName: string }> {
+  const projectRoot = path.resolve(__dirname, '..', '..', '..', '..');
+  const candidates = [
+    path.join(projectRoot, '.octopus-state/tools-cache.json'),
+    path.join(projectRoot, 'plugins/mcp/tools-cache.json'),
+  ];
+  const cachePath = candidates.find(p => fs.existsSync(p));
+  if (!cachePath) return [];
+  try {
+    return JSON.parse(fs.readFileSync(cachePath, 'utf8'));
+  } catch {
+    return [];
+  }
+}
+
+/** 根据 mcpFilter 白名单计算需要 deny 的 MCP 工具名列表 */
+function computeMcpDenyTools(mcpFilter: string[] | null): string[] {
+  if (!Array.isArray(mcpFilter)) return [];
+  const allTools = readMcpToolsCache();
+  if (allTools.length === 0) return [];
+  const allowSet = new Set(mcpFilter);
+  // mcpFilter 为空数组 = 全部禁用
+  return allTools
+    .filter(t => !allowSet.has(t.serverId))
+    .map(t => t.nativeToolName);
 }
 
 /**
@@ -69,6 +101,8 @@ export async function syncAgentToEngine(
     deleteAgentName?: string;
     /** 技能白名单（空数组 = 禁用技能 → deny run_skill，有值 = 启用 → 移除 deny） */
     skillsFilter?: string[];
+    /** MCP 白名单（serverId 数组），变更时同步 tools.deny 隐藏未授权 MCP 工具 */
+    mcpFilter?: string[] | null;
     /** 心跳配置同步。传对象 = 创建/更新心跳，null = 删除心跳 */
     heartbeat?: { every: string; prompt: string } | null;
   },
@@ -138,28 +172,49 @@ export async function syncAgentToEngine(
         }
       }
 
+      // mcpFilter → tools.deny 隐藏未授权的 MCP 工具
+      if (opts.mcpFilter !== undefined) {
+        const mcpDeny = computeMcpDenyTools(opts.mcpFilter);
+        const currentDeny: string[] = entry.tools?.deny || [];
+        // 移除旧的 MCP deny 项（以 mcp_ 开头），再加入新的
+        const nonMcpDeny = currentDeny.filter((t: string) => !t.startsWith('mcp_'));
+        const newDeny = [...nonMcpDeny, ...mcpDeny];
+        const oldDenyStr = JSON.stringify(currentDeny.sort());
+        const newDenyStr = JSON.stringify(newDeny.sort());
+        if (oldDenyStr !== newDenyStr) {
+          entry.tools = { ...entry.tools, deny: newDeny.length > 0 ? newDeny : undefined };
+          if (!entry.tools.deny) delete entry.tools.deny;
+          changed = true;
+          console.log(`[AgentConfigSync] mcp tools.deny: ${targetId} → [${mcpDeny.join(', ')}]`);
+        }
+      }
+
       // skillsFilter → 双重隔离
-      //   1. tools.deny: run_skill（阻止调用）
-      //   2. skills.allow: []（阻止引擎注入 <available_skills> 到 system prompt）
+      //   1. tools.deny: run_skill（无技能权限时阻止调用）
+      //   2. skills = []（始终阻止引擎注入 <available_skills>，由 SystemPromptBuilder 按白名单注入）
       if (opts.skillsFilter !== undefined) {
         const hasSkills = Array.isArray(opts.skillsFilter) && opts.skillsFilter.length > 0;
         const currentDeny: string[] = entry.tools?.deny || [];
         const hasRunSkillDeny = currentDeny.includes('run_skill');
 
-        if (!hasSkills && !hasRunSkillDeny) {
-          // 技能禁用 → deny run_skill + 引擎级 skills=[]（空数组禁止注入）
-          entry.tools = { ...entry.tools, deny: [...currentDeny, 'run_skill'] };
+        // 始终阻止引擎自行注入 skill 描述，由企业层 SystemPromptBuilder 按 skillsFilter 白名单控制
+        if (!Array.isArray((entry as any).skills) || (entry as any).skills.length !== 0) {
           (entry as any).skills = [];
           changed = true;
-          console.log(`[AgentConfigSync] skills disabled: ${targetId} → deny run_skill + skills.allow=[]`);
+        }
+
+        if (!hasSkills && !hasRunSkillDeny) {
+          // 技能全部禁用 → deny run_skill
+          entry.tools = { ...entry.tools, deny: [...currentDeny, 'run_skill'] };
+          changed = true;
+          console.log(`[AgentConfigSync] skills disabled: ${targetId} → deny run_skill`);
         } else if (hasSkills && hasRunSkillDeny) {
-          // 技能启用 → 移除 deny + 移除引擎级限制
+          // 有技能权限 → 移除 deny（允许调用 run_skill）
           const newDeny = currentDeny.filter(t => t !== 'run_skill');
           entry.tools = { ...entry.tools, deny: newDeny.length > 0 ? newDeny : undefined };
           if (!entry.tools.deny) delete entry.tools.deny;
-          delete (entry as any).skills;  // 移除限制，恢复引擎默认（注入所有 skill）
           changed = true;
-          console.log(`[AgentConfigSync] skills enabled: ${targetId} → removed deny + skills restriction`);
+          console.log(`[AgentConfigSync] skills enabled: ${targetId} → removed run_skill deny`);
         }
       }
     }
@@ -257,8 +312,32 @@ export async function syncAgentToEngine(
   }
 
   if (changed) {
-    await bridge.configApplyFull(config as Record<string, unknown>);
-    console.log(`[AgentConfigSync] config applied for user ${userId}`);
+    // 增量 patch：只传变更的部分，避免全量覆盖
+    const patch: Record<string, unknown> = {};
+
+    // agents.list 是数组，deep merge 会整体替换，所以传完整 list
+    patch.agents = { list: (config as any).agents?.list || [] };
+
+    // 如果涉及 memory-lancedb-pro plugin 变更，只传 plugin patch
+    if (opts.enabledAgentNames || opts.deleteAgentName) {
+      const memoryPlugin = (config as any).plugins?.entries?.['memory-lancedb-pro'];
+      if (memoryPlugin) {
+        patch.plugins = {
+          entries: {
+            'memory-lancedb-pro': {
+              config: {
+                scopes: {
+                  agentAccess: memoryPlugin.config?.scopes?.agentAccess || {},
+                },
+              },
+            },
+          },
+        };
+      }
+    }
+
+    await bridge.configApply(patch);
+    console.log(`[AgentConfigSync] config applied (incremental) for user ${userId}`);
   } else {
     console.log(`[AgentConfigSync] no changes needed for user ${userId}`);
   }
