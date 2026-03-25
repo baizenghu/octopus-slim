@@ -23,6 +23,17 @@ import { invalidatePromptCache } from '../services/SystemPromptBuilder';
 import { createAvatarUpload, mimeToExt } from '../utils/avatar';
 
 import type { AppPrismaClient } from '../types/prisma';
+
+/** 过滤 skillsFilter：只保留 DB 中 enabled=true 的 skill */
+async function filterEnabledSkills(prisma: AppPrismaClient, skillsFilter: string[]): Promise<string[]> {
+  if (!skillsFilter.length) return [];
+  const enabled = await prisma.skill.findMany({
+    where: { enabled: true, name: { in: skillsFilter } },
+    select: { name: true },
+  });
+  const enabledSet = new Set(enabled.map((s: { name: string }) => s.name));
+  return skillsFilter.filter(name => enabledSet.has(name));
+}
 import { resolve as pathResolve } from 'path';
 import { readFile } from 'fs/promises';
 
@@ -258,7 +269,7 @@ export function createAgentsRouter(
           agentName: agent.name,
           model: model?.trim() || null,
           toolsFilter: toolsFilter ?? [],
-          skillsFilter: skillsFilter ?? [],
+          skillsFilter: await filterEnabledSkills(prisma, skillsFilter ?? []),
           mcpFilter: mcpFilter ?? [],
           enabledAgentNames: enabledAgents.map(a => a.name),
         });
@@ -343,7 +354,7 @@ export function createAgentsRouter(
           syncOpts.agentName = agent.name;
           if (modelChanged) syncOpts.model = model?.trim() || null;
           if (toolsFilterChanged) syncOpts.toolsFilter = toolsFilter ?? [];
-          if (skillsFilterChanged) syncOpts.skillsFilter = skillsFilter ?? [];
+          if (skillsFilterChanged) syncOpts.skillsFilter = await filterEnabledSkills(prisma, skillsFilter ?? []);
           if (mcpFilterChanged) syncOpts.mcpFilter = mcpFilter ?? [];
         }
         if (enabledChanged) {
