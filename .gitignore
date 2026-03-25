@@ -92,6 +92,27 @@ __pycache__/
 *.pyc
 *.zip
 
+# Backup directories (migration/upgrade snapshots)
+*.bak-*/
+data.bak-*/
+.octopus-state.bak-*/
+
+# User-installed skills (runtime, managed by UI)
+data/skills/claude-code-dispatch/
+data/skills/team-research/
+data/skills/skill-*/
+
+# Skill packages/venvs
+data/skills/**/packages/
+data/skills/**/.venv/
+
+# Engine runtime state files
+.octopus-state/tools-cache.json
+.octopus-state/im-active-agents.json
+
+# Output artifacts
+outputs/
+
 # ─── 本地开发 / 运行时 ────────────────
 .claude/
 .octopus-state/feishu/
