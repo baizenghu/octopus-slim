@@ -19,7 +19,6 @@ import type { AuditLogger } from '@octopus/audit';
 import { AuditAction } from '@octopus/audit';
 import { randomUUID } from 'crypto';
 import { stripReasoningTagsFromText } from '../../utils/reasoning-tags';
-import { getSkillsForUser, buildSkillsSystemPromptSection } from '../SkillsInfo';
 import { getRuntimeConfig } from '../../config';
 
 // FILE_SIZE_LIMIT 现在通过 getRuntimeConfig().im.fileSizeLimitBytes 获取
@@ -570,35 +569,6 @@ export class IMRouter {
         } catch { /* ignore */ }
       }
 
-      // 注入 Skill 操作指南（SKILL.md 内容），与 Web 聊天路径对齐
-      if (this.dataRoot) {
-        try {
-          let skills = await getSkillsForUser(userId, this.prisma, this.dataRoot);
-          // 非 default agent：按 skillsFilter 白名单过滤
-          if (agentName !== 'default' && skills.length > 0) {
-            const agentRow = await this.prisma.agent.findFirst({
-              where: { ownerId: userId, name: agentName, enabled: true },
-              select: { skillsFilter: true },
-            });
-            if (agentRow) {
-              const sf: string[] | null = agentRow.skillsFilter
-                ? (typeof agentRow.skillsFilter === 'string' ? JSON.parse(agentRow.skillsFilter) : agentRow.skillsFilter)
-                : null;
-              if (Array.isArray(sf) && sf.length > 0) {
-                skills = skills.filter(s => sf.includes(s.name) || sf.includes(s.id));
-              } else {
-                skills = []; // 未配置白名单的 agent 不提供 skill
-              }
-            }
-          }
-          const skillsSection = buildSkillsSystemPromptSection(skills);
-          if (skillsSection) {
-            extraSystemPrompt = (extraSystemPrompt || '') + '\n\n' + skillsSection;
-          }
-        } catch (e: any) {
-          console.warn('[im-router] Failed to inject skills info:', e.message);
-        }
-      }
 
       // 如果上一个调用还在进行，自动取消
       const prevRun = this.activeRuns.get(imKey);

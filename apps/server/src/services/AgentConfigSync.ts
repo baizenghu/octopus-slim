@@ -85,7 +85,7 @@ export async function syncAgentToEngine(
     toolsFilter?: string[] | null;
     enabledAgentNames?: string[];
     deleteAgentName?: string;
-    /** 技能白名单（空数组 = 禁用技能 → deny run_skill，有值 = 启用 → 移除 deny） */
+    /** 技能白名单（空数组 = 禁用技能，有值 = 引擎原生 skills 白名单 + 移除 run_skill deny） */
     skillsFilter?: string[];
     /** MCP 白名单（serverId 数组），变更时同步 tools.deny 隐藏未授权 MCP 工具 */
     mcpFilter?: string[] | null;
@@ -199,18 +199,19 @@ export async function syncAgentToEngine(
         }
       }
 
-      // skillsFilter → 双重隔离
-      //   1. tools.deny: run_skill（无技能权限时阻止调用）
-      //   2. skills = []（始终阻止引擎注入 <available_skills>，由 SystemPromptBuilder 按白名单注入）
+      // skillsFilter → 引擎原生 skills 白名单 + tools.deny run_skill
       if (opts.skillsFilter !== undefined) {
         const hasSkills = Array.isArray(opts.skillsFilter) && opts.skillsFilter.length > 0;
         const currentDeny: string[] = entry.tools?.deny || [];
         const hasRunSkillDeny = currentDeny.includes('run_skill');
 
-        // 始终阻止引擎自行注入 skill 描述，由企业层 SystemPromptBuilder 按 skillsFilter 白名单控制
-        if (!Array.isArray((entry as any).skills) || (entry as any).skills.length !== 0) {
-          (entry as any).skills = [];
+        // 设置引擎原生 skills 白名单（引擎自动注入 <available_skills>）
+        const newSkills = hasSkills ? [...opts.skillsFilter] : [];
+        const currentSkills: string[] = (entry as any).skills || [];
+        if (JSON.stringify(newSkills) !== JSON.stringify(currentSkills)) {
+          (entry as any).skills = newSkills;
           changed = true;
+          console.log(`[AgentConfigSync] skills: ${targetId} → [${newSkills.join(', ')}]`);
         }
 
         if (!hasSkills && !hasRunSkillDeny) {

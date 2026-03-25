@@ -2,14 +2,13 @@
  * SystemPromptBuilder — 构建企业级系统提示
  *
  * 负责为每次对话生成 extraSystemPrompt。
- * 只注入引擎不知道的企业级信息（用户、工作区、Agent 列表、DB 连接、Skills）。
+ * 只注入引擎不知道的企业级信息（用户、工作区、Agent 列表、DB 连接）。
  * 工具权限由引擎 tools.allow/deny/profile 硬执行，不在 prompt 中重复描述。
  *
  * 包含 (userId, agentId) 维度的缓存，TTL 5 分钟。
  */
 
 import type { WorkspaceManager } from '@octopus/workspace';
-import { getSkillsForUser, buildSkillsSystemPromptSection } from './SkillsInfo';
 
 // ── 缓存 ──────────────────────────────────────────────────────────
 const promptCache = new Map<string, { prompt: string; ts: number }>();
@@ -70,7 +69,7 @@ export async function buildEnterpriseSystemPrompt(
   const cached = promptCache.get(cacheKey);
   if (cached && Date.now() - cached.ts < PROMPT_CACHE_TTL) return cached.prompt;
 
-  const { prisma, workspaceManager, dataRoot } = deps;
+  const { prisma, workspaceManager } = deps;
   const sections: string[] = [];
 
   // ── 身份 ──
@@ -133,20 +132,6 @@ export async function buildEnterpriseSystemPrompt(
     } catch { /* ignore */ }
   }
 
-  // ── Skills 注入（按白名单过滤） ──
-  if (prisma) {
-    try {
-      let skills = await getSkillsForUser(user.id, prisma, dataRoot);
-      const sf = agent?.skillsFilter;
-      if (!Array.isArray(sf) || sf.length === 0) {
-        skills = [];
-      } else {
-        skills = skills.filter(s => sf.includes(s.name) || sf.includes(s.id));
-      }
-      const skillsSection = buildSkillsSystemPromptSection(skills);
-      if (skillsSection) sections.push(skillsSection);
-    } catch { /* ignore */ }
-  }
 
   // ── DB 连接名（MCP SQL 工具需要） ──
   const dbSection = await buildDbConnectionsSection(
