@@ -9,6 +9,7 @@
 
 import { Router } from 'express';
 import type { EngineAdapter } from '../services/EngineAdapter';
+import { TenantEngineAdapter } from '../services/TenantEngineAdapter';
 import type { WorkspaceManager } from '@octopus/workspace';
 import { ensureAndSyncNativeAgent } from '../services/AgentConfigSync';
 
@@ -63,8 +64,8 @@ export function createChatInternalRouter(
     }
 
     try {
-      const EA = (await import('../services/EngineAdapter')).EngineAdapter;
-      const nativeAgentId = EA.userAgentId(userId, agentName);
+      const tenant = TenantEngineAdapter.forUser(bridge, userId);
+      const nativeAgentId = tenant.agentId(agentName);
 
       // 确保 agent 存在
       await ensureAndSyncNativeAgent(bridge, workspaceManager, userId, agentName, {
@@ -88,7 +89,7 @@ export function createChatInternalRouter(
       } else {
         // 无活跃 session，创建新的
         const sid = `inject-${Date.now().toString(36)}`;
-        sessionKey = EA.userSessionKey(userId, agentName, sid);
+        sessionKey = tenant.sessionKey(agentName, sid);
       }
 
       // 注入消息（fire-and-forget，不等 agent 回复完成）

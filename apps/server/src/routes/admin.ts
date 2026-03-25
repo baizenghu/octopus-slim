@@ -17,6 +17,7 @@ import type { WorkspaceManager } from '@octopus/workspace';
 import { createAuthMiddleware, adminOnly, type AuthenticatedRequest } from '../middleware/auth';
 import { getRuntimeConfig } from '../config';
 import { EngineAdapter } from '../services/EngineAdapter';
+import { TenantEngineAdapter } from '../services/TenantEngineAdapter';
 import { validatePassword } from '../utils/password';
 
 import type { AppPrismaClient } from '../types/prisma';
@@ -238,13 +239,13 @@ export function createAdminRouter(
       }
 
       // ── 清理原生 cron 任务 ──
+      const tenant = TenantEngineAdapter.forUser(bridge as EngineAdapter, id);
       if (bridge?.isConnected) {
         try {
-          const cronResult = (await bridge.cronList(true)) as any;
+          const cronResult = await tenant.listMyCrons(true);
           const cronItems = cronResult?.jobs || [];
-          const prefix = `ent_${id}_`;
           for (const item of cronItems) {
-            if (item.agentId?.startsWith(prefix) && item.id) {
+            if (item.id) {
               await bridge.cronRemove(item.id).catch(() => { });
             }
           }
@@ -263,7 +264,7 @@ export function createAdminRouter(
       const nativeAgentIds: string[] = [];
 
       for (const agent of userAgents) {
-        const nativeAgentId = EngineAdapter.userAgentId(id, agent.name);
+        const nativeAgentId = tenant.agentId(agent.name);
         nativeAgentIds.push(nativeAgentId);
         if (bridge?.isConnected) {
           bridge.agentsDelete(nativeAgentId).catch(() => { });
@@ -271,7 +272,7 @@ export function createAdminRouter(
         // memory scope 无需清理：默认行为不依赖 agentAccess 配置
       }
       // 默认 agent 不在 agents 表中，也需要清理原生 gateway
-      const defaultNativeId = EngineAdapter.userAgentId(id, 'default');
+      const defaultNativeId = tenant.agentId('default');
       nativeAgentIds.push(defaultNativeId);
       if (bridge?.isConnected) {
         bridge.agentsDelete(defaultNativeId).catch(() => { });
@@ -286,7 +287,7 @@ export function createAdminRouter(
 
       // ── 清理用户的 Docker sandbox 容器 ──
       try {
-        const containerPrefix = `octopus-sbx-agent-ent_${id}_`;
+        const containerPrefix = `octopus-sbx-agent-${tenant.agentId('')}`;
         const containers = execFileSync('docker', [
           'ps', '-a',
           '--filter', `name=${containerPrefix}`,
@@ -357,15 +358,15 @@ export function createAdminRouter(
         try {
           const { config: configRaw } = await bridge.configGetParsed();
           const agentsList: any[] = (configRaw as any)?.agents?.list || [];
-          const prefix = `ent_${id}_`;
-          const filtered = agentsList.filter((a: any) => !a.id?.startsWith(prefix));
+          const userPrefix = tenant.agentId('');
+          const filtered = agentsList.filter((a: any) => !a.id?.startsWith(userPrefix));
           if (filtered.length < agentsList.length) {
             (configRaw as any).agents.list = filtered;
             // 同步清理其他 agent 的 allowAgents 引用
             for (const a of filtered) {
               const allow = a.subagents?.allowAgents;
               if (Array.isArray(allow)) {
-                a.subagents.allowAgents = allow.filter((aid: string) => !aid.startsWith(prefix));
+                a.subagents.allowAgents = allow.filter((aid: string) => !aid.startsWith(userPrefix));
               }
             }
             await bridge.configApplyFull(configRaw);

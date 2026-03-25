@@ -52,6 +52,7 @@ import { createWeixinRoutes } from './routes/weixin';
 import { createSystemConfigRouter } from './routes/system-config';
 import { MCPRegistry, MCPExecutor } from '@octopus/mcp';
 import { EngineAdapter } from './services/EngineAdapter';
+import { TenantEngineAdapter } from './services/TenantEngineAdapter';
 import { ensureAgentTemplates } from './services/SoulTemplate';
 import { IMService } from './services/im';
 import { globalErrorHandler } from './middleware/error-handler';
@@ -212,7 +213,7 @@ async function main() {
           const agents = await prismaClient.agent.findMany({ where: { enabled: true } });
           const createResults = await Promise.allSettled(
             agents.map(async (agent) => {
-              const nativeId = EngineAdapter.userAgentId(agent.ownerId, agent.name);
+              const nativeId = TenantEngineAdapter.forUser(bridge!, agent.ownerId).agentId(agent.name);
               const workspacePath = workspaceManager.getAgentWorkspacePath(agent.ownerId, agent.name);
               try {
                 await bridge!.agentsCreate({ name: nativeId, workspace: workspacePath });
@@ -254,7 +255,7 @@ async function main() {
           workspaceManager,
           auditLogger,
           ensureAgent: async (userId: string, agentName: string) => {
-            const nativeAgentId = EngineAdapter.userAgentId(userId, agentName);
+            const nativeAgentId = TenantEngineAdapter.forUser(imBridge, userId).agentId(agentName);
             const workspacePath = agentName === 'default'
               ? path.join(config.workspace.dataRoot, 'users', userId, 'workspace')
               : path.join(config.workspace.dataRoot, 'users', userId, 'agents', agentName, 'workspace');

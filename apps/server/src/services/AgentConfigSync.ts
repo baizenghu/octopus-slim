@@ -11,6 +11,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import type { EngineAdapter } from './EngineAdapter';
+import { TenantEngineAdapter } from './TenantEngineAdapter';
 import type { WorkspaceManager } from '@octopus/workspace';
 import { getSoulTemplate, getMemoryTemplate } from './SoulTemplate';
 
@@ -95,16 +96,14 @@ export async function syncAgentToEngine(
 ): Promise<void> {
   if (!bridge.isConnected) return;
 
+  const tenant = TenantEngineAdapter.forUser(bridge, userId);
   const { config } = await bridge.configGetParsed();
   const agentsList: any[] = (config as any)?.agents?.list || [];
   let changed = false;
 
-  // 延迟导入 EngineAdapter 类以获取静态方法（避免循环依赖）
-  const { EngineAdapter: EA } = await import('./EngineAdapter');
-
   // 1. 删除 agent entry
   if (opts.deleteAgentName) {
-    const deleteId = EA.userAgentId(userId, opts.deleteAgentName);
+    const deleteId = tenant.agentId(opts.deleteAgentName);
     const before = agentsList.length;
     (config as any).agents.list = agentsList.filter((a: any) => a.id !== deleteId);
     if ((config as any).agents.list.length !== before) {
@@ -118,7 +117,7 @@ export async function syncAgentToEngine(
 
   // 2. 更新 model + tools.allow
   if (opts.agentName && (opts.model !== undefined || opts.toolsFilter !== undefined || opts.mcpFilter !== undefined || opts.skillsFilter !== undefined)) {
-    const targetId = EA.userAgentId(userId, opts.agentName);
+    const targetId = tenant.agentId(opts.agentName);
     const entry = currentList.find((a: any) => a.id === targetId);
     if (entry) {
       // model 同步
@@ -233,7 +232,7 @@ export async function syncAgentToEngine(
 
   // 2.5 更新心跳配置
   if (opts.heartbeat !== undefined && opts.agentName) {
-    const targetId = EA.userAgentId(userId, opts.agentName);
+    const targetId = tenant.agentId(opts.agentName);
     const entry = currentList.find((a: any) => a.id === targetId);
     if (entry) {
       if (opts.heartbeat === null) {
@@ -256,10 +255,10 @@ export async function syncAgentToEngine(
 
   // 3. 更新 allowAgents（default agent 可 spawn 专业 agent，专业 agent 不可 spawn 子 agent）
   if (opts.enabledAgentNames) {
-    const defaultId = EA.userAgentId(userId, 'default');
+    const defaultId = tenant.agentId('default');
     const specialistIds = opts.enabledAgentNames
       .filter(n => n !== 'default')
-      .map(n => EA.userAgentId(userId, n));
+      .map(n => tenant.agentId(n));
 
     for (const entry of currentList) {
       if (entry.id === defaultId) {
@@ -290,10 +289,10 @@ export async function syncAgentToEngine(
     const memoryPlugin = (config as any).plugins?.entries?.['memory-lancedb-pro'];
     if (memoryPlugin?.config?.scopes) {
       const scopes = memoryPlugin.config.scopes;
-      const defaultId = EA.userAgentId(userId, 'default');
+      const defaultId = tenant.agentId('default');
       const specialistIds = opts.enabledAgentNames
         .filter((n: string) => n !== 'default')
-        .map((n: string) => EA.userAgentId(userId, n));
+        .map((n: string) => tenant.agentId(n));
 
       const allUserAgentIds = [defaultId, ...specialistIds];
       scopes.agentAccess = scopes.agentAccess || {};
@@ -314,7 +313,7 @@ export async function syncAgentToEngine(
 
   // 删除 agent 时清理 agentAccess
   if (opts.deleteAgentName) {
-    const deleteId = EA.userAgentId(userId, opts.deleteAgentName);
+    const deleteId = tenant.agentId(opts.deleteAgentName);
     const memoryPlugin = (config as any).plugins?.entries?.['memory-lancedb-pro'];
     if (memoryPlugin?.config?.scopes?.agentAccess?.[deleteId]) {
       delete memoryPlugin.config.scopes.agentAccess[deleteId];
@@ -422,9 +421,7 @@ export async function ensureAndSyncNativeAgent(
 
   const logPrefix = useCache ? '[chat]' : '[agents]';
 
-  // 延迟导入 EngineAdapter 类以获取静态方法（避免循环依赖）
-  const { EngineAdapter: EA } = await import('./EngineAdapter');
-  const nativeAgentId = EA.userAgentId(userId, agentName);
+  const nativeAgentId = TenantEngineAdapter.forUser(bridge, userId).agentId(agentName);
 
   // ── 1. 缓存检查（仅 chat.ts 模式） ──
   // 利用 agentsCreate 幂等性：直接尝试创建，catch "already exists" 即可

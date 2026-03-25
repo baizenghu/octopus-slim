@@ -18,6 +18,10 @@ export class TenantEngineAdapter {
     this.admin = admin;
   }
 
+  static forUser(engine: EngineAdapter, userId: string): TenantEngineAdapter {
+    return new TenantEngineAdapter(engine, userId);
+  }
+
   /** 计算当前用户某 agent 的原生 agentId */
   agentId(agentName: string): string {
     return EngineAdapter.userAgentId(this.userId, agentName);

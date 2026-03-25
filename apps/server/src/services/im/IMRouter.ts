@@ -12,6 +12,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import type { IMAdapter, IMIncomingMessage } from './IMAdapter';
 import { EngineAdapter } from '../EngineAdapter';
+import { TenantEngineAdapter } from '../TenantEngineAdapter';
 import type { AuthService } from '@octopus/auth';
 import type { AppPrismaClient } from '../../types/prisma';
 import type { WorkspaceManager } from '@octopus/workspace';
@@ -498,9 +499,10 @@ export class IMRouter {
     const imKey = `${msg.channel}:${msg.imUserId}`;
     const agentName = this.activeAgents.get(imKey) || 'default';
     console.log(`[im-router] routeToAgent: imKey=${imKey}, agentName=${agentName}, activeAgents size=${this.activeAgents.size}`);
-    const agentId = EngineAdapter.userAgentId(userId, agentName);
+    const tenant = TenantEngineAdapter.forUser(this.bridge, userId);
+    const agentId = tenant.agentId(agentName);
     const sessionId = `im-${msg.channel}-${msg.imUserId}`;
-    const sessionKey = EngineAdapter.userSessionKey(userId, agentName, sessionId);
+    const sessionKey = tenant.sessionKey(agentName, sessionId);
 
     let timeoutTimer: ReturnType<typeof setTimeout> | undefined;
     try {
