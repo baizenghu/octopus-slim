@@ -80,6 +80,6 @@
     "@types/qrcode-terminal": "^0.12.0",
     "@types/ws": "^8.5.0",
     "typescript": "^5.4.0",
-    "vitest": "^4.0.18"
+    "vitest": "^2.0.0"
   }
 }

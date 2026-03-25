@@ -456,6 +456,7 @@ export const nodeHandlers: GatewayRequestHandlers = {
         },
         { dropIfSlow: true },
       );
+      context.broadcast("nodes.update", {}, { dropIfSlow: true });
       respond(true, approved, undefined);
     });
   },
@@ -485,6 +486,7 @@ export const nodeHandlers: GatewayRequestHandlers = {
         },
         { dropIfSlow: true },
       );
+      context.broadcast("nodes.update", {}, { dropIfSlow: true });
       respond(true, rejected, undefined);
     });
   },
@@ -506,7 +508,7 @@ export const nodeHandlers: GatewayRequestHandlers = {
       respond(true, result, undefined);
     });
   },
-  "node.rename": async ({ params, respond }) => {
+  "node.rename": async ({ params, respond, context }) => {
     if (!validateNodeRenameParams(params)) {
       respondInvalidParams({
         respond,
@@ -530,6 +532,7 @@ export const nodeHandlers: GatewayRequestHandlers = {
         respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "unknown nodeId"));
         return;
       }
+      context.broadcast("nodes.update", {}, { dropIfSlow: true });
       respond(true, { nodeId: updated.nodeId, displayName: updated.displayName }, undefined);
     });
   },

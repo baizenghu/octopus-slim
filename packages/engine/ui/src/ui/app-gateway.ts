@@ -6,6 +6,14 @@ import { ConnectErrorDetailCodes } from "../../../src/gateway/protocol/connect-e
 import { CHAT_SESSIONS_ACTIVE_MINUTES, flushChatQueueForEvent } from "./app-chat.ts";
 import type { EventLogEntry } from "./app-events.ts";
 import {
+  startDebugPolling,
+  startLogsPolling,
+  startNodesPolling,
+  stopDebugPolling,
+  stopLogsPolling,
+  stopNodesPolling,
+} from "./app-polling.ts";
+import {
   applySettings,
   loadCron,
   refreshActiveTab,
@@ -26,6 +34,8 @@ import {
   parseExecApprovalResolved,
   removeExecApproval,
 } from "./controllers/exec-approval.ts";
+import { loadDebug } from "./controllers/debug.ts";
+import { loadLogs } from "./controllers/logs.ts";
 import { loadNodes } from "./controllers/nodes.ts";
 import { loadSessions } from "./controllers/sessions.ts";
 import {
@@ -213,6 +223,10 @@ export function connectGateway(host: GatewayHost) {
       host.lastErrorCode = null;
       host.hello = hello;
       applySnapshot(host, hello);
+      // WS connection established — stop all polling timers (push replaces pull).
+      stopNodesPolling(host as unknown as Parameters<typeof stopNodesPolling>[0]);
+      stopLogsPolling(host as unknown as Parameters<typeof stopLogsPolling>[0]);
+      stopDebugPolling(host as unknown as Parameters<typeof stopDebugPolling>[0]);
       // Reset orphaned chat run state from before disconnect.
       // Any in-flight run's final event was lost during the disconnect window.
       host.chatRunId = null;
@@ -241,12 +255,20 @@ export function connectGateway(host: GatewayHost) {
             host.lastErrorCode && isGenericBrowserFetchFailure(error.message)
               ? formatAuthCloseErrorMessage(host.lastErrorCode, error.message)
               : error.message;
-          return;
+        } else {
+          host.lastError = `disconnected (${code}): ${reason || "no reason"}`;
         }
-        host.lastError = `disconnected (${code}): ${reason || "no reason"}`;
       } else {
         host.lastError = null;
         host.lastErrorCode = null;
+      }
+      // WS connection lost — fall back to polling so the UI stays live.
+      startNodesPolling(host as unknown as Parameters<typeof startNodesPolling>[0]);
+      if (host.tab === "logs") {
+        startLogsPolling(host as unknown as Parameters<typeof startLogsPolling>[0]);
+      }
+      if (host.tab === "debug") {
+        startDebugPolling(host as unknown as Parameters<typeof startDebugPolling>[0]);
       }
     },
     onEvent: (evt) => {
@@ -328,6 +350,19 @@ function handleGatewayEventUnsafe(host: GatewayHost, evt: GatewayEventFrame) {
   ].slice(0, 250);
   if (host.tab === "debug") {
     host.eventLog = host.eventLogBuffer;
+  }
+
+  if (evt.event === "nodes.update") {
+    void loadNodes(host as unknown as OctopusApp, { quiet: true });
+    return;
+  }
+
+  if (evt.event === "tick" && host.tab === "logs") {
+    void loadLogs(host as unknown as Parameters<typeof loadLogs>[0], { quiet: true });
+  }
+
+  if (evt.event === "health" && host.tab === "debug") {
+    void loadDebug(host as unknown as Parameters<typeof loadDebug>[0]);
   }
 
   if (evt.event === "agent") {
