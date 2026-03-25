@@ -66,8 +66,8 @@ export function createSkillsRouter(
     try {
       await bridge.configApply({ skills: { entries: { [skillId]: { enabled } } } });
       logger.info('Synced to engine', { skillId, enabled });
-    } catch (e: any) {
-      logger.warn('Failed to sync to engine', { skillId, error: e.message });
+    } catch (e: unknown) {
+      logger.warn('Failed to sync to engine', { skillId, error: (e as Error).message });
     }
   }
 
@@ -215,7 +215,7 @@ export function createSkillsRouter(
    * 接收 zip 文件 → 解压 → 扫描 → 入库(pending)
    */
   router.post('/upload', authMiddleware, adminOnly, upload.single('file'), async (req: AuthenticatedRequest, res, next) => {
-    const tmpFile = (req as any).file?.path;
+    const tmpFile = (req as { file?: { path: string } }).file?.path;
     let skillDir = '';
 
     try {
@@ -275,9 +275,11 @@ export function createSkillsRouter(
             deps.depsType = 'python-shared-venv';
             deps.depsInfo = `${deps.whlFiles!.length} 个 .whl 包已安装到共享虚拟环境`;
             logger.info('.whl packages installed for enterprise skill', { skillId });
-          } catch (installErr: any) {
-            logger.warn('.whl install failed for enterprise skill', { skillId, error: installErr.message });
-            deps.depsInfo = `安装失败: ${installErr.stderr?.toString().slice(-200) || installErr.message}。请检查 .whl 文件平台兼容性`;
+          } catch (installErr: unknown) {
+            const installErrMsg = (installErr as Error).message;
+            const installErrStderr = (installErr as { stderr?: Buffer }).stderr;
+            logger.warn('.whl install failed for enterprise skill', { skillId, error: installErrMsg });
+            deps.depsInfo = `安装失败: ${installErrStderr?.toString().slice(-200) || installErrMsg}。请检查 .whl 文件平台兼容性`;
           }
         }
       }
@@ -286,8 +288,8 @@ export function createSkillsRouter(
       let scanReport: ScanReport | null = null;
       try {
         scanReport = await scanner.scan(skillId, skillDir);
-      } catch (scanErr: any) {
-        logger.warn('scan error', { skillId, error: scanErr.message });
+      } catch (scanErr: unknown) {
+        logger.warn('scan error', { skillId, error: (scanErr as Error).message });
       }
 
       // 合并依赖信息到 scanReport
@@ -352,8 +354,8 @@ export function createSkillsRouter(
       });
 
       res.json({ message: '技能已更新', skill });
-    } catch (err: any) {
-      if (err.code === 'P2025') {
+    } catch (err: unknown) {
+      if ((err as { code?: string }).code === 'P2025') {
         res.status(404).json({ error: '技能不存在' });
         return;
       }
@@ -376,7 +378,7 @@ export function createSkillsRouter(
 
       // 自动清理关联此 Skill 的 agent skillsFilter（admin 可强制删除企业级技能）
       const allAgents = await prisma.agent.findMany({ select: { id: true, name: true, ownerId: true, skillsFilter: true } });
-      const referencingAgents = allAgents.filter((a: any) => {
+      const referencingAgents = allAgents.filter((a) => {
         const filter = a.skillsFilter as string[] | null;
         return Array.isArray(filter) && (filter.includes(id) || filter.includes(existing.name));
       });
@@ -400,8 +402,8 @@ export function createSkillsRouter(
       rmDir(skillDir);
 
       res.json({ message: '技能已删除' });
-    } catch (err: any) {
-      if (err.code === 'P2025') {
+    } catch (err: unknown) {
+      if ((err as { code?: string }).code === 'P2025') {
         res.status(404).json({ error: '技能不存在' });
         return;
       }
@@ -497,7 +499,7 @@ export function createSkillsRouter(
           enabled: false,
           // 将拒绝原因存入 scanReport 的 rejectReason 字段
           scanReport: {
-            ...(existing.scanReport as any || {}),
+            ...(existing.scanReport as Record<string, unknown> ?? {}),
             rejectReason: reason || '管理员拒绝',
           },
         },
@@ -530,8 +532,8 @@ export function createSkillsRouter(
 
       syncSkillEnabledToEngine(id, enabled);
       res.json({ message: enabled ? '技能已启用' : '技能已禁用', skill });
-    } catch (err: any) {
-      if (err.code === 'P2025') {
+    } catch (err: unknown) {
+      if ((err as { code?: string }).code === 'P2025') {
         res.status(404).json({ error: '技能不存在' });
         return;
       }
@@ -561,7 +563,7 @@ export function createSkillsRouter(
    * 上传个人 Skill
    */
   router.post('/personal/upload', authMiddleware, upload.single('file'), async (req: AuthenticatedRequest, res, next) => {
-    const tmpFile = (req as any).file?.path;
+    const tmpFile = (req as { file?: { path: string } }).file?.path;
     let skillDir = '';
 
     try {
@@ -615,8 +617,8 @@ export function createSkillsRouter(
       let scanReport: ScanReport | null = null;
       try {
         scanReport = await scanner.scan(skillId, skillDir);
-      } catch (scanErr: any) {
-        logger.warn(`scan error for ${skillId}: ${scanErr.message}`);
+      } catch (scanErr: unknown) {
+        logger.warn(`scan error for ${skillId}: ${(scanErr as Error).message}`);
       }
 
       // 个人 Skill：将 deps/*.whl 安装到共享 venv
@@ -634,9 +636,11 @@ export function createSkillsRouter(
             deps.depsType = 'python-shared-venv';
             deps.depsInfo = `${deps.whlFiles!.length} 个 .whl 包已安装到共享虚拟环境`;
             logger.info(`.whl packages installed for ${skillId}`);
-          } catch (installErr: any) {
-            logger.warn(`.whl install failed for ${skillId}: ${installErr.message}`);
-            deps.depsInfo = `安装失败: ${installErr.stderr?.toString().slice(-200) || installErr.message}。请检查 .whl 文件是否匹配服务器平台 (Linux x86_64, Python 3.12)`;
+          } catch (installErr: unknown) {
+            const installErrMsg = (installErr as Error).message;
+            const installErrStderr = (installErr as { stderr?: Buffer }).stderr;
+            logger.warn(`.whl install failed for ${skillId}: ${installErrMsg}`);
+            deps.depsInfo = `安装失败: ${installErrStderr?.toString().slice(-200) || installErrMsg}。请检查 .whl 文件是否匹配服务器平台 (Linux x86_64, Python 3.12)`;
           }
         } else {
           deps.depsInfo = '共享虚拟环境未就绪 (data/skills/.venv)，.whl 包未安装';
@@ -708,12 +712,12 @@ export function createSkillsRouter(
         where: { ownerId: user.id },
         select: { name: true, skillsFilter: true },
       });
-      const referencingAgents = userAgents.filter((a: any) => {
+      const referencingAgents = userAgents.filter((a) => {
         const filter = a.skillsFilter as string[] | null;
         return Array.isArray(filter) && (filter.includes(id) || filter.includes(existing.name));
       });
       if (referencingAgents.length > 0) {
-        const names = referencingAgents.map((a: any) => a.name).join(', ');
+        const names = referencingAgents.map((a) => a.name).join(', ');
         res.status(409).json({ error: `无法删除：以下 Agent 仍在使用此技能：${names}。请先取消关联后再删除。` });
         return;
       }

@@ -19,6 +19,15 @@ import { EngineAdapter } from '../services/EngineAdapter';
 import type { EngineAdapter as BridgeType } from '../services/EngineAdapter';
 import { syncAgentToEngine } from '../services/AgentConfigSync';
 import { createLogger } from '../utils/logger';
+import type { AppPrismaClient } from '../types/prisma';
+import type {
+  EngineCronJob,
+  EngineCronListResponse,
+  EngineChatHistoryResponse,
+  EngineMessage,
+  EngineContentBlock,
+  HeartbeatTaskConfig,
+} from '../types/engine';
 
 const logger = createLogger('scheduler');
 
@@ -89,9 +98,9 @@ async function verifyTaskOwnership(
 ): Promise<{ ok: boolean; status: number; error?: string }> {
   try {
     // NOTE: cron.list RPC 不支持 agentId 过滤，全量拉取后客户端校验归属
-    const result = (await bridge.cronList(true)) as any;
-    const allJobs: any[] = result?.jobs || [];
-    const job = allJobs.find((j: any) => j.id === taskId);
+    const result = (await bridge.cronList(true)) as EngineCronListResponse;
+    const allJobs: EngineCronJob[] = result?.jobs ?? [];
+    const job = allJobs.find((j) => j.id === taskId);
     if (!job) {
       return { ok: false, status: 404, error: 'Task not found' };
     }
@@ -100,14 +109,14 @@ async function verifyTaskOwnership(
       return { ok: false, status: 403, error: 'Access denied' };
     }
     return { ok: true, status: 200 };
-  } catch (err: any) {
-    return { ok: false, status: 500, error: err.message };
+  } catch (err: unknown) {
+    return { ok: false, status: 500, error: (err as Error).message };
   }
 }
 
 export function createSchedulerRouter(
   authService: AuthService,
-  prisma: any,
+  prisma: AppPrismaClient,
   bridge?: BridgeType,
   imService?: { sendToUser(userId: string, text: string): Promise<number> },
 ): Router {
@@ -130,13 +139,13 @@ export function createSchedulerRouter(
         // 合并原生 cron 任务
         // NOTE: Native Gateway cron.list RPC 不支持 agentId 过滤，只能客户端过滤
         // 安全依赖：userPrefix 前缀匹配确保只返回当前用户的任务
-        const result = (await bridge.cronList(true)) as any;
-        const allJobs: any[] = result?.jobs || [];
+        const result = (await bridge.cronList(true)) as EngineCronListResponse;
+        const allJobs: EngineCronJob[] = result?.jobs ?? [];
         const userPrefix = `ent_${user.id}_`;
-        const cronJobs = allJobs.filter((j: any) => (j.agentId || '').startsWith(userPrefix));
+        const cronJobs = allJobs.filter((j) => (j.agentId || '').startsWith(userPrefix));
         // DB 任务优先，cron 任务补充（去重：DB 中已有的 heartbeat 不重复加）
-        const dbIds = new Set(dbTasks.map((t: any) => t.id));
-        const mergedCron = cronJobs.filter((j: any) => !dbIds.has(j.id));
+        const dbIds = new Set(dbTasks.map(t => t.id));
+        const mergedCron = cronJobs.filter((j) => !dbIds.has(j.id!));
         res.json({ tasks: [...dbTasks, ...mergedCron] });
       } else {
         res.json({ tasks: dbTasks });
@@ -212,7 +221,7 @@ export function createSchedulerRouter(
         try {
           await writeHeartbeatToAgent(bridge, nativeAgentId, renderHeartbeatFileContent(content));
           logger.info(`[scheduler] HEARTBEAT.md written for ${nativeAgentId}`);
-        } catch (e: any) {
+        } catch (e: unknown) {
           logger.error(`[scheduler] writeHeartbeatToAgent failed for ${nativeAgentId}:`, { error: e instanceof Error ? e.message : String(e) });
         }
 
@@ -280,7 +289,7 @@ export function createSchedulerRouter(
           return;
         }
 
-        const oldConfig = dbTask.taskConfig as any;
+        const oldConfig = dbTask.taskConfig as HeartbeatTaskConfig;
         const oldDbAgentId = oldConfig?.agentId;
         const { name, cron: newEvery, taskConfig: newTaskConfig, enabled } = req.body;
         const nextDbAgentId = newTaskConfig?.agentId || oldDbAgentId;
@@ -336,7 +345,7 @@ export function createSchedulerRouter(
           } else if (newContent && newContent !== oldConfig.content) {
             await writeHeartbeatToAgent(bridge, nextNativeAgentId, renderHeartbeatFileContent(newContent));
           }
-        } catch (e: any) {
+        } catch (e: unknown) {
           logger.error(`[scheduler] HEARTBEAT.md write failed during update:`, { error: e instanceof Error ? e.message : String(e) });
         }
 
@@ -422,7 +431,7 @@ export function createSchedulerRouter(
           return;
         }
 
-        const taskCfg = dbTask.taskConfig as any;
+        const taskCfg = dbTask.taskConfig as HeartbeatTaskConfig;
         const dbAgentId = taskCfg?.agentId;
 
         // 查 agent 获取 nativeAgentId
@@ -433,7 +442,7 @@ export function createSchedulerRouter(
           // 通过 RPC 清空原生 agent 目录中的 HEARTBEAT.md
           try {
             await clearHeartbeatFromAgent(bridge, nativeAgentId);
-          } catch (e: any) {
+          } catch (e: unknown) {
             logger.error(`[scheduler] clearHeartbeatFromAgent failed for ${nativeAgentId}:`, { error: e instanceof Error ? e.message : String(e) });
           }
 
@@ -485,7 +494,7 @@ export function createSchedulerRouter(
           res.status(503).json({ error: 'Native gateway not connected' });
           return;
         }
-        const taskCfg = dbTask.taskConfig as any;
+        const taskCfg = dbTask.taskConfig as HeartbeatTaskConfig;
         const agent = await prisma.agent.findFirst({ where: { id: taskCfg?.agentId, ownerId: user.id } });
         if (!agent) {
           res.status(404).json({ error: 'Agent not found' });
@@ -511,12 +520,12 @@ export function createSchedulerRouter(
         // callAgent resolve 后，从 session history 获取完整回复（更可靠）
         if (!heartbeatReply) {
           try {
-            const history = await bridge.chatHistory(sessionKey) as any;
-            const msgs = (history?.messages || history?.history || []) as any[];
-            const lastAssistant = [...msgs].reverse().find((m: any) => m.role === 'assistant');
+            const history = await bridge.chatHistory(sessionKey) as EngineChatHistoryResponse;
+            const msgs: EngineMessage[] = history?.messages ?? history?.history ?? [];
+            const lastAssistant = [...msgs].reverse().find((m) => m.role === 'assistant');
             if (lastAssistant) {
               heartbeatReply = Array.isArray(lastAssistant.content)
-                ? lastAssistant.content.map((c: any) => c.text || c.content || '').join('')
+                ? lastAssistant.content.map((c: EngineContentBlock) => c.text || c.content || '').join('')
                 : String(lastAssistant.content || '');
             }
           } catch { /* history 读取失败不阻塞 */ }
@@ -532,11 +541,11 @@ export function createSchedulerRouter(
             : `🚨 心跳巡检告警\nAgent: ${agent.name}\n时间: ${new Date().toLocaleString('zh-CN')}\n\n${resultSummary}`;
           imService.sendToUser(user.id, alertText).then(sent => {
             if (sent > 0) logger.info(`[scheduler] Heartbeat result sent to ${user.id} via IM (${sent} channel(s))`);
-          }).catch((e: any) => logger.warn(`[scheduler] IM send failed: ${e instanceof Error ? e.message : String(e)}`));
+          }).catch((e: unknown) => logger.warn(`[scheduler] IM send failed: ${e instanceof Error ? e.message : String(e)}`));
         }
 
         // 清理隔离 session
-        bridge.sessionsDelete(sessionKey).catch((e: any) => {
+        bridge.sessionsDelete(sessionKey).catch((e: unknown) => {
           logger.warn(`[scheduler] Failed to cleanup heartbeat session ${sessionKey}: ${e instanceof Error ? e.message : String(e)}`);
         });
         await prisma.scheduledTask.update({
@@ -593,24 +602,24 @@ export function createSchedulerRouter(
         return;
       }
       // NOTE: cron.list RPC 不支持 agentId 过滤，全量拉取后客户端过滤
-      const result = (await bridge.cronList(true)) as any;
-      const allJobs: any[] = result?.jobs || [];
+      const result = (await bridge.cronList(true)) as EngineCronListResponse;
+      const allJobs: EngineCronJob[] = result?.jobs ?? [];
       const prefix = `ent-reminder:${user.id}:`;
       const now = Date.now();
       const dueReminders = allJobs
-        .filter((j: any) => {
+        .filter((j) => {
           if (!(j.name || '').startsWith(prefix)) return false;
           // 检查 schedule.at 是否已到期
           const at = j.schedule?.at;
           return at && new Date(at).getTime() <= now;
         })
-        .map((j: any) => ({
+        .map((j) => ({
           id: j.id || j.name,
           title: j.payload?.text || j.payload?.message || '提醒',
           firedAt: j.schedule?.at || new Date().toISOString(),
         }));
       res.json({ reminders: dueReminders });
-    } catch (err: any) {
+    } catch (err: unknown) {
       logger.error('[scheduler] Reminders query error:', { error: err instanceof Error ? err.message : String(err) });
       res.json({ reminders: [] });
     }
@@ -632,7 +641,7 @@ export function createSchedulerRouter(
         await bridge.cronRemove(req.params.id);
       }
       res.json({ ok: true });
-    } catch (err: any) {
+    } catch (err: unknown) {
       // 可能已被自动删除，静默处理
       logger.warn('[scheduler] Dismiss error (ignored):', { error: err instanceof Error ? err.message : String(err) });
       res.json({ ok: true });

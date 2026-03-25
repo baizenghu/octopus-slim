@@ -26,6 +26,18 @@ import { EngineAdapter } from '../services/EngineAdapter';
 import { validateSessionOwnership } from '../utils/ownership';
 import { sanitizeUserContent, sanitizeAssistantContent, isInternalMessage } from '../utils/ContentSanitizer';
 import { createLogger } from '../utils/logger';
+import type { AppPrismaClient } from '../types/prisma';
+import type {
+  EngineSessionItem,
+  EngineSessionsListResponse,
+  EngineContentBlock,
+  EngineMessage,
+  EngineChatHistoryResponse,
+  EngineModelItem,
+  EngineModelsListResponse,
+  EngineConfig,
+  EngineProviderConfig,
+} from '../types/engine';
 
 const logger = createLogger('sessions');
 
@@ -41,9 +53,9 @@ export async function autoGenerateTitle(bridge: EngineAdapter, sessionId: string
     // 从 sessionKey 解析 agentId 用于服务端过滤
     const agentIdMatch = sessionId.match(/^agent:([^:]+):session:/);
     const titleAgentId = agentIdMatch ? agentIdMatch[1] : undefined;
-    const result = await bridge.sessionsList(titleAgentId) as any;
-    const sessions = (result?.sessions || result) as any[];
-    const session = sessions.find((s: any) => (s.key || s.sessionKey) === sessionId);
+    const result = await bridge.sessionsList(titleAgentId) as EngineSessionsListResponse;
+    const sessions: EngineSessionItem[] = result?.sessions ?? [];
+    const session = sessions.find((s) => (s.key || s.sessionKey) === sessionId);
 
     // 如果已经有自定义标题，跳过
     if (session?.label && session.label !== '新对话') {
@@ -51,15 +63,15 @@ export async function autoGenerateTitle(bridge: EngineAdapter, sessionId: string
     }
 
     // 2. 获取历史记录取首条消息
-    const history = await bridge.chatHistory(sessionId) as any;
-    const messages = (history?.messages || history?.history || []) as any[];
+    const history = await bridge.chatHistory(sessionId) as EngineChatHistoryResponse;
+    const messages: EngineMessage[] = history?.messages ?? history?.history ?? [];
 
-    const firstUser = messages.find((m: any) => m.role === 'user');
+    const firstUser = messages.find((m) => m.role === 'user');
     if (!firstUser) return null;
 
     let content: string;
     if (Array.isArray(firstUser.content)) {
-      content = firstUser.content.map((c: any) => c.text || c.content || '').join('');
+      content = firstUser.content.map((c: EngineContentBlock) => c.text || c.content || '').join('');
     } else {
       content = String(firstUser.content || '');
     }
@@ -80,8 +92,8 @@ export async function autoGenerateTitle(bridge: EngineAdapter, sessionId: string
         try {
           await bridge.sessionsPatch(sessionId, { label: finalTitle });
           return finalTitle;
-        } catch (patchErr: any) {
-          const msg = String(patchErr?.message || patchErr || '');
+        } catch (patchErr: unknown) {
+          const msg = patchErr instanceof Error ? patchErr.message : String(patchErr ?? '');
           if (msg.includes('label already in use')) {
             const now = new Date();
             const suffix = `${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
@@ -105,7 +117,7 @@ export async function autoGenerateTitle(bridge: EngineAdapter, sessionId: string
 
 /** 加载用户的 Agent 配置（纯函数，供 chat.ts / sessions.ts 共享） */
 export async function loadAgentFromDb(
-  prisma: any,
+  prisma: AppPrismaClient | null,
   userId: string,
   agentId?: string,
 ) {
@@ -125,7 +137,7 @@ export function createSessionsRouter(
   authService: AuthService,
   _workspaceManager: WorkspaceManager,
   bridge: EngineAdapter | undefined,
-  prisma?: any,
+  prisma?: AppPrismaClient,
   _auditLogger?: AuditLogger,
 ): Router {
   const router = Router();
@@ -142,47 +154,50 @@ export function createSessionsRouter(
       return;
     }
     try {
-      const result = await bridge.modelsList() as any;
-      const allModels: any[] = result?.models || result || [];
+      const result = await bridge.modelsList() as EngineModelsListResponse;
+      const allModels: EngineModelItem[] = result?.models ?? [];
 
       // 从 octopus.json 读取已配置的 providers，只返回这些 provider 的模型
-      const { config: octopusCfg } = await bridge.configGetParsed();
+      const { config: octopusCfgRaw } = await bridge.configGetParsed();
+      const octopusCfg = octopusCfgRaw as EngineConfig;
       const configuredProviders = new Set<string>();
       // models.providers 中显式配置的
-      const providers = (octopusCfg as any)?.models?.providers;
+      const providers = octopusCfg.models?.providers;
       if (providers && typeof providers === 'object') {
         for (const key of Object.keys(providers)) {
           configuredProviders.add(key);
         }
       }
       // agents.defaults.model 中引用的 provider
-      const defaultModel = (octopusCfg as any)?.agents?.defaults?.model;
+      const defaultModel = octopusCfg.agents?.defaults?.model;
       const primaryStr = typeof defaultModel === 'string' ? defaultModel : defaultModel?.primary;
       if (primaryStr && primaryStr.includes('/')) {
         configuredProviders.add(primaryStr.split('/')[0]);
       }
-      const fallbacks: string[] = defaultModel?.fallbacks || [];
+      const fallbacks: string[] = (typeof defaultModel === 'object' && defaultModel !== null
+        ? defaultModel.fallbacks ?? []
+        : []);
       for (const fb of fallbacks) {
         if (fb && fb.includes('/')) configuredProviders.add(fb.split('/')[0]);
       }
 
       // 过滤：只保留已配置 provider 的模型
-      const filtered = configuredProviders.size > 0
-        ? allModels.filter((m: any) => {
+      const filtered: EngineModelItem[] = configuredProviders.size > 0
+        ? allModels.filter((m) => {
             const provider = m.provider || (m.id?.includes('/') ? m.id.split('/')[0] : '');
             return configuredProviders.has(provider);
           })
-        : allModels;
+        : [...allModels];
 
       // 补充：octopus.json 中自定义 provider 的模型可能不在引擎列表中，手动添加
-      const existingIds = new Set(filtered.map((m: any) => `${m.provider}/${m.id}`));
+      const existingIds = new Set(filtered.map((m) => `${m.provider}/${m.id}`));
       if (providers && typeof providers === 'object') {
         for (const [providerKey, providerCfg] of Object.entries(providers)) {
-          const cfg = providerCfg as any;
-          const modelEntries: any[] = cfg?.models || [];
+          const cfg = providerCfg as EngineProviderConfig;
+          const modelEntries = cfg?.models ?? [];
           for (const entry of modelEntries) {
             const modelId = typeof entry === 'string' ? entry : entry?.id;
-            const modelName = typeof entry === 'string' ? entry : (entry?.name || entry?.id);
+            const modelName = typeof entry === 'string' ? entry : (entry?.name ?? entry?.id);
             if (modelId && !existingIds.has(`${providerKey}/${modelId}`)) {
               filtered.push({ id: modelId, name: modelName, provider: providerKey });
             }
@@ -223,10 +238,10 @@ export function createSessionsRouter(
       }
 
       // 传入 agentId 让 Native Gateway 服务端过滤，减少全量数据暴露
-      const result = await bridge.sessionsList(nativeAgentId) as any;
+      const result = await bridge.sessionsList(nativeAgentId) as EngineSessionsListResponse;
       // 保留客户端 filter 作为二次防御
-      const rawSessions = ((result?.sessions || result) as any[] || [])
-        .filter((s: any) => {
+      const rawSessions: EngineSessionItem[] = (result?.sessions ?? [])
+        .filter((s) => {
           const key = s.key || s.sessionKey || '';
           if (!key.startsWith(agentPrefix)) return false;
           // 排除心跳隔离会话
@@ -237,7 +252,7 @@ export function createSessionsRouter(
 
       // P1-12: 异步补标题（fire-and-forget），不阻塞列表返回
       // 标题会在后台生成，前端下次刷新时看到
-      const needsTitle = (s: any) => {
+      const needsTitle = (s: EngineSessionItem) => {
         const lbl = s.label || s.title || '';
         return !lbl || lbl === '新对话' || lbl.includes('<relevant-memories') || lbl.includes('[UNTRUSTED DATA');
       };
@@ -245,13 +260,13 @@ export function createSessionsRouter(
       if (sessionsNeedingTitle.length > 0) {
         // fire-and-forget: 不 await，后台异步执行
         Promise.allSettled(
-          sessionsNeedingTitle.map((s: any) =>
+          sessionsNeedingTitle.map((s) =>
             autoGenerateTitle(bridge!, s.key || s.sessionKey).catch(() => null)
           )
         ).catch(err => logger.error('background title generation error', { error: err }));
       }
 
-      const sessions = rawSessions.map((s: any) => ({
+      const sessions = rawSessions.map((s) => ({
         sessionId: s.key || s.sessionKey,
         title: (s.label || s.title || '新对话')
           .replace(/^\[请(?:使用|严格按照|优先使用)\s+[^\]]*(?:\]|\S*…)\s*/m, '')
@@ -290,28 +305,28 @@ export function createSessionsRouter(
       return;
     }
     try {
-      const history = await bridge.chatHistory(sessionId) as any;
+      const history = await bridge.chatHistory(sessionId) as EngineChatHistoryResponse;
       // native gateway 的 content 字段是 [{type:'text', text:'...'}] 数组，转成字符串
       type ToolCallInfo = { name: string; toolCallId?: string; args?: string; result?: string };
       type HistoryMsg = { role: 'user' | 'assistant'; content: string; thinking?: string; ts?: string; toolCalls?: ToolCallInfo[] };
 
-      const rawMessages = ((history?.messages || history?.history || []) as any[])
-        .filter((m: any) => m.role === 'user' || m.role === 'assistant')
-        .map((m: any) => {
+      const rawMessages = (history?.messages ?? history?.history ?? [])
+        .filter((m) => m.role === 'user' || m.role === 'assistant')
+        .map((m: EngineMessage) => {
           // map 内部可能返回 null（subagent 内部消息），后面 filter 掉
           let content: string;
           let toolCalls: ToolCallInfo[] | undefined;
           if (Array.isArray(m.content)) {
             // 只提取 type=text 的内容块，跳过 tool_use 等非文本块（与引擎 WebUI extractRawText 一致）
             content = m.content
-              .filter((c: any) => c.type === 'text' && typeof c.text === 'string')
-              .map((c: any) => c.text)
+              .filter((c: EngineContentBlock) => c.type === 'text' && typeof c.text === 'string')
+              .map((c: EngineContentBlock) => c.text)
               .join('\n');
             // 提取工具调用块（引擎用 toolCall，标准 API 用 tool_use）
-            const toolUseBlocks = m.content.filter((c: any) => (c.type === 'toolCall' || c.type === 'tool_use') && c.name);
+            const toolUseBlocks = m.content.filter((c: EngineContentBlock) => (c.type === 'toolCall' || c.type === 'tool_use') && c.name);
             if (toolUseBlocks.length > 0) {
-              toolCalls = toolUseBlocks.map((c: any) => ({
-                name: c.name,
+              toolCalls = toolUseBlocks.map((c: EngineContentBlock) => ({
+                name: c.name!,
                 toolCallId: c.id || undefined,
                 args: c.args ? (typeof c.args === 'string' ? c.args : JSON.stringify(c.args)) :
                       c.arguments ? (typeof c.arguments === 'string' ? c.arguments : JSON.stringify(c.arguments)) :
@@ -476,14 +491,14 @@ export function createSessionsRouter(
       return;
     }
     try {
-      const history = await bridge.chatHistory(sessionId) as any;
-      const messages = (history?.messages || history?.history || []) as any[];
-      const userAssistantMsgs = messages.filter((m: any) => m.role === 'user' || m.role === 'assistant');
+      const history = await bridge.chatHistory(sessionId) as EngineChatHistoryResponse;
+      const messages: EngineMessage[] = history?.messages ?? history?.history ?? [];
+      const userAssistantMsgs = messages.filter((m) => m.role === 'user' || m.role === 'assistant');
       const lastMsg = userAssistantMsgs[userAssistantMsgs.length - 1];
       const completed = !lastMsg || lastMsg.role === 'assistant';
       res.json({ completed, messageCount: userAssistantMsgs.length });
-    } catch (err: any) {
-      res.status(500).json({ error: err.message });
+    } catch (err: unknown) {
+      res.status(500).json({ error: (err as Error).message });
     }
   });
 

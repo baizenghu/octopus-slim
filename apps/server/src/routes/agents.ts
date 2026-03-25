@@ -24,6 +24,7 @@ import { createAvatarUpload, mimeToExt } from '../utils/avatar';
 import { createLogger } from '../utils/logger';
 
 import type { AppPrismaClient } from '../types/prisma';
+import type { EngineAgentFileResponse } from '../types/engine';
 
 const logger = createLogger('agents');
 
@@ -60,7 +61,7 @@ export function createAgentsRouter(
    * 同步 agent 到原生 gateway，并自动配置 memory scope 隔离 + 独立工作空间
    * @param isUpdate 是否为更新操作（更新时不覆盖 MEMORY.md，保留已有记忆 #19 修复）
    */
-  async function syncToNative(userId: string, agentName: string, systemPrompt?: string | null, identity?: any, isUpdate = false, description?: string | null) {
+  async function syncToNative(userId: string, agentName: string, systemPrompt?: string | null, identity?: { name?: string; emoji?: string; vibe?: string } | null, isUpdate = false, description?: string | null) {
     if (!bridge?.isConnected || !workspaceManager) return;
     await ensureAndSyncNativeAgent(bridge, workspaceManager, userId, agentName, {
       useCache: false,
@@ -162,7 +163,7 @@ export function createAgentsRouter(
 
       await bridge.agentFilesSet(nativeAgentId, 'TOOLS.md', lines.join('\n'));
       logger.info(`[agents] TOOLS.md synced for ${nativeAgentId} (native: ${nativeCount}, mcp: ${mcpToolCount})`);
-    } catch (e: any) {
+    } catch (e: unknown) {
       logger.error(`[agents] syncToolsMd failed for ${agentName}:`, { error: e instanceof Error ? e.message : String(e) });
     }
   }
@@ -208,7 +209,7 @@ export function createAgentsRouter(
 
     // 首次创建 default agent 时同步 TOOLS.md（包含原生工具 + MCP 工具）
     const defaultToolsFilter = ['read', 'write', 'exec'];
-    syncToolsMd(userId, 'default', defaultMcpFilter, defaultToolsFilter).catch((e: any) =>
+    syncToolsMd(userId, 'default', defaultMcpFilter, defaultToolsFilter).catch((e: unknown) =>
       logger.error('[agents] syncToolsMd for new default agent failed:', { error: e instanceof Error ? e.message : String(e) }),
     );
   }
@@ -264,7 +265,7 @@ export function createAgentsRouter(
 
       // 同步到原生 Gateway（await 确保同步完成后再响应，#20 修复）
       try {
-        await syncToNative(user.id, agent.name, null, agent.identity, false, agent.description);
+        await syncToNative(user.id, agent.name, null, agent.identity as { name?: string; emoji?: string; vibe?: string } | null, false, agent.description);
         // 统一同步 allowAgents + model + tools 到 native agents.list（单次 config read/write）
         const enabledAgents = await prisma.agent.findMany({ where: { ownerId: user.id, enabled: true }, select: { name: true } });
         await syncAgentToEngine(bridge!, user.id, {
@@ -277,7 +278,7 @@ export function createAgentsRouter(
         });
         // 创建时同步 TOOLS.md（原生工具 + MCP 工具）
         await syncToolsMd(user.id, agent.name, mcpFilter || [], toolsFilter || []);
-      } catch (e: any) {
+      } catch (e: unknown) {
         logger.error('[agents] Native sync failed:', { error: e instanceof Error ? e.message : String(e) });
         // 同步失败不阻塞响应（DB 已写入）
       }
@@ -335,8 +336,8 @@ export function createAgentsRouter(
       const enabledChanged = enabled !== undefined && enabled !== existing.enabled;
       if (identityChanged || descriptionChanged || enabledChanged) {
         try {
-          await syncToNative(user.id, agent.name, null, agent.identity, true, agent.description);
-        } catch (e: any) {
+          await syncToNative(user.id, agent.name, null, agent.identity as { name?: string; emoji?: string; vibe?: string } | null, true, agent.description);
+        } catch (e: unknown) {
           logger.error('[agents] Native sync failed:', { error: e instanceof Error ? e.message : String(e) });
         }
       }
@@ -363,7 +364,7 @@ export function createAgentsRouter(
           const enabledAgents = await prisma.agent.findMany({ where: { ownerId: user.id, enabled: true }, select: { name: true } });
           syncOpts.enabledAgentNames = enabledAgents.map(a => a.name);
         }
-        syncAgentToEngine(bridge!, user.id, syncOpts).catch((e: any) =>
+        syncAgentToEngine(bridge!, user.id, syncOpts).catch((e: unknown) =>
           logger.error('[agents] syncAgentToEngine failed:', { error: e instanceof Error ? e.message : String(e) }),
         );
       }
@@ -372,7 +373,7 @@ export function createAgentsRouter(
       if (mcpFilterChanged || toolsFilterChanged) {
         const finalMcpFilter = mcpFilter ?? (existing.mcpFilter as string[]) ?? [];
         const finalToolsFilter = toolsFilter ?? (existing.toolsFilter as string[]) ?? [];
-        syncToolsMd(user.id, agent.name, finalMcpFilter, finalToolsFilter).catch((e: any) =>
+        syncToolsMd(user.id, agent.name, finalMcpFilter, finalToolsFilter).catch((e: unknown) =>
           logger.error('[agents] syncToolsMd failed:', { error: e instanceof Error ? e.message : String(e) }),
         );
       }
@@ -423,7 +424,7 @@ export function createAgentsRouter(
           try {
             await rm(stateDir, { recursive: true, force: true });
             logger.info(`[agents] Cleaned state dir: ${stateDir}`);
-          } catch (e: any) {
+          } catch (e: unknown) {
             logger.error(`[agents] Failed to clean state dir ${stateDir}:`, { error: e instanceof Error ? e.message : String(e) });
           }
         }, 2000);
@@ -431,7 +432,7 @@ export function createAgentsRouter(
       }
       // 清理专业 agent 的独立工作空间
       if (workspaceManager && existing.name !== 'default') {
-        workspaceManager.deleteAgentWorkspace(user.id, existing.name).catch((e: any) =>
+        workspaceManager.deleteAgentWorkspace(user.id, existing.name).catch((e: unknown) =>
           logger.error('[agents] Workspace cleanup failed:', { error: e instanceof Error ? e.message : String(e) }),
         );
       }
@@ -441,7 +442,7 @@ export function createAgentsRouter(
         syncAgentToEngine(bridge!, user.id, {
           deleteAgentName: existing.name,
           enabledAgentNames: enabledAgents.map(a => a.name),
-        }).catch((e: any) =>
+        }).catch((e: unknown) =>
           logger.error('[agents] syncAgentToEngine after delete failed:', { error: e instanceof Error ? e.message : String(e) }),
         );
       }
@@ -486,7 +487,7 @@ export function createAgentsRouter(
       const files = await Promise.all(
         filesToLoad.map(async (fileName) => {
           try {
-            const result = await bridge.agentFilesGet(nativeAgentId, fileName) as any;
+            const result = await bridge.agentFilesGet(nativeAgentId, fileName) as EngineAgentFileResponse;
             // RPC 返回 { agentId, workspace, file: { name, path, content, ... } }
             let text = '';
             if (typeof result === 'string') {
@@ -497,7 +498,7 @@ export function createAgentsRouter(
               text = result?.content ?? '';
             }
             return { name: fileName, content: text || '' };
-          } catch (e: any) {
+          } catch (e: unknown) {
             logger.warn(`[agents] agentFilesGet ${fileName} failed:`, { error: e instanceof Error ? e.message : String(e) });
             return { name: fileName, content: '' };
           }
@@ -608,16 +609,16 @@ export function createAgentsRouter(
       return;
     }
 
-    createAvatarUpload().single('avatar')(req, res, (err: any) => {
+    createAvatarUpload().single('avatar')(req, res, (err: unknown) => {
       if (err) {
-        res.status(400).json({ error: err.message });
+        res.status(400).json({ error: (err as Error).message });
         return;
       }
       (async () => {
         try {
           const authReq = req as AuthenticatedRequest;
           const user = authReq.user!;
-          const file = (req as any).file;
+          const file = (req as { file?: { buffer: Buffer; mimetype: string } }).file;
 
           if (!file) {
             res.status(400).json({ error: '请选择头像文件' });
@@ -651,7 +652,7 @@ export function createAgentsRouter(
           await fs.promises.writeFile(avatarPath, file.buffer);
 
           // 更新 DB identity JSON 中的 avatar 字段
-          const currentIdentity = (existing.identity as any) || {};
+          const currentIdentity = (existing.identity as Record<string, unknown>) ?? {};
           const avatarUrl = `/api/agents/${id}/avatar`;
           const newIdentity = { ...currentIdentity, avatar: avatarUrl };
           await prisma.agent.update({
@@ -666,7 +667,7 @@ export function createAgentsRouter(
               // 读取现有 IDENTITY.md 内容
               let identityContent = '';
               try {
-                const result = await bridge.agentFilesGet(nativeAgentId, 'IDENTITY.md') as any;
+                const result = await bridge.agentFilesGet(nativeAgentId, 'IDENTITY.md') as EngineAgentFileResponse;
                 if (typeof result === 'string') {
                   identityContent = result;
                 } else if (result?.file) {
@@ -680,7 +681,7 @@ export function createAgentsRouter(
               const lines = identityContent.split('\n').filter((l: string) => !l.startsWith('avatar:'));
               lines.push(`avatar: ${avatarUrl}`);
               await bridge.agentFilesSet(nativeAgentId, 'IDENTITY.md', lines.join('\n'));
-            } catch (e: any) {
+            } catch (e: unknown) {
               logger.error('[agents] avatar IDENTITY.md sync failed:', { error: e instanceof Error ? e.message : String(e) });
             }
           }
@@ -720,8 +721,8 @@ export function createAgentsRouter(
       } catch { /* directory not found */ }
 
       res.status(404).json({ error: '头像不存在' });
-    } catch (err: any) {
-      res.status(500).json({ error: err.message || '获取头像失败' });
+    } catch (err: unknown) {
+      res.status(500).json({ error: (err as Error).message || '获取头像失败' });
     }
   });
 

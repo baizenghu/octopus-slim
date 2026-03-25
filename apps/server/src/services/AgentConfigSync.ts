@@ -15,6 +15,7 @@ import { TenantEngineAdapter } from './TenantEngineAdapter';
 import type { WorkspaceManager } from '@octopus/workspace';
 import { getSoulTemplate, getMemoryTemplate } from './SoulTemplate';
 import { createLogger } from '../utils/logger';
+import type { EngineConfig, EngineAgentListEntry, EngineAgentFileResponse } from '../types/engine';
 
 const logger = createLogger('AgentConfigSync');
 
@@ -101,27 +102,28 @@ export async function syncAgentToEngine(
 
   const tenant = TenantEngineAdapter.forUser(bridge, userId);
   const { config } = await bridge.configGetParsed();
-  const agentsList: any[] = (config as any)?.agents?.list || [];
+  const engineCfg = config as EngineConfig;
+  const agentsList: EngineAgentListEntry[] = engineCfg.agents?.list ?? [];
   let changed = false;
 
   // 1. 删除 agent entry
   if (opts.deleteAgentName) {
     const deleteId = tenant.agentId(opts.deleteAgentName);
     const before = agentsList.length;
-    (config as any).agents.list = agentsList.filter((a: any) => a.id !== deleteId);
-    if ((config as any).agents.list.length !== before) {
+    engineCfg.agents!.list = agentsList.filter((a) => a.id !== deleteId);
+    if ((engineCfg.agents!.list?.length ?? 0) !== before) {
       changed = true;
       logger.info(`deleted agent entry: ${deleteId}`);
     }
   }
 
   // 当前 agents.list（可能已被步骤 1 修改）
-  const currentList: any[] = (config as any)?.agents?.list || [];
+  const currentList: EngineAgentListEntry[] = engineCfg.agents?.list ?? [];
 
   // 2. 更新 model + tools.allow
   if (opts.agentName && (opts.model !== undefined || opts.toolsFilter !== undefined || opts.mcpFilter !== undefined || opts.skillsFilter !== undefined)) {
     const targetId = tenant.agentId(opts.agentName);
-    const entry = currentList.find((a: any) => a.id === targetId);
+    const entry = currentList.find((a) => a.id === targetId);
     if (entry) {
       // model 同步
       if (opts.model !== undefined) {
@@ -209,9 +211,9 @@ export async function syncAgentToEngine(
 
         // 设置引擎原生 skills 白名单（引擎自动注入 <available_skills>）
         const newSkills = hasSkills ? [...opts.skillsFilter] : [];
-        const currentSkills: string[] = (entry as any).skills || [];
+        const currentSkills: string[] = entry.skills ?? [];
         if (JSON.stringify(newSkills) !== JSON.stringify(currentSkills)) {
-          (entry as any).skills = newSkills;
+          entry.skills = newSkills;
           changed = true;
           logger.info(`skills: ${targetId} → [${newSkills.join(', ')}]`);
         }
@@ -236,7 +238,7 @@ export async function syncAgentToEngine(
   // 2.5 更新心跳配置
   if (opts.heartbeat !== undefined && opts.agentName) {
     const targetId = tenant.agentId(opts.agentName);
-    const entry = currentList.find((a: any) => a.id === targetId);
+    const entry = currentList.find((a) => a.id === targetId);
     if (entry) {
       if (opts.heartbeat === null) {
         // 删除心跳
@@ -289,13 +291,13 @@ export async function syncAgentToEngine(
 
   // 4. 同步 memory-lancedb-pro agentAccess（记忆隔离）
   if (opts.enabledAgentNames) {
-    const memoryPlugin = (config as any).plugins?.entries?.['memory-lancedb-pro'];
+    const memoryPlugin = engineCfg.plugins?.entries?.['memory-lancedb-pro'];
     if (memoryPlugin?.config?.scopes) {
       const scopes = memoryPlugin.config.scopes;
       const defaultId = tenant.agentId('default');
       const specialistIds = opts.enabledAgentNames
-        .filter((n: string) => n !== 'default')
-        .map((n: string) => tenant.agentId(n));
+        .filter((n) => n !== 'default')
+        .map((n) => tenant.agentId(n));
 
       const allUserAgentIds = [defaultId, ...specialistIds];
       scopes.agentAccess = scopes.agentAccess || {};
@@ -317,7 +319,7 @@ export async function syncAgentToEngine(
   // 删除 agent 时清理 agentAccess
   if (opts.deleteAgentName) {
     const deleteId = tenant.agentId(opts.deleteAgentName);
-    const memoryPlugin = (config as any).plugins?.entries?.['memory-lancedb-pro'];
+    const memoryPlugin = engineCfg.plugins?.entries?.['memory-lancedb-pro'];
     if (memoryPlugin?.config?.scopes?.agentAccess?.[deleteId]) {
       delete memoryPlugin.config.scopes.agentAccess[deleteId];
       changed = true;
@@ -329,11 +331,11 @@ export async function syncAgentToEngine(
     const patch: Record<string, unknown> = {};
 
     // agents.list 是数组，deep merge 会整体替换，所以传完整 list
-    patch.agents = { list: (config as any).agents?.list || [] };
+    patch.agents = { list: engineCfg.agents?.list ?? [] };
 
     // 如果涉及 memory-lancedb-pro plugin 变更，只传 plugin patch
     if (opts.enabledAgentNames || opts.deleteAgentName) {
-      const memoryPlugin = (config as any).plugins?.entries?.['memory-lancedb-pro'];
+      const memoryPlugin = engineCfg.plugins?.entries?.['memory-lancedb-pro'];
       if (memoryPlugin) {
         patch.plugins = {
           entries: {
@@ -368,9 +370,9 @@ async function setFileWithRetry(
 ): Promise<void> {
   try {
     await bridge.agentFilesSet(nativeAgentId, fileName, content);
-  } catch (e: any) {
+  } catch (e: unknown) {
     if (logPrefix === '[agents]') {
-      logger.warn(`${logPrefix} agentFilesSet ${fileName} failed for ${nativeAgentId}, retrying in 1.5s:`, { message: e.message });
+      logger.warn(`${logPrefix} agentFilesSet ${fileName} failed for ${nativeAgentId}, retrying in 1.5s:`, { message: (e as Error).message });
     }
     await new Promise(r => setTimeout(r, 1500));
     await bridge.agentFilesSet(nativeAgentId, fileName, content);
@@ -452,8 +454,8 @@ export async function ensureAndSyncNativeAgent(
       await bridge.agentsCreate({ name: nativeAgentId, workspace: workspacePath });
       isNewAgent = true;
       agentReady = true;
-    } catch (createErr: any) {
-      const msg = createErr.message || '';
+    } catch (createErr: unknown) {
+      const msg = (createErr as Error).message || '';
       if (msg.includes('already exists')) {
         agentReady = true;
       } else {
@@ -468,8 +470,8 @@ export async function ensureAndSyncNativeAgent(
         isNewAgent = true;
         agentReady = true;
         break;
-      } catch (createErr: any) {
-        const msg = createErr.message || '';
+      } catch (createErr: unknown) {
+        const msg = (createErr as Error).message || '';
         if (msg.includes('already exists')) {
           try {
             await bridge.agentsUpdate({ agentId: nativeAgentId, workspace: workspacePath });
@@ -492,11 +494,11 @@ export async function ensureAndSyncNativeAgent(
 
   if (useCache && isNewAgent) {
     // chat.ts 模式：新建时无条件写 SOUL.md + MEMORY.md（不写 IDENTITY.md）
-    await setFileWithRetry(bridge, nativeAgentId, 'SOUL.md', getSoulTemplate(dataRoot, agentName), logPrefix).catch((e: any) => {
-      logger.error(`${logPrefix} agentFilesSet SOUL.md failed for ${nativeAgentId}:`, { message: e.message });
+    await setFileWithRetry(bridge, nativeAgentId, 'SOUL.md', getSoulTemplate(dataRoot, agentName), logPrefix).catch((e: unknown) => {
+      logger.error(`${logPrefix} agentFilesSet SOUL.md failed for ${nativeAgentId}:`, { message: (e as Error).message });
     });
-    await setFileWithRetry(bridge, nativeAgentId, 'MEMORY.md', getMemoryTemplate(dataRoot, agentName), logPrefix).catch((e: any) => {
-      logger.error(`${logPrefix} agentFilesSet MEMORY.md failed for ${nativeAgentId}:`, { message: e.message });
+    await setFileWithRetry(bridge, nativeAgentId, 'MEMORY.md', getMemoryTemplate(dataRoot, agentName), logPrefix).catch((e: unknown) => {
+      logger.error(`${logPrefix} agentFilesSet MEMORY.md failed for ${nativeAgentId}:`, { message: (e as Error).message });
     });
   } else if (!useCache) {
     // agents.ts 模式：条件写 IDENTITY.md + SOUL.md + MEMORY.md
@@ -513,28 +515,28 @@ export async function ensureAndSyncNativeAgent(
       identityParts.push(`vibe: ${identity.vibe}`);
     }
     if (identityParts.length > 0) {
-      await setFileWithRetry(bridge, nativeAgentId, 'IDENTITY.md', identityParts.join('\n'), logPrefix).catch((e: any) => {
-        logger.error(`${logPrefix} agentFilesSet IDENTITY.md ultimately failed for ${nativeAgentId}:`, { message: e.message });
+      await setFileWithRetry(bridge, nativeAgentId, 'IDENTITY.md', identityParts.join('\n'), logPrefix).catch((e: unknown) => {
+        logger.error(`${logPrefix} agentFilesSet IDENTITY.md ultimately failed for ${nativeAgentId}:`, { message: (e as Error).message });
       });
     }
 
     // SOUL.md：有明确的 systemPrompt 时写入；否则仅在文件不存在时用模板填充
     if (systemPrompt) {
-      await setFileWithRetry(bridge, nativeAgentId, 'SOUL.md', systemPrompt, logPrefix).catch((e: any) => {
-        logger.error(`${logPrefix} agentFilesSet SOUL.md ultimately failed for ${nativeAgentId}:`, { message: e.message });
+      await setFileWithRetry(bridge, nativeAgentId, 'SOUL.md', systemPrompt, logPrefix).catch((e: unknown) => {
+        logger.error(`${logPrefix} agentFilesSet SOUL.md ultimately failed for ${nativeAgentId}:`, { message: (e as Error).message });
       });
     } else if (!isUpdate) {
       try {
-        const existing = await bridge.agentFilesGet(nativeAgentId, 'SOUL.md') as any;
+        const existing = await bridge.agentFilesGet(nativeAgentId, 'SOUL.md') as EngineAgentFileResponse;
         if (!existing?.content) {
-          await setFileWithRetry(bridge, nativeAgentId, 'SOUL.md', getSoulTemplate(dataRoot, agentName), logPrefix).catch((e: any) => {
-            logger.error(`${logPrefix} agentFilesSet SOUL.md ultimately failed for ${nativeAgentId}:`, { message: e.message });
+          await setFileWithRetry(bridge, nativeAgentId, 'SOUL.md', getSoulTemplate(dataRoot, agentName), logPrefix).catch((e: unknown) => {
+            logger.error(`${logPrefix} agentFilesSet SOUL.md ultimately failed for ${nativeAgentId}:`, { message: (e as Error).message });
           });
         }
       } catch {
         // 文件不存在，用模板填充
-        await setFileWithRetry(bridge, nativeAgentId, 'SOUL.md', getSoulTemplate(dataRoot, agentName), logPrefix).catch((e: any) => {
-          logger.error(`${logPrefix} agentFilesSet SOUL.md ultimately failed for ${nativeAgentId}:`, { message: e.message });
+        await setFileWithRetry(bridge, nativeAgentId, 'SOUL.md', getSoulTemplate(dataRoot, agentName), logPrefix).catch((e: unknown) => {
+          logger.error(`${logPrefix} agentFilesSet SOUL.md ultimately failed for ${nativeAgentId}:`, { message: (e as Error).message });
         });
       }
     }
@@ -542,17 +544,17 @@ export async function ensureAndSyncNativeAgent(
     // MEMORY.md：仅在文件不存在时写入（保护已有记忆）
     if (!isUpdate) {
       try {
-        const existing = await bridge.agentFilesGet(nativeAgentId, 'MEMORY.md') as any;
+        const existing = await bridge.agentFilesGet(nativeAgentId, 'MEMORY.md') as EngineAgentFileResponse;
         if (!existing?.content) {
           const memDisplayName = identity?.name || agentName;
-          await setFileWithRetry(bridge, nativeAgentId, 'MEMORY.md', getMemoryTemplate(dataRoot, memDisplayName), logPrefix).catch((e: any) => {
-            logger.error(`${logPrefix} agentFilesSet MEMORY.md ultimately failed for ${nativeAgentId}:`, { message: e.message });
+          await setFileWithRetry(bridge, nativeAgentId, 'MEMORY.md', getMemoryTemplate(dataRoot, memDisplayName), logPrefix).catch((e: unknown) => {
+            logger.error(`${logPrefix} agentFilesSet MEMORY.md ultimately failed for ${nativeAgentId}:`, { message: (e as Error).message });
           });
         }
       } catch {
         const memDisplayName = identity?.name || agentName;
-        await setFileWithRetry(bridge, nativeAgentId, 'MEMORY.md', getMemoryTemplate(dataRoot, memDisplayName), logPrefix).catch((e: any) => {
-          logger.error(`${logPrefix} agentFilesSet MEMORY.md ultimately failed for ${nativeAgentId}:`, { message: e.message });
+        await setFileWithRetry(bridge, nativeAgentId, 'MEMORY.md', getMemoryTemplate(dataRoot, memDisplayName), logPrefix).catch((e: unknown) => {
+          logger.error(`${logPrefix} agentFilesSet MEMORY.md ultimately failed for ${nativeAgentId}:`, { message: (e as Error).message });
         });
       }
     }
