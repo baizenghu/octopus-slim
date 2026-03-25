@@ -11,6 +11,17 @@ export default defineConfig({
       'tests/**/*.test.ts',
       'tests/**/*.spec.ts',
     ],
+    exclude: [
+      '**/node_modules/**',
+      '**/dist/**',
+      // 引擎自带测试 — fork 后不维护，只跑企业层测试
+      'packages/engine/src/**/*.test.ts',
+      'packages/engine/src/**/*.spec.ts',
+      'packages/engine/ui/**/*.test.ts',
+      'packages/engine/ui/**/*.spec.ts',
+      'packages/engine/extensions/**/*.test.ts',
+      'packages/engine/extensions/**/*.spec.ts',
+    ],
     setupFiles: ['./tests/setup.ts'],
     environment: 'node',
     coverage: {
