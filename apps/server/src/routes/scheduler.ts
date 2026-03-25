@@ -376,7 +376,7 @@ export function createSchedulerRouter(
           return;
         }
         // native cron 不支持直接 patch，先删后建
-        await bridge.cronRemove(id).catch(() => {});
+        await bridge.cronRemove(id).catch(err => logger.warn(`[scheduler] 删除旧 cron 任务失败 ${id}`, { error: err?.message || String(err) }));
         const { name, cron: cronExpr, taskConfig } = req.body;
         const nativeAgentId = req.tenantBridge!.agentId('default');
         const job = await bridge.cronAdd({
@@ -545,7 +545,7 @@ export function createSchedulerRouter(
             lastRunAt: new Date(),
             taskConfig: { ...taskCfg, lastResult: resultSummary, lastResultAt: new Date().toISOString() },
           },
-        }).catch(() => {});
+        }).catch(err => logger.warn('[scheduler] 更新心跳任务最后运行时间失败', { error: (err as Error)?.message || String(err) }));
 
         // 审计日志：记录心跳执行结果
         try {

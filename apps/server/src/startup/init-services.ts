@@ -143,7 +143,7 @@ export async function initServices(config: AppConfig): Promise<Services> {
 
   auditLogger.cleanup().then((n: number) => {
     if (n > 0) logger.info(`Cleaned up ${n} expired export files`);
-  }).catch(() => {});
+  }).catch(err => logger.warn('审计日志过期文件清理失败', { error: (err as Error)?.message || String(err) }));
 
   // ── FileCleanupService ──
   if (prismaClient) {

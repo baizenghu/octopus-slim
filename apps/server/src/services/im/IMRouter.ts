@@ -236,7 +236,7 @@ export class IMRouter {
         resource: `im:${channel}:${imUserId}`,
         details: { channel, imUserId },
         success: true,
-      }).catch(() => {});
+      }).catch(err => logger.warn('[im-router] 记录 IM 绑定审计日志失败', { error: (err as Error)?.message || String(err) }));
     } catch (e: any) {
       // 记录失败次数
       const prev = this.bindAttempts.get(imUserId);
@@ -256,7 +256,7 @@ export class IMRouter {
         details: { channel, imUserId },
         success: false,
         errorMessage: e.message,
-      }).catch(() => {});
+      }).catch(err => logger.warn('[im-router] 记录 IM 绑定失败审计日志出错', { error: (err as Error)?.message || String(err) }));
       // 安全：错误回复不包含原始输入
       await adapter.sendText(imUserId, '绑定失败：用户名或密码错误');
     }
@@ -300,7 +300,7 @@ export class IMRouter {
         resource: `im:${channel}:${imUserId}`,
         details: { channel, imUserId },
         success: true,
-      }).catch(() => {});
+      }).catch(err => logger.warn('[im-router] 记录 IM 解绑审计日志失败', { error: (err as Error)?.message || String(err) }));
     } catch {
       await adapter.sendText(imUserId, '解除绑定失败，请稍后重试。');
     }
@@ -430,7 +430,7 @@ export class IMRouter {
         resource: `agent:${targetName}`,
         details: { channel: msg.channel, imUserId: msg.imUserId, to: targetName },
         success: true,
-      }).catch(() => {});
+      }).catch(err => logger.warn('[im-router] 记录 Agent 切换审计日志失败', { error: (err as Error)?.message || String(err) }));
 
       const displayName = (agent.identity as any)?.name || agent.name;
       await adapter.sendText(imUserId, `已切换到 ${displayName}。使用 /agent default 切回主助手。`);
@@ -579,7 +579,7 @@ export class IMRouter {
       const prevRun = this.activeRuns.get(imKey);
       if (prevRun && !prevRun.aborted) {
         prevRun.aborted = true;
-        this.bridge.chatAbort(prevRun.sessionKey).catch(() => {});
+        this.bridge.chatAbort(prevRun.sessionKey).catch(err => logger.warn('[im-router] 取消前一个 agent 调用失败', { error: err?.message || String(err) }));
       }
 
       const runState = { sessionKey, aborted: false };
@@ -591,7 +591,7 @@ export class IMRouter {
           runState.aborted = true;
           this.bridge.chatAbort(sessionKey).catch(() => {});
           this.activeRuns.delete(imKey);
-          adapter.sendText(msg.imUserId, '任务执行超时（30分钟），已自动取消。').catch(() => {});
+          adapter.sendText(msg.imUserId, '任务执行超时（30分钟），已自动取消。').catch(err => logger.warn('[im-router] 发送超时通知失败', { error: err?.message || String(err) }));
         }
       }, IMRouter.RUN_TIMEOUT_MS);
 

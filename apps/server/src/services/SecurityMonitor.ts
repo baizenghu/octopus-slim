@@ -147,8 +147,8 @@ export class SecurityMonitor extends EventEmitter {
       if (!resp.ok) {
         logger.warn(`IM 告警发送失败: ${resp.status}`);
       }
-    } catch {
-      // 静默失败，不阻塞主流程
+    } catch (err) {
+      logger.warn('发送 IM 安全告警失败', { error: (err as Error)?.message || String(err) });
     }
   }
 

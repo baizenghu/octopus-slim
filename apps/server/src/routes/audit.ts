@@ -14,6 +14,9 @@ import { AuditAction } from '@octopus/audit';
 import type { AuditExportFormat, AuditQueryFilters } from '@octopus/audit';
 import { createAuthMiddleware, adminOnly, type AuthenticatedRequest } from '../middleware/auth';
 import { getRuntimeConfig } from '../config';
+import { createLogger } from '../utils/logger';
+
+const logger = createLogger('audit');
 
 export function createAuditRouter(authService: AuthService, auditLogger: AuditLogger): Router {
   const router = Router();
@@ -88,7 +91,7 @@ export function createAuditRouter(authService: AuthService, auditLogger: AuditLo
         details: { filters },
         ipAddress: req.ip || 'unknown',
         success: true,
-      }).catch(() => {});
+      }).catch(err => logger.warn('记录审计导出操作日志失败', { error: (err as Error)?.message || String(err) }));
 
       const contentType = format === 'csv' ? 'text/csv' : 'application/json';
       const filename = filepath.split('/').pop() || `audit-export.${format}`;
@@ -119,7 +122,7 @@ export function createAuditRouter(authService: AuthService, auditLogger: AuditLo
         details: { archivedCount: result.archivedCount },
         ipAddress: req.ip || 'unknown',
         success: true,
-      }).catch(() => {});
+      }).catch(err => logger.warn('记录审计归档操作日志失败', { error: (err as Error)?.message || String(err) }));
 
       res.json({
         message: `Archived ${result.archivedCount} records`,

@@ -47,7 +47,7 @@ async function readEnterpriseConfig(): Promise<Record<string, any>> {
   try {
     const raw = await fsPromises.readFile(getEnterprisePath(), 'utf-8');
     return JSON.parse(raw);
-  } catch { return {}; }
+  } catch (err) { logger.warn('读取企业配置文件失败，使用空配置', { error: (err as Error)?.message }); return {}; }
 }
 
 async function writeEnterpriseConfig(config: Record<string, any>): Promise<void> {

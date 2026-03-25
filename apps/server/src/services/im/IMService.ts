@@ -73,7 +73,7 @@ export class IMService {
   /** 停止所有 adapter */
   async stop(): Promise<void> {
     for (const adapter of this.adapters) {
-      await adapter.stop().catch(() => {});
+      await adapter.stop().catch(err => logger.warn('停止 IM adapter 失败', { error: err?.message || String(err) }));
     }
     this.adapters = [];
     await this.weixinManager?.stopAll();

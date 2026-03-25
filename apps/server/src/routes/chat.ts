@@ -306,7 +306,7 @@ export function createChatRouter(
     // 审计日志
     try {
       await (auditLogger as any)?.log?.({ userId: user.id, action: 'chat', details: { agentId: nativeAgentId, sessionId: sid } });
-    } catch { /* ignore */ }
+    } catch (err) { logger.warn('审计日志记录失败', { error: (err as Error)?.message || String(err) }); }
 
     // SSE 响应头
     res.writeHead(200, {

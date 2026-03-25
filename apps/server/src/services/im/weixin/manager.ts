@@ -99,7 +99,7 @@ export class WeixinManager {
   /** 停止所有 adapter */
   async stopAll(): Promise<void> {
     for (const adapter of this.adapters.values()) {
-      await adapter.stop().catch(() => {});
+      await adapter.stop().catch(err => logger.warn('停止微信 adapter 失败', { error: err?.message || String(err) }));
     }
     this.adapters.clear();
   }
