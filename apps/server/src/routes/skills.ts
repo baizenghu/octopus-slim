@@ -616,7 +616,7 @@ export function createSkillsRouter(
       try {
         scanReport = await scanner.scan(skillId, skillDir);
       } catch (scanErr: any) {
-        console.warn(`[skills] scan error for ${skillId}:`, scanErr.message);
+        logger.warn(`scan error for ${skillId}: ${scanErr.message}`);
       }
 
       // 个人 Skill：将 deps/*.whl 安装到共享 venv
@@ -625,7 +625,7 @@ export function createSkillsRouter(
         if (fs.existsSync(venvPip)) {
           try {
             const depsDir = path.join(skillDir, 'deps');
-            console.log(`[skills] Installing ${deps.whlFiles!.length} .whl packages to shared venv for ${skillId}...`);
+            logger.info(`Installing ${deps.whlFiles!.length} .whl packages for ${skillId}`);
             const { execSync } = await import('child_process');
             execSync(`${venvPip} install "${depsDir}/"*.whl --quiet --disable-pip-version-check --no-deps`, {
               timeout: 120000,
@@ -633,9 +633,9 @@ export function createSkillsRouter(
             });
             deps.depsType = 'python-shared-venv';
             deps.depsInfo = `${deps.whlFiles!.length} 个 .whl 包已安装到共享虚拟环境`;
-            console.log(`[skills] .whl packages installed for ${skillId}`);
+            logger.info(`.whl packages installed for ${skillId}`);
           } catch (installErr: any) {
-            console.warn(`[skills] .whl install failed for ${skillId}:`, installErr.message);
+            logger.warn(`.whl install failed for ${skillId}: ${installErr.message}`);
             deps.depsInfo = `安装失败: ${installErr.stderr?.toString().slice(-200) || installErr.message}。请检查 .whl 文件是否匹配服务器平台 (Linux x86_64, Python 3.12)`;
           }
         } else {
