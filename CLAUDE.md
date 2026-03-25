@@ -177,7 +177,7 @@ Model Provider (DeepSeek / etc.)
 - **ChatPage.tsx 拆分**（~1400 行）
 - **工具名映射消除**: 前端直接用引擎原生名 read/write/exec
 - **knownNativeAgents 缓存删除**: 用 agentsCreate 幂等性替代
-- **SystemPromptBuilder → Context Engine 插件**: 迁移到引擎 assemble() hook
+- ~~SystemPromptBuilder → Context Engine 插件~~: **已评估不可行** — assemble() 无法获取 userId/prisma 等企业依赖，extraSystemPrompt 是正确的注入边界
 - **多租户命名空间下沉引擎**: 加 tenantId 概念替代 ent_ 前缀
 - **RAG 实现**: packages/rag 当前空壳
 
