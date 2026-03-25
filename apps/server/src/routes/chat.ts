@@ -67,7 +67,7 @@ export function createChatRouter(
   auditLogger?: AuditLogger,
 ): Router {
   const router = Router();
-  const authMiddleware = createAuthMiddleware(authService, prisma);
+  const authMiddleware = createAuthMiddleware(authService, prisma, bridge);
 
   /**
    * 斜杠命令处理器
@@ -280,7 +280,7 @@ export function createChatRouter(
       return;
     }
 
-    const nativeAgentId = EngineAdapter.userAgentId(user.id, agentName);
+    const nativeAgentId = req.tenantBridge!.agentId(agentName);
     // 若前端传来的 sessionId 已经是完整 native session key（历史会话继续聊天），直接使用
     let sessionKey: string;
     let sid: string;
@@ -294,7 +294,7 @@ export function createChatRouter(
       sid = rawSessionId;
     } else {
       sid = rawSessionId || randomUUID().replace(/-/g, '').slice(0, 16);
-      sessionKey = EngineAdapter.userSessionKey(user.id, agentName, sid);
+      sessionKey = req.tenantBridge!.sessionKey(agentName, sid);
     }
 
     // 确保 native gateway 有此 agent（首次对话时自动创建）
@@ -530,7 +530,7 @@ export function createChatRouter(
       return;
     }
 
-    const nativeAgentId = EngineAdapter.userAgentId(user.id, agentNameNS);
+    const nativeAgentId = req.tenantBridge!.agentId(agentNameNS);
     let sessionKey: string;
     let sid: string;
     if (rawSessionId && rawSessionId.startsWith('agent:')) {
@@ -542,7 +542,7 @@ export function createChatRouter(
       sid = rawSessionId;
     } else {
       sid = rawSessionId || randomUUID().replace(/-/g, '').slice(0, 16);
-      sessionKey = EngineAdapter.userSessionKey(user.id, agentNameNS, sid);
+      sessionKey = req.tenantBridge!.sessionKey(agentNameNS, sid);
     }
     await ensureNativeAgent(user.id, agentNameNS);
     const extraPrompt = await buildEnterpriseSystemPrompt(user, agentNS, { prisma, workspaceManager, dataRoot });

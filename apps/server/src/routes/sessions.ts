@@ -126,7 +126,7 @@ export function createSessionsRouter(
   _auditLogger?: AuditLogger,
 ): Router {
   const router = Router();
-  const authMiddleware = createAuthMiddleware(authService, prisma);
+  const authMiddleware = createAuthMiddleware(authService, prisma, bridge);
 
   // loadAgent 已提取为顶层 loadAgentFromDb
 
@@ -212,7 +212,7 @@ export function createSessionsRouter(
           ? await prisma.agent.findFirst({ where: { id: reqAgentId, ownerId: user.id } })
           : await prisma.agent.findFirst({ where: { ownerId: user.id, isDefault: true } });
         const agentName = agent?.name || 'default';
-        nativeAgentId = EngineAdapter.userAgentId(user.id, agentName);
+        nativeAgentId = req.tenantBridge!.agentId(agentName);
         agentPrefix = `agent:${nativeAgentId}:session:`;
       } else {
         // 无 DB 时退回到用户级别过滤
@@ -275,7 +275,7 @@ export function createSessionsRouter(
       const reqAgentId = req.query.agentId as string | undefined;
       const agent = await loadAgentFromDb(prisma, user.id, reqAgentId);
       const agentName = agent?.name || 'default';
-      sessionId = EngineAdapter.userSessionKey(user.id, agentName, sessionId);
+      sessionId = req.tenantBridge!.sessionKey(agentName, sessionId);
     }
     // 用户归属校验：确保 session 属于当前用户
     if (!validateSessionOwnership(sessionId, user.id)) {
@@ -379,7 +379,7 @@ export function createSessionsRouter(
       const reqAgentId = req.query.agentId as string | undefined;
       const agent = await loadAgentFromDb(prisma, user.id, reqAgentId);
       const agentName = agent?.name || 'default';
-      sessionId = EngineAdapter.userSessionKey(user.id, agentName, sessionId);
+      sessionId = req.tenantBridge!.sessionKey(agentName, sessionId);
     }
     // 用户归属校验：确保 session 属于当前用户
     if (!validateSessionOwnership(sessionId, user.id)) {
@@ -438,7 +438,7 @@ export function createSessionsRouter(
       const { agentId: reqAgentId } = req.body || {};
       const agent = await loadAgentFromDb(prisma, user.id, reqAgentId);
       const agentName = agent?.name || 'default';
-      sessionId = EngineAdapter.userSessionKey(user.id, agentName, sessionId);
+      sessionId = req.tenantBridge!.sessionKey(agentName, sessionId);
     }
 
     // 权限校验：session key 必须包含当前用户 ID
@@ -462,7 +462,7 @@ export function createSessionsRouter(
       const reqAgentId = req.query.agentId as string | undefined;
       const agent = await loadAgentFromDb(prisma, user.id, reqAgentId);
       const agentName = agent?.name || 'default';
-      sessionId = EngineAdapter.userSessionKey(user.id, agentName, sessionId);
+      sessionId = req.tenantBridge!.sessionKey(agentName, sessionId);
     }
     if (!validateSessionOwnership(sessionId, user.id)) {
       res.status(403).json({ error: 'Access denied' });
@@ -545,7 +545,7 @@ export function createSessionsRouter(
         const reqAgentId = req.query.agentId as string | undefined;
         const agent = await loadAgentFromDb(prisma, user.id, reqAgentId);
         const agentName = agent?.name || 'default';
-        sessionKey = EngineAdapter.userSessionKey(user.id, agentName, sessionId);
+        sessionKey = req.tenantBridge!.sessionKey(agentName, sessionId);
       } else if (!validateSessionOwnership(sessionId, user.id)) {
         res.status(403).json({ error: 'Access denied' });
         return;
@@ -570,7 +570,7 @@ export function createSessionsRouter(
     }
     try {
       const agentName = (req.query.agentName as string) || 'default';
-      const nativeAgentId = EngineAdapter.userAgentId(user.id, agentName);
+      const nativeAgentId = req.tenantBridge!.agentId(agentName);
       const catalog = await bridge.toolsCatalog(nativeAgentId);
       res.json(catalog);
     } catch (err) {

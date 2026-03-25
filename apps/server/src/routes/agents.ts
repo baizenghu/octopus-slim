@@ -51,7 +51,7 @@ export function createAgentsRouter(
   dataRoot?: string,
 ): Router {
   const router = Router();
-  const authMiddleware = createAuthMiddleware(authService, prisma);
+  const authMiddleware = createAuthMiddleware(authService, prisma, bridge);
 
   /**
    * 同步 agent 到原生 gateway，并自动配置 memory scope 隔离 + 独立工作空间
@@ -410,8 +410,7 @@ export function createAgentsRouter(
 
       // 从原生 Gateway 删除（deleteFiles: true 清理 sessions 等 state 数据），清理 memory scope 配置 + 工作空间
       if (bridge?.isConnected) {
-        const { EngineAdapter: OCB } = await import('../services/EngineAdapter');
-        const nativeAgentId = OCB.userAgentId(user.id, existing.name);
+        const nativeAgentId = req.tenantBridge!.agentId(existing.name);
         await bridge.agentsDelete(nativeAgentId).catch(() => { });
         // 清理残留的 state 目录（原生 gateway deleteFiles 清内容但可能留空目录/sessions）
         const path = await import('path');
@@ -475,8 +474,7 @@ export function createAgentsRouter(
         return;
       }
 
-      const { EngineAdapter: OCB } = await import('../services/EngineAdapter');
-      const nativeAgentId = OCB.userAgentId(user.id, existing.name);
+      const nativeAgentId = req.tenantBridge!.agentId(existing.name);
 
       // 支持 ?file=SOUL.md 按需加载单个文件
       const requestedFile = req.query.file as string | undefined;
@@ -545,8 +543,7 @@ export function createAgentsRouter(
         return;
       }
 
-      const { EngineAdapter: OCB } = await import('../services/EngineAdapter');
-      const nativeAgentId = OCB.userAgentId(user.id, existing.name);
+      const nativeAgentId = req.tenantBridge!.agentId(existing.name);
       await bridge.agentFilesSet(nativeAgentId, fileName, content);
 
       // SOUL.md 同步更新 DB 中的 systemPrompt 字段（保持一致性）
@@ -665,8 +662,7 @@ export function createAgentsRouter(
           // 同步写入 IDENTITY.md 的 avatar 字段
           if (bridge?.isConnected) {
             try {
-              const { EngineAdapter: EA } = await import('../services/EngineAdapter');
-              const nativeAgentId = EA.userAgentId(user.id, existing.name);
+              const nativeAgentId = req.tenantBridge!.agentId(existing.name);
               // 读取现有 IDENTITY.md 内容
               let identityContent = '';
               try {

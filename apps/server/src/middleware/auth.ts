@@ -7,10 +7,13 @@
 import type { Request, Response, NextFunction } from 'express';
 import type { AuthService, User, Role } from '@octopus/auth';
 import { getRuntimeConfig } from '../config';
+import type { TenantEngineAdapter } from '../services/TenantEngineAdapter';
 
 /** 扩展 Express Request 类型，附加 user 信息 */
 export interface AuthenticatedRequest extends Request {
   user?: User;
+  /** 按当前登录用户隔离的引擎适配器，认证成功后自动注入 */
+  tenantBridge?: TenantEngineAdapter;
 }
 
 /** 检查用户是否具有管理员角色 */
@@ -36,8 +39,14 @@ export function adminOnly(req: AuthenticatedRequest, res: Response, next: NextFu
  * @param prisma      可选 Prisma 客户端。若传入，将在 token 验证后自动从 DB 校正 userId。
  *                    解决「JWT 含旧 userId（如 user-baizh）而 DB 已变更为时间戳 ID」的问题。
  *                    用 username → userId 缓存避免对每次请求做重复查询。
+ * @param engine      可选 EngineAdapter。若传入，认证成功后自动在 req.tenantBridge 注入
+ *                    按当前用户隔离的 TenantEngineAdapter。
  */
-export function createAuthMiddleware(authService: AuthService, prisma?: { user: { findUnique: (args: any) => Promise<{ userId: string; roles: any } | null> } }) {
+export function createAuthMiddleware(
+  authService: AuthService,
+  prisma?: { user: { findUnique: (args: any) => Promise<{ userId: string; roles: any } | null> } },
+  engine?: import('../services/EngineAdapter').EngineAdapter,
+) {
   // username → { userId, roles } 的 TTL 缓存（5 分钟过期，上限 1000 条）
   interface CacheEntry {
     userId: string;
@@ -100,6 +109,13 @@ export function createAuthMiddleware(authService: AuthService, prisma?: { user: 
       }
 
       req.user = user;
+
+      // 按登录用户注入 TenantEngineAdapter（engine 存在时）
+      if (engine) {
+        const { TenantEngineAdapter } = await import('../services/TenantEngineAdapter');
+        req.tenantBridge = new TenantEngineAdapter(engine, user.id, isAdmin(user));
+      }
+
       next();
     } catch (err: any) {
       res.status(401).json({ error: err.message || 'Authentication failed' });

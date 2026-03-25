@@ -109,7 +109,7 @@ export function createSchedulerRouter(
   imService?: { sendToUser(userId: string, text: string): Promise<number> },
 ): Router {
   const router = Router();
-  const authMiddleware = createAuthMiddleware(authService, prisma);
+  const authMiddleware = createAuthMiddleware(authService, prisma, bridge);
 
   /**
    * 列出当前用户的定时任务
@@ -189,7 +189,7 @@ export function createSchedulerRouter(
           res.status(404).json({ error: 'Agent not found' });
           return;
         }
-        const nativeAgentId = EngineAdapter.userAgentId(user.id, agent.name);
+        const nativeAgentId = req.tenantBridge!.agentId(agent.name);
 
         // 写入 DB
         const taskId = randomUUID().replace(/-/g, '').slice(0, 16);
@@ -225,7 +225,7 @@ export function createSchedulerRouter(
 
       // ---- 普通定时任务 ----
       if (bridge?.isConnected) {
-        const nativeAgentId = EngineAdapter.userAgentId(user.id, 'default');
+        const nativeAgentId = req.tenantBridge!.agentId('default');
         const message = taskConfig?.message || `执行定时任务: ${name}`;
         const schedule = cronExpr
           ? { kind: 'cron' as const, expr: cronExpr }
@@ -291,8 +291,8 @@ export function createSchedulerRouter(
           res.status(404).json({ error: 'Agent not found' });
           return;
         }
-        const oldNativeAgentId = EngineAdapter.userAgentId(user.id, oldAgent.name);
-        const nextNativeAgentId = EngineAdapter.userAgentId(user.id, nextAgent.name);
+        const oldNativeAgentId = req.tenantBridge!.agentId(oldAgent.name);
+        const nextNativeAgentId = req.tenantBridge!.agentId(nextAgent.name);
 
         if (nextDbAgentId !== oldDbAgentId) {
           const existing = await prisma.scheduledTask.findFirst({
@@ -376,7 +376,7 @@ export function createSchedulerRouter(
         // native cron 不支持直接 patch，先删后建
         await bridge.cronRemove(id).catch(() => {});
         const { name, cron: cronExpr, taskConfig } = req.body;
-        const nativeAgentId = EngineAdapter.userAgentId(user.id, 'default');
+        const nativeAgentId = req.tenantBridge!.agentId('default');
         const job = await bridge.cronAdd({
           name: name?.trim() || id,
           agentId: nativeAgentId,
@@ -426,7 +426,7 @@ export function createSchedulerRouter(
         // 查 agent 获取 nativeAgentId
         const agent = await prisma.agent.findFirst({ where: { id: dbAgentId, ownerId: user.id } });
         if (agent) {
-          const nativeAgentId = EngineAdapter.userAgentId(user.id, agent.name);
+          const nativeAgentId = req.tenantBridge!.agentId(agent.name);
 
           // 通过 RPC 清空原生 agent 目录中的 HEARTBEAT.md
           try {
@@ -489,9 +489,9 @@ export function createSchedulerRouter(
           res.status(404).json({ error: 'Agent not found' });
           return;
         }
-        const nativeAgentId = EngineAdapter.userAgentId(user.id, agent.name);
+        const nativeAgentId = req.tenantBridge!.agentId(agent.name);
         const heartbeatSessionId = `heartbeat-${randomUUID().replace(/-/g, '').slice(0, 16)}`;
-        const sessionKey = EngineAdapter.userSessionKey(user.id, agent.name, heartbeatSessionId);
+        const sessionKey = req.tenantBridge!.sessionKey(agent.name, heartbeatSessionId);
         const content = taskCfg?.content || '';
         const prompt = buildHeartbeatRunPrompt(content);
         let heartbeatReply = '';
