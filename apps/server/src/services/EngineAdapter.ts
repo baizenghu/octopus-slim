@@ -14,6 +14,7 @@ import { deepMerge } from '../utils/deep-merge';
 import { ConfigBatcher } from '../utils/config-batcher';
 import { getRuntimeConfig } from '../config';
 import { createLogger } from '../utils/logger';
+import type { EngineRawEvent, EngineAgentsListResponse, EngineSessionsListResponse, EngineCronListResponse, EngineModelsListResponse } from '../types/engine';
 
 const logger = createLogger('EngineAdapter');
 
@@ -89,14 +90,14 @@ export class EngineAdapter extends EventEmitter {
 
     // 订阅全局 agent 事件，转发给 EventEmitter
     const { onAgentEvent } = await opaqueImport(`${ENGINE_ROOT}infra/agent-events.js`);
-    this.unsubAgentEvents = onAgentEvent((evt: any) => {
+    this.unsubAgentEvents = onAgentEvent((evt: EngineRawEvent) => {
       this.emit('_raw_event', evt);
     });
 
     // 订阅心跳事件，转发给 EventEmitter
     try {
       // heartbeat-visibility 导出 onHeartbeatEvent（也可能在 heartbeat-events 中）
-      let onHbEvent: ((cb: (evt: any) => void) => () => void) | undefined;
+      let onHbEvent: ((cb: (evt: EngineRawEvent) => void) => () => void) | undefined;
       for (const mod of ['infra/heartbeat-visibility.js', 'infra/heartbeat-events.js']) {
         try {
           const m = await opaqueImport(`${ENGINE_ROOT}${mod}`);
@@ -104,7 +105,7 @@ export class EngineAdapter extends EventEmitter {
         } catch { /* try next */ }
       }
       if (onHbEvent) {
-        this.unsubHeartbeatEvents = onHbEvent((evt: any) => {
+        this.unsubHeartbeatEvents = onHbEvent((evt: EngineRawEvent) => {
           logger.info('heartbeat event received:', { event: JSON.stringify(evt).slice(0, 500) });
           this.emit('heartbeat', evt);
         });
@@ -112,25 +113,26 @@ export class EngineAdapter extends EventEmitter {
       } else {
         logger.warn('onHeartbeatEvent not found in engine modules');
       }
-    } catch (e: any) {
+    } catch (e: unknown) {
       logger.warn('Heartbeat event listener failed:', { error: e instanceof Error ? e.message : String(e), stack: e instanceof Error ? e.stack : undefined });
     }
 
     // 订阅 cron 事件（通过 fallback context 拿到 cron service）
     try {
-      const state = (globalThis as any)[FALLBACK_GATEWAY_CONTEXT_KEY];
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const state = (globalThis as Record<symbol, any>)[FALLBACK_GATEWAY_CONTEXT_KEY];
       const cronService = state?.context?.cron;
       if (cronService?._state?.deps) {
         const originalOnEvent = cronService._state.deps.onEvent;
-        cronService._state.deps.onEvent = (evt: any) => {
+        cronService._state.deps.onEvent = (evt: Record<string, unknown>) => {
           originalOnEvent?.(evt);
-          if (evt.action === 'finished') {
+          if (evt['action'] === 'finished') {
             this.emit('cron_finished', evt);
           }
         };
         logger.info('Cron event listener registered');
       }
-    } catch (e: any) {
+    } catch (e: unknown) {
       logger.warn('Cron event listener failed:', { error: e instanceof Error ? e.message : String(e), stack: e instanceof Error ? e.stack : undefined });
     }
 
@@ -168,7 +170,8 @@ export class EngineAdapter extends EventEmitter {
     }
 
     // 通过全局 Symbol 访问引擎设置的 fallback context
-    const state = (globalThis as any)[FALLBACK_GATEWAY_CONTEXT_KEY];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const state = (globalThis as Record<symbol, any>)[FALLBACK_GATEWAY_CONTEXT_KEY];
     const context = state?.context;
     if (!context) {
       throw new Error('[engine] No gateway context available — engine not started?');
@@ -211,7 +214,9 @@ export class EngineAdapter extends EventEmitter {
           if (responded) {
             // agent handler 的第二次 respond（异步执行完成/失败后）。
             if (!ok && method === 'agent') {
-              const runId = (payload as any)?.runId || (params as any)?.idempotencyKey;
+              const typedPayload = payload as { runId?: string } | null;
+              const typedParams = params as { idempotencyKey?: string } | null;
+              const runId = typedPayload?.runId || typedParams?.idempotencyKey;
               logger.error(`agent run ${runId} async error:`, { error: error?.message });
               this.emit('_agent_async_error', { runId, error: error?.message ?? 'unknown error' });
             }
@@ -258,25 +263,25 @@ export class EngineAdapter extends EventEmitter {
       this.off('_agent_async_error', asyncErrorHandler);
     };
 
-    const unsubscribe = onAgentEvent((evt: any) => {
+    const unsubscribe = onAgentEvent((evt: EngineRawEvent) => {
       // 只处理本次运行的事件
       if (!this.trackedRunIds.has(evt.runId)) return;
 
       // tool 事件特殊处理：合并 start/update/result 为单次发送
       if (evt.stream === 'tool') {
-        const data = evt.data || {};
-        const phase = data.phase as string;
-        const toolCallId = data.toolCallId as string | undefined;
-        const toolName = (data.name || data.toolName) as string;
+        const data: Record<string, unknown> = evt.data || {};
+        const phase = data['phase'] as string;
+        const toolCallId = data['toolCallId'] as string | undefined;
+        const toolName = (data['name'] || data['toolName']) as string;
 
         if (phase === 'start' && toolCallId) {
           // 存入 pending，同时发一个不含 result 的事件（让前端感知工具开始执行）
-          pendingToolCalls.set(toolCallId, { name: toolName, args: data.args });
+          pendingToolCalls.set(toolCallId, { name: toolName, args: data['args'] });
           onEvent({
             type: 'tool_call',
             toolCallId,
             toolName,
-            toolArgs: data.args ? (typeof data.args === 'string' ? data.args : JSON.stringify(data.args)) : undefined,
+            toolArgs: data['args'] ? (typeof data['args'] === 'string' ? data['args'] : JSON.stringify(data['args'])) : undefined,
             runId: evt.runId,
           });
           return;
@@ -289,14 +294,14 @@ export class EngineAdapter extends EventEmitter {
           // 从 pending 取出 args，合并 result，发出一次完整事件
           const pending = pendingToolCalls.get(toolCallId);
           pendingToolCalls.delete(toolCallId);
-          const args = pending?.args ?? data.args;
+          const args = pending?.args ?? data['args'];
           const name = pending?.name || toolName;
           onEvent({
             type: 'tool_call',
             toolCallId,
             toolName: name,
             toolArgs: args ? (typeof args === 'string' ? args : JSON.stringify(args)) : undefined,
-            toolResult: data.result ? (typeof data.result === 'string' ? data.result : JSON.stringify(data.result)) : undefined,
+            toolResult: data['result'] ? (typeof data['result'] === 'string' ? data['result'] : JSON.stringify(data['result'])) : undefined,
             runId: evt.runId,
           });
           return;
@@ -310,7 +315,7 @@ export class EngineAdapter extends EventEmitter {
       }
 
       // 运行结束时清理
-      if (evt.stream === 'lifecycle' && (evt.data.phase === 'end' || evt.data.phase === 'error')) {
+      if (evt.stream === 'lifecycle' && (evt.data['phase'] === 'end' || evt.data['phase'] === 'error')) {
         this.trackedRunIds.delete(evt.runId);
         cleanup();
       }
@@ -355,37 +360,37 @@ export class EngineAdapter extends EventEmitter {
 
   // ---- 引擎事件映射 ----
 
-  private mapEngineEvent(evt: { stream: string; data: Record<string, unknown>; runId: string }): AgentStreamEvent | null {
+  private mapEngineEvent(evt: EngineRawEvent): AgentStreamEvent | null {
     const { stream, data, runId } = evt;
 
     switch (stream) {
       case 'assistant':
         return {
           type: 'text_delta',
-          content: (data.text as string) ?? (data.delta as string) ?? '',
+          content: (data['text'] as string) ?? (data['delta'] as string) ?? '',
           runId,
         };
       case 'tool':
         return {
           type: 'tool_call',
-          toolName: ((data.toolName || data.name) as string) ?? 'unknown',
-          toolCallId: data.toolCallId as string | undefined,
-          toolArgs: data.args ? (typeof data.args === 'string' ? data.args : JSON.stringify(data.args)) : undefined,
-          toolResult: data.result ? (typeof data.result === 'string' ? data.result : JSON.stringify(data.result)) : undefined,
+          toolName: ((data['toolName'] || data['name']) as string) ?? 'unknown',
+          toolCallId: data['toolCallId'] as string | undefined,
+          toolArgs: data['args'] ? (typeof data['args'] === 'string' ? data['args'] : JSON.stringify(data['args'])) : undefined,
+          toolResult: data['result'] ? (typeof data['result'] === 'string' ? data['result'] : JSON.stringify(data['result'])) : undefined,
           runId,
         };
       case 'lifecycle':
-        if (data.phase === 'end') {
+        if (data['phase'] === 'end') {
           return { type: 'done', runId };
         }
-        if (data.phase === 'error') {
-          return { type: 'error', error: (data.error as string) ?? 'unknown error', runId };
+        if (data['phase'] === 'error') {
+          return { type: 'error', error: (data['error'] as string) ?? 'unknown error', runId };
         }
-        return { type: 'lifecycle', phase: data.phase as string, runId };
+        return { type: 'lifecycle', phase: data['phase'] as string, runId };
       case 'thinking':
-        return { type: 'thinking', content: (data.text as string) ?? '', runId };
+        return { type: 'thinking', content: (data['text'] as string) ?? '', runId };
       case 'error':
-        return { type: 'error', error: (data.message as string) ?? 'unknown error', runId };
+        return { type: 'error', error: (data['message'] as string) ?? 'unknown error', runId };
       default:
         return null;
     }
@@ -394,7 +399,7 @@ export class EngineAdapter extends EventEmitter {
   // ---- Sessions ----
 
   async sessionsList(agentId?: string) {
-    return this.call('sessions.list', { agentId });
+    return this.call<EngineSessionsListResponse>('sessions.list', { agentId });
   }
 
   async sessionsDelete(key: string) {
@@ -420,7 +425,7 @@ export class EngineAdapter extends EventEmitter {
   // ---- Agents CRUD ----
 
   async agentsList() {
-    return this.call('agents.list', {});
+    return this.call<EngineAgentsListResponse>('agents.list', {});
   }
 
   async agentsCreate(params: { name: string; workspace: string; emoji?: string }) {
@@ -448,7 +453,7 @@ export class EngineAdapter extends EventEmitter {
   // ---- Cron ----
 
   async cronList(includeDisabled = false) {
-    return this.call('cron.list', { includeDisabled });
+    return this.call<EngineCronListResponse>('cron.list', { includeDisabled });
   }
 
   async cronAdd(job: {
@@ -484,17 +489,19 @@ export class EngineAdapter extends EventEmitter {
         const { config: latest, hash: baseHash } = await this.configGetParsed();
         if (!baseHash) throw new Error('config.get did not return hash');
         const merged = { ...fullConfig };
-        if ((latest as any).messages) merged.messages = (latest as any).messages;
-        if ((latest as any).meta) merged.meta = (latest as any).meta;
+        const typedLatest = latest as { messages?: unknown; meta?: unknown };
+        if (typedLatest.messages) merged['messages'] = typedLatest.messages;
+        if (typedLatest.meta) merged['meta'] = typedLatest.meta;
         try {
           await this.call('config.set', { raw: JSON.stringify(merged), baseHash });
           return;
-        } catch (e: any) {
-          if (attempt < maxRetries - 1 && (e.message?.includes('config changed since last load') || e.message?.includes('rate limit'))) {
-            const delay = e.message?.includes('rate limit')
-              ? (parseInt(e.message.match(/retry after (\d+)s/)?.[1] || '10', 10) * 1000 + 1000)
+        } catch (e: unknown) {
+          const msg = e instanceof Error ? e.message : String(e);
+          if (attempt < maxRetries - 1 && (msg.includes('config changed since last load') || msg.includes('rate limit'))) {
+            const delay = msg.includes('rate limit')
+              ? (parseInt(msg.match(/retry after (\d+)s/)?.[1] || '10', 10) * 1000 + 1000)
               : (500 * (attempt + 1));
-            logger.warn(`configApplyFull attempt ${attempt + 1} failed: ${e.message}, retrying in ${delay}ms`);
+            logger.warn(`configApplyFull attempt ${attempt + 1} failed: ${msg}, retrying in ${delay}ms`);
             await new Promise(r => setTimeout(r, delay));
             continue;
           }
@@ -514,12 +521,13 @@ export class EngineAdapter extends EventEmitter {
         try {
           await this.call('config.set', { raw: JSON.stringify(merged), baseHash });
           return;
-        } catch (e: any) {
-          if (attempt < maxRetries - 1 && (e.message?.includes('config changed since last load') || e.message?.includes('rate limit'))) {
-            const delay = e.message?.includes('rate limit')
-              ? (parseInt(e.message.match(/retry after (\d+)s/)?.[1] || '10', 10) * 1000 + 1000)
+        } catch (e: unknown) {
+          const msg = e instanceof Error ? e.message : String(e);
+          if (attempt < maxRetries - 1 && (msg.includes('config changed since last load') || msg.includes('rate limit'))) {
+            const delay = msg.includes('rate limit')
+              ? (parseInt(msg.match(/retry after (\d+)s/)?.[1] || '10', 10) * 1000 + 1000)
               : (500 * (attempt + 1));
-            logger.warn(`configApply attempt ${attempt + 1} failed: ${e.message}, retrying in ${delay}ms`);
+            logger.warn(`configApply attempt ${attempt + 1} failed: ${msg}, retrying in ${delay}ms`);
             await new Promise(r => setTimeout(r, delay));
             continue;
           }
@@ -566,7 +574,7 @@ export class EngineAdapter extends EventEmitter {
   // ---- Models ----
 
   async modelsList() {
-    return this.call('models.list', {});
+    return this.call<EngineModelsListResponse>('models.list', {});
   }
 
   // ---- Health ----

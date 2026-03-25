@@ -9,6 +9,7 @@
  */
 
 import type { WorkspaceManager } from '@octopus/workspace';
+import type { AppPrismaClient } from '../types/prisma';
 
 // ── 缓存 ──────────────────────────────────────────────────────────
 const promptCache = new Map<string, { prompt: string; ts: number }>();
@@ -27,7 +28,7 @@ export function invalidatePromptCache(userId: string) {
 async function buildDbConnectionsSection(
   userId: string,
   allowedConnections: string[] | null | undefined,
-  prisma?: any,
+  prisma?: AppPrismaClient,
 ): Promise<string> {
   if (!prisma || !Array.isArray(allowedConnections) || allowedConnections.length === 0) return '';
   try {
@@ -35,7 +36,7 @@ async function buildDbConnectionsSection(
       where: { userId, enabled: true },
       select: { name: true, dbType: true, host: true, port: true, dbName: true, dbUser: true },
     });
-    const filtered = dbConns.filter((c: { name: string }) => allowedConnections.includes(c.name));
+    const filtered = dbConns.filter((c) => allowedConnections.includes(c.name));
     if (filtered.length === 0) return '';
 
     const lines = [
@@ -54,12 +55,21 @@ async function buildDbConnectionsSection(
 
 // ── 主函数 ────────────────────────────────────────────────────────
 
+/** Agent 基本信息（从 Prisma 查询结果中需要的字段） */
+interface AgentInfo {
+  id?: string;
+  name?: string;
+  systemPrompt?: string | null;
+  allowedConnections?: string[] | null;
+  identity?: unknown;
+}
+
 /** 构建企业级额外系统提示（注入到原生 extraSystemPrompt） */
 export async function buildEnterpriseSystemPrompt(
   user: { id: string; username: string; displayName?: string },
-  agent: any | null,
+  agent: AgentInfo | null,
   deps: {
-    prisma?: any;
+    prisma?: AppPrismaClient;
     workspaceManager: WorkspaceManager;
     dataRoot: string;
   },
@@ -136,7 +146,7 @@ export async function buildEnterpriseSystemPrompt(
   // ── DB 连接名（MCP SQL 工具需要） ──
   const dbSection = await buildDbConnectionsSection(
     user.id,
-    agent?.allowedConnections as string[] | null | undefined,
+    agent?.allowedConnections,
     prisma,
   );
   if (dbSection) sections.push(dbSection);

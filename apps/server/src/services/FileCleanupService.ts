@@ -94,14 +94,14 @@ export class FileCleanupService {
         const absPath = path.join(this.config.dataRoot, 'users', file.userId, 'workspace', file.filePath);
         try {
           if (fs.existsSync(absPath)) await fsp.unlink(absPath);
-        } catch (err: any) {
-          logger.warn(`删除文件失败 ${absPath}: ${err.message}`);
+        } catch (err: unknown) {
+          logger.warn(`删除文件失败 ${absPath}: ${err instanceof Error ? err.message : String(err)}`);
         }
         await prisma.generatedFile.update({ where: { id: file.id }, data: { status: 'deleted' } });
         cleaned++;
       }
       return cleaned;
-    } catch (err: any) {
+    } catch (err: unknown) {
       logger.error('DB 清理失败:', { error: err instanceof Error ? err.message : String(err), stack: err instanceof Error ? err.stack : undefined });
       return 0;
     }
@@ -138,7 +138,7 @@ export class FileCleanupService {
           } catch { /* 忽略单文件失败 */ }
         }
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       logger.error('temp 清理失败:', { error: err instanceof Error ? err.message : String(err), stack: err instanceof Error ? err.stack : undefined });
     }
     return cleaned;
@@ -171,7 +171,7 @@ export class FileCleanupService {
           }
         }
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       logger.error('files/ 清理失败:', { error: err instanceof Error ? err.message : String(err), stack: err instanceof Error ? err.stack : undefined });
     }
     return cleaned;
@@ -242,7 +242,7 @@ export class FileCleanupService {
           } catch { /* 忽略单文件失败 */ }
         }
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       logger.error('孤儿检测失败:', { error: err instanceof Error ? err.message : String(err), stack: err instanceof Error ? err.stack : undefined });
     }
 

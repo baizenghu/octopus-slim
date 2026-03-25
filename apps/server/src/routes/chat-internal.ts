@@ -77,10 +77,10 @@ export function createChatInternalRouter(
       });
 
       // 查找最近活跃的 session
-      const result = await bridge.sessionsList(nativeAgentId) as any;
-      const sessions = ((result?.sessions || result) as any[] || [])
-        .filter((s: any) => (s.key || s.sessionKey || '').startsWith(`agent:${nativeAgentId}:session:`))
-        .sort((a: any, b: any) => {
+      const result = await bridge.sessionsList(nativeAgentId);
+      const sessions = (result?.sessions || [])
+        .filter((s) => (s.key || s.sessionKey || '').startsWith(`agent:${nativeAgentId}:session:`))
+        .sort((a, b) => {
           const ta = new Date(a.updatedAt || 0).getTime();
           const tb = new Date(b.updatedAt || 0).getTime();
           return tb - ta; // 最新的在前
@@ -104,13 +104,13 @@ export function createChatInternalRouter(
           deliver: false,
         },
         () => {}, // 不处理流式事件
-      ).catch((err: any) => {
+      ).catch((err: unknown) => {
         logger.error(`[chat-internal] callAgent failed for ${userId}:`, { error: err instanceof Error ? err.message : String(err) });
       });
 
       logger.info(`[chat-internal] injected message to ${sessionKey} for ${userId}`);
       res.json({ success: true, sessionKey });
-    } catch (err: any) {
+    } catch (err: unknown) {
       logger.error(`[chat-internal] inject failed for ${userId}:`, { error: err instanceof Error ? err.message : String(err) });
       res.status(500).json({ error: 'Inject failed' });
     }

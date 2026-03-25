@@ -47,7 +47,7 @@ function loadActiveAgents(): Map<string, string> {
 function saveActiveAgents(map: Map<string, string>): void {
   try {
     fs.writeFileSync(ACTIVE_AGENTS_FILE, JSON.stringify(Object.fromEntries(map)));
-  } catch (e: any) {
+  } catch (e: unknown) {
     logger.warn('[im-router] Failed to save activeAgents:', { error: e instanceof Error ? e.message : String(e), stack: e instanceof Error ? e.stack : undefined });
   }
 }
@@ -83,7 +83,7 @@ export class IMRouter {
   /** 注册 adapter 的消息回调 */
   attach(adapter: IMAdapter): void {
     adapter.onMessage((msg) => {
-      this.handleMessage(adapter, msg).catch((e: any) => {
+      this.handleMessage(adapter, msg).catch((e: unknown) => {
         logger.error(`[im-router] Error handling message from ${msg.channel}:`, { error: e instanceof Error ? e.message : String(e), stack: e instanceof Error ? e.stack : undefined });
       });
     });
@@ -237,7 +237,7 @@ export class IMRouter {
         details: { channel, imUserId },
         success: true,
       }).catch(err => logger.warn('[im-router] 记录 IM 绑定审计日志失败', { error: (err as Error)?.message || String(err) }));
-    } catch (e: any) {
+    } catch (e: unknown) {
       // 记录失败次数
       const prev = this.bindAttempts.get(imUserId);
       if (prev) {
@@ -255,7 +255,7 @@ export class IMRouter {
         resource: `im:${channel}:${imUserId}`,
         details: { channel, imUserId },
         success: false,
-        errorMessage: e.message,
+        errorMessage: e instanceof Error ? e.message : String(e),
       }).catch(err => logger.warn('[im-router] 记录 IM 绑定失败审计日志出错', { error: (err as Error)?.message || String(err) }));
       // 安全：错误回复不包含原始输入
       await adapter.sendText(imUserId, '绑定失败：用户名或密码错误');
@@ -268,7 +268,7 @@ export class IMRouter {
    */
   private tryDeleteMessage(adapter: IMAdapter, messageId: string): void {
     if (adapter.deleteMessage) {
-      adapter.deleteMessage(messageId).catch((e: any) => {
+      adapter.deleteMessage(messageId).catch((e: unknown) => {
         // 删除失败不阻塞（权限不足、消息已删等情况均可忽略）
         logger.warn(`[im-router] Failed to delete sensitive message ${messageId}:`, { error: e instanceof Error ? e.message : String(e), stack: e instanceof Error ? e.stack : undefined });
       });
@@ -338,7 +338,7 @@ export class IMRouter {
     run.aborted = true;
     try {
       await this.bridge.chatAbort(run.sessionKey);
-    } catch (e: any) {
+    } catch (e: unknown) {
       logger.warn(`[im-router] chatAbort failed for ${run.sessionKey}:`, { error: e instanceof Error ? e.message : String(e), stack: e instanceof Error ? e.stack : undefined });
     }
     this.activeRuns.delete(imKey);
@@ -372,8 +372,8 @@ export class IMRouter {
         select: { name: true, description: true, identity: true },
       });
       const list = available.length > 0
-        ? available.map((a: any) => {
-            const displayName = a.identity?.name || a.name;
+        ? available.map((a: { name: string; description: string | null; identity: unknown }) => {
+            const displayName = (a.identity as { name?: string } | null)?.name || a.name;
             const marker = a.name === current ? ' ← 当前' : '';
             const desc = a.description ? `：${a.description}` : '';
             return `- ${displayName}（${a.name}）${desc}${marker}`;
@@ -432,9 +432,9 @@ export class IMRouter {
         success: true,
       }).catch(err => logger.warn('[im-router] 记录 Agent 切换审计日志失败', { error: (err as Error)?.message || String(err) }));
 
-      const displayName = (agent.identity as any)?.name || agent.name;
+      const displayName = (agent.identity as { name?: string } | null)?.name || agent.name;
       await adapter.sendText(imUserId, `已切换到 ${displayName}。使用 /agent default 切回主助手。`);
-    } catch (e: any) {
+    } catch (e: unknown) {
       logger.error(`[im-router] Agent switch error:`, { error: e instanceof Error ? e.message : String(e), stack: e instanceof Error ? e.stack : undefined });
       await adapter.sendText(imUserId, '切换 Agent 失败，请稍后重试。');
     }
@@ -483,7 +483,7 @@ export class IMRouter {
             const sizeMB = (stat.size / 1024 / 1024).toFixed(1);
             await adapter.sendText(imUserId, `📎 文件 ${fileName} (${sizeMB}MB) 过大，请到 Web 端下载。`);
           }
-        } catch (e: any) {
+        } catch (e: unknown) {
           logger.error(`[im-router] Failed to send file ${fileName}:`, { error: e instanceof Error ? e.message : String(e), stack: e instanceof Error ? e.stack : undefined });
           await adapter.sendText(imUserId, `📎 文件 ${fileName} 发送失败，请到 Web 端下载。`);
         }

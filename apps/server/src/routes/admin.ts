@@ -20,6 +20,7 @@ import { createAuthMiddleware, adminOnly, type AuthenticatedRequest } from '../m
 import { getRuntimeConfig } from '../config';
 import { EngineAdapter } from '../services/EngineAdapter';
 import { TenantEngineAdapter } from '../services/TenantEngineAdapter';
+import type { EngineConfig, EngineAgentListEntry } from '../types/engine';
 import { validatePassword } from '../utils/password';
 import { createLogger } from '../utils/logger';
 
@@ -46,6 +47,8 @@ export function createAdminRouter(
       const search = (req.query.search as string) || '';
       const status = req.query.status as string;
 
+      // Prisma 动态查询参数：where 条件根据请求参数动态构建
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const where: any = {};
       if (search) {
         where.OR = [
@@ -82,8 +85,8 @@ export function createAdminRouter(
       ]);
 
       res.json({ data: users, total, page, pageSize });
-    } catch (err: any) {
-      next(err);
+    } catch (err: unknown) {
+      next(err instanceof Error ? err : new Error(String(err)));
     }
   });
 
@@ -147,8 +150,8 @@ export function createAdminRouter(
         hashedPassword,
       );
       logger.info(`[admin] User '${username}' created. MockLDAP registered: ${registered}`);
-    } catch (err: any) {
-      next(err);
+    } catch (err: unknown) {
+      next(err instanceof Error ? err : new Error(String(err)));
     }
   });
 
@@ -198,12 +201,12 @@ export function createAdminRouter(
       // 排除 passwordHash，防止泄露到客户端
       const { passwordHash: _ph, ...safeUser } = user;
       res.json(safeUser);
-    } catch (err: any) {
-      if (err.code === 'P2025') {
+    } catch (err: unknown) {
+      if ((err as { code?: string }).code === 'P2025') {
         res.status(404).json({ error: 'User not found' });
         return;
       }
-      next(err);
+      next(err instanceof Error ? err : new Error(String(err)));
     }
   });
 
@@ -219,8 +222,8 @@ export function createAdminRouter(
       }
       await authService.unlockUser(user.username);
       res.json({ success: true, message: `用户 ${user.username} 已解锁` });
-    } catch (err: any) {
-      next(err);
+    } catch (err: unknown) {
+      next(err instanceof Error ? err : new Error(String(err)));
     }
   });
 
@@ -254,7 +257,7 @@ export function createAdminRouter(
               await bridge.cronRemove(item.id).catch(() => { });
             }
           }
-        } catch (e: any) {
+        } catch (e: unknown) {
           logger.error(`[admin] Cron cleanup failed for ${id}:`, { error: e instanceof Error ? e.message : String(e) });
         }
       }
@@ -306,7 +309,7 @@ export function createAdminRouter(
           }
           logger.info(`[admin] Cleaned ${names.length} sandbox container(s) for ${id}`);
         }
-      } catch (e: any) {
+      } catch (e: unknown) {
         logger.warn(`[admin] Failed to cleanup sandbox containers for ${id}:`, { error: e instanceof Error ? e.message : String(e) });
       }
 
@@ -331,7 +334,7 @@ export function createAdminRouter(
         try {
           await workspaceManager.deleteWorkspace(id);
           logger.info(`[admin] Workspace deleted for ${id}`);
-        } catch (e: any) {
+        } catch (e: unknown) {
           logger.error(`[admin] Workspace cleanup failed for ${id}:`, { error: e instanceof Error ? e.message : String(e) });
         }
       } else {
@@ -360,34 +363,35 @@ export function createAdminRouter(
       if (bridge?.isConnected) {
         try {
           const { config: configRaw } = await bridge.configGetParsed();
-          const agentsList: any[] = (configRaw as any)?.agents?.list || [];
+          const engineConfig = configRaw as EngineConfig;
+          const agentsList: EngineAgentListEntry[] = engineConfig?.agents?.list || [];
           const userPrefix = tenant.agentId('');
-          const filtered = agentsList.filter((a: any) => !a.id?.startsWith(userPrefix));
+          const filtered = agentsList.filter((a) => !a.id?.startsWith(userPrefix));
           if (filtered.length < agentsList.length) {
-            (configRaw as any).agents.list = filtered;
+            engineConfig.agents!.list = filtered;
             // 同步清理其他 agent 的 allowAgents 引用
             for (const a of filtered) {
               const allow = a.subagents?.allowAgents;
               if (Array.isArray(allow)) {
-                a.subagents.allowAgents = allow.filter((aid: string) => !aid.startsWith(userPrefix));
+                a.subagents!.allowAgents = allow.filter((aid: string) => !aid.startsWith(userPrefix));
               }
             }
             await bridge.configApplyFull(configRaw);
             logger.info(`[admin] Removed ${agentsList.length - filtered.length} agent(s) from octopus.json for ${id}`);
           }
-        } catch (e: any) {
+        } catch (e: unknown) {
           logger.error(`[admin] Failed to clean octopus.json for ${id}:`, { error: e instanceof Error ? e.message : String(e) });
         }
       }
 
       logger.info(`[admin] User '${userToDelete.username}' deleted (${userAgents.length} agents cleaned)`);
       res.json({ message: 'User deleted' });
-    } catch (err: any) {
-      if (err.code === 'P2025') {
+    } catch (err: unknown) {
+      if ((err as { code?: string }).code === 'P2025') {
         res.status(404).json({ error: 'User not found' });
         return;
       }
-      next(err);
+      next(err instanceof Error ? err : new Error(String(err)));
     }
   });
 
@@ -468,8 +472,8 @@ export function createAdminRouter(
         totalScheduledTasks,
         enabledScheduledTasks,
       });
-    } catch (err: any) {
-      next(err);
+    } catch (err: unknown) {
+      next(err instanceof Error ? err : new Error(String(err)));
     }
   });
 

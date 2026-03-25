@@ -6,6 +6,7 @@
  */
 
 import { EngineAdapter } from './EngineAdapter';
+import type { EngineAgentListEntry, EngineSessionsListResponse, EngineCronListResponse } from '../types/engine';
 
 export class TenantEngineAdapter {
   readonly engine: EngineAdapter;
@@ -33,35 +34,31 @@ export class TenantEngineAdapter {
   }
 
   /** 列出当前用户的 agents（admin 不过滤） */
-  async listMyAgents(): Promise<any[]> {
-    const result = await this.engine.agentsList() as any;
-    const agents: any[] = result?.agents || result || [];
+  async listMyAgents(): Promise<EngineAgentListEntry[]> {
+    const result = await this.engine.agentsList();
+    const agents: EngineAgentListEntry[] = result?.agents || [];
     if (this.admin) return agents;
     const prefix = `ent_${this.userId}_`;
-    return agents.filter((a: any) => (a.id || a.agentId || '').startsWith(prefix));
+    return agents.filter((a) => (a.id || '').startsWith(prefix));
   }
 
   /** 列出当前用户的 sessions（admin 不过滤），可按原生 agentId 精确查询 */
-  async listMySessions(agentId?: string): Promise<any> {
-    const result = await this.engine.sessionsList(agentId) as any;
+  async listMySessions(agentId?: string): Promise<EngineSessionsListResponse> {
+    const result = await this.engine.sessionsList(agentId);
     if (this.admin) return result;
-    const sessions: any[] = result?.sessions || result || [];
+    const sessions = result?.sessions || [];
     const prefix = `agent:ent_${this.userId}_`;
-    const filtered = sessions.filter((s: any) => (s.key || s.sessionKey || '').startsWith(prefix));
-    // 保持与原始返回结构兼容
-    if (result && typeof result === 'object' && !Array.isArray(result)) {
-      return { ...result, sessions: filtered };
-    }
-    return filtered;
+    const filtered = sessions.filter((s) => (s.key || s.sessionKey || '').startsWith(prefix));
+    return { ...result, sessions: filtered };
   }
 
   /** 列出当前用户的 cron 任务（admin 不过滤） */
-  async listMyCrons(includeDisabled = false): Promise<any> {
-    const result = await this.engine.cronList(includeDisabled) as any;
+  async listMyCrons(includeDisabled = false): Promise<EngineCronListResponse> {
+    const result = await this.engine.cronList(includeDisabled);
     if (this.admin) return result;
-    const jobs: any[] = result?.jobs || [];
+    const jobs = result?.jobs || [];
     const prefix = `ent_${this.userId}_`;
-    const filtered = jobs.filter((j: any) => (j.agentId || j.agent || '').startsWith(prefix));
+    const filtered = jobs.filter((j) => (j.agentId || j.agent || '').startsWith(prefix));
     return { ...result, jobs: filtered };
   }
 }

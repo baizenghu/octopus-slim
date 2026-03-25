@@ -24,6 +24,7 @@ import { getRuntimeConfig } from '../config';
 import { createAuthMiddleware, type AuthenticatedRequest } from '../middleware/auth';
 import type { AuthService } from '@octopus/auth';
 import type { WorkspaceManager } from '@octopus/workspace';
+import type { AppPrismaClient } from '../types/prisma';
 import { createLogger } from '../utils/logger';
 
 const logger = createLogger('files');
@@ -60,7 +61,7 @@ export function createFilesRouter(
   _config: GatewayConfig,
   authService: AuthService,
   workspaceManager: WorkspaceManager,
-  prismaClient?: any,  // PrismaClient（可选，用于 DB 状态同步）
+  prismaClient?: AppPrismaClient,
 ): Router {
   const router = Router();
   const authMiddleware = createAuthMiddleware(authService);
@@ -72,7 +73,7 @@ export function createFilesRouter(
   const upload = multer({
     storage: multer.memoryStorage(),
     limits: { fileSize: MAX_FILE_SIZE },
-    fileFilter: (_req: any, file: any, cb: any) => {
+    fileFilter: (_req: Express.Request, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
       const ext = path.extname(file.originalname).toLowerCase();
       if (!ALLOWED_EXTENSIONS.has(ext)) {
         cb(new Error(`不允许的文件类型: ${ext}`));
@@ -90,7 +91,7 @@ export function createFilesRouter(
    * Optional query: ?subdir=reports (子目录)
    */
   router.post('/upload', authMiddleware, (req: AuthenticatedRequest, res) => {
-    upload.single('file')(req, res, async (err: any) => {
+    upload.single('file')(req, res, async (err: unknown) => {
       if (err) {
         if (err instanceof multer.MulterError) {
           if (err.code === 'LIMIT_FILE_SIZE') {
@@ -100,13 +101,13 @@ export function createFilesRouter(
           res.status(400).json({ error: err.message });
           return;
         }
-        res.status(400).json({ error: err.message });
+        res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
         return;
       }
 
       try {
         const user = req.user!;
-        const file = (req as any).file;
+        const file = (req as { file?: Express.Multer.File }).file;
         if (!file) {
           res.status(400).json({ error: '没有上传文件' });
           return;
@@ -118,8 +119,8 @@ export function createFilesRouter(
         // 配额拦截：超限时拒绝上传
         try {
           await workspaceManager.enforceQuota(user.id);
-        } catch (quotaErr: any) {
-          res.status(413).json({ error: quotaErr.message });
+        } catch (quotaErr: unknown) {
+          res.status(413).json({ error: quotaErr instanceof Error ? quotaErr.message : String(quotaErr) });
           return;
         }
 
@@ -163,9 +164,9 @@ export function createFilesRouter(
             type: file.mimetype,
           },
         });
-      } catch (err: any) {
+      } catch (err: unknown) {
         // Upload handler 内无法使用 next()（multer 回调上下文），保留直接响应但隐藏内部信息
-        logger.error('POST /api/files/upload', { error: err.message });
+        logger.error('POST /api/files/upload', { error: err instanceof Error ? err.message : String(err) });
         res.status(500).json({ error: '服务器内部错误，请稍后重试' });
       }
     });
@@ -240,8 +241,8 @@ export function createFilesRouter(
       });
 
       res.json({ dir: dirType, subdir, files });
-    } catch (err: any) {
-      next(err);
+    } catch (err: unknown) {
+      next(err instanceof Error ? err : new Error(String(err)));
     }
   });
 
@@ -298,7 +299,7 @@ export function createFilesRouter(
       if (downloadEntry && Date.now() <= downloadEntry.expires) {
         downloadTokens.delete(queryToken); // 一次性消费
         // 设置 req.user 用于后续逻辑，跳过 authMiddleware
-        req.user = { id: downloadEntry.userId } as any;
+        (req as AuthenticatedRequest).user = { id: downloadEntry.userId } as AuthenticatedRequest['user'];
         return next();
       }
 
@@ -382,8 +383,8 @@ export function createFilesRouter(
         res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`);
       }
       res.sendFile(fullPath);
-    } catch (err: any) {
-      next(err);
+    } catch (err: unknown) {
+      next(err instanceof Error ? err : new Error(String(err)));
     }
   });
 
@@ -420,8 +421,8 @@ export function createFilesRouter(
         createdAt: stat.birthtime.toISOString(),
         modifiedAt: stat.mtime.toISOString(),
       });
-    } catch (err: any) {
-      next(err);
+    } catch (err: unknown) {
+      next(err instanceof Error ? err : new Error(String(err)));
     }
   });
 
@@ -480,8 +481,8 @@ export function createFilesRouter(
       }
 
       res.json({ message: '删除成功', path: relativePath });
-    } catch (err: any) {
-      next(err);
+    } catch (err: unknown) {
+      next(err instanceof Error ? err : new Error(String(err)));
     }
   });
 

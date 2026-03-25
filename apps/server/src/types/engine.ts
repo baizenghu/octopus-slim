@@ -141,3 +141,15 @@ export interface HeartbeatTaskConfig {
   lastResult?: string;
   lastResultAt?: string;
 }
+
+/** 引擎原生事件（内部事件总线传递的原始结构） */
+export interface EngineRawEvent {
+  runId: string;
+  stream: string;
+  data: Record<string, unknown>;
+}
+
+/** agents.list 响应 */
+export interface EngineAgentsListResponse {
+  agents?: EngineAgentListEntry[];
+}

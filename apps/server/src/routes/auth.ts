@@ -13,6 +13,7 @@ import * as path from 'path';
 import type { AuthService } from '@octopus/auth';
 import type { WorkspaceManager } from '@octopus/workspace';
 import { createAuthMiddleware, type AuthenticatedRequest } from '../middleware/auth';
+import type { AppPrismaClient } from '../types/prisma';
 import { securityMonitor } from '../services/SecurityMonitor';
 import { validatePassword } from '../utils/password';
 import { createAvatarUpload, mimeToExt } from '../utils/avatar';
@@ -20,7 +21,7 @@ import { createLogger } from '../utils/logger';
 
 const logger = createLogger('auth');
 
-export function createAuthRouter(authService: AuthService, workspaceManager: WorkspaceManager, prisma?: any, dataRoot?: string): Router {
+export function createAuthRouter(authService: AuthService, workspaceManager: WorkspaceManager, prisma?: AppPrismaClient, dataRoot?: string): Router {
   const router = Router();
   const authMiddleware = createAuthMiddleware(authService, prisma);
 
@@ -64,8 +65,8 @@ export function createAuthRouter(authService: AuthService, workspaceManager: Wor
             res.status(401).json({ error: 'User account not found. Please contact administrator.' });
             return;
           }
-        } catch (dbErr: any) {
-          logger.warn('User sync warning', { error: dbErr.message });
+        } catch (dbErr: unknown) {
+          logger.warn('User sync warning', { error: dbErr instanceof Error ? dbErr.message : String(dbErr) });
         }
       }
 
@@ -87,14 +88,14 @@ export function createAuthRouter(authService: AuthService, workspaceManager: Wor
         refreshToken: result.refreshToken,
         expiresIn: result.expiresIn,
       });
-    } catch (err: any) {
+    } catch (err: unknown) {
       // 记录登录失败事件到安全监控（暴力破解检测）
       const ip = req.ip || req.socket.remoteAddress || 'unknown';
       const { username } = req.body;
       if (username) {
         securityMonitor.recordLoginFailure(ip, username);
       }
-      res.status(401).json({ error: err.message || 'Login failed' });
+      res.status(401).json({ error: err instanceof Error ? err.message : 'Login failed' });
     }
   });
 
@@ -111,16 +112,17 @@ export function createAuthRouter(authService: AuthService, workspaceManager: Wor
 
       const result = await authService.refreshToken(refreshToken);
       // DB fallback：验证用户是否仍然有效（防止已禁用用户用旧 refresh token 获取新 access token）
-      if (prisma && (result as any).user?.id) {
-        const dbUser = await prisma.user.findUnique({ where: { userId: (result as any).user.id } });
+      const typedResult = result as { user?: { id?: string } };
+      if (prisma && typedResult.user?.id) {
+        const dbUser = await prisma.user.findUnique({ where: { userId: typedResult.user.id } });
         if (!dbUser || dbUser.status !== 'active') {
           res.status(401).json({ error: 'User disabled' });
           return;
         }
       }
       res.json(result);
-    } catch (err: any) {
-      res.status(401).json({ error: err.message || 'Token refresh failed' });
+    } catch (err: unknown) {
+      res.status(401).json({ error: err instanceof Error ? err.message : 'Token refresh failed' });
     }
   });
 
@@ -134,8 +136,8 @@ export function createAuthRouter(authService: AuthService, workspaceManager: Wor
         await authService.logout(token);
       }
       res.json({ message: 'Logged out' });
-    } catch (err: any) {
-      res.status(500).json({ error: err.message || 'Logout failed' });
+    } catch (err: unknown) {
+      res.status(500).json({ error: err instanceof Error ? err.message : 'Logout failed' });
     }
   });
 
@@ -168,7 +170,7 @@ export function createAuthRouter(authService: AuthService, workspaceManager: Wor
 
       // bcrypt 哈希新密码
       const bcryptModule = await import('bcryptjs');
-      const bcrypt = (bcryptModule as any).default || bcryptModule;
+      const bcrypt = (bcryptModule as { default?: typeof bcryptModule }).default || bcryptModule;
       const hashedPassword = await bcrypt.hash(newPassword, 12);
 
       // 更新数据库
@@ -191,8 +193,8 @@ export function createAuthRouter(authService: AuthService, workspaceManager: Wor
       );
 
       res.json({ message: '密码修改成功' });
-    } catch (err: any) {
-      res.status(500).json({ error: err.message || '密码修改失败' });
+    } catch (err: unknown) {
+      res.status(500).json({ error: err instanceof Error ? err.message : '密码修改失败' });
     }
   });
 
@@ -217,16 +219,16 @@ export function createAuthRouter(authService: AuthService, workspaceManager: Wor
    * 上传用户头像
    */
   router.post('/avatar', authMiddleware, (req, res) => {
-    createAvatarUpload().single('avatar')(req, res, (err: any) => {
+    createAvatarUpload().single('avatar')(req, res, (err: unknown) => {
       if (err) {
-        res.status(400).json({ error: err.message });
+        res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
         return;
       }
       (async () => {
         try {
           const authReq = req as AuthenticatedRequest;
           const user = authReq.user!;
-          const file = (req as any).file;
+          const file = (req as { file?: Express.Multer.File }).file;
           if (!file) {
             res.status(400).json({ error: '请选择头像文件' });
             return;
@@ -258,8 +260,8 @@ export function createAuthRouter(authService: AuthService, workspaceManager: Wor
           }
 
           res.json({ ok: true, avatarUrl: `/api/auth/avatar/${user.id}` });
-        } catch (err: any) {
-          res.status(500).json({ error: err.message || '头像上传失败' });
+        } catch (err: unknown) {
+          res.status(500).json({ error: err instanceof Error ? err.message : '头像上传失败' });
         }
       })();
     });
@@ -296,8 +298,8 @@ export function createAuthRouter(authService: AuthService, workspaceManager: Wor
       }
 
       res.status(404).json({ error: '头像不存在' });
-    } catch (err: any) {
-      res.status(500).json({ error: err.message || '获取头像失败' });
+    } catch (err: unknown) {
+      res.status(500).json({ error: err instanceof Error ? err.message : '获取头像失败' });
     }
   });
 

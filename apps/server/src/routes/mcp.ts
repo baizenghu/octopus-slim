@@ -65,8 +65,8 @@ export function createMcpRouter(
     );
     try {
       fs.writeFileSync(signalPath, Date.now().toString());
-    } catch (err: any) {
-      logger.warn('Failed to write refresh signal', { error: err.message });
+    } catch (err: unknown) {
+      logger.warn('Failed to write refresh signal', { error: err instanceof Error ? err.message : String(err) });
     }
   }
 
@@ -75,8 +75,24 @@ export function createMcpRouter(
   /** 用户工作空间基目录 */
   const usersBase = path.resolve(dataRoot, 'users');
 
+  /** Prisma MCPServer 行数据结构（与 schema 对齐） */
+  type MCPServerRow = {
+    id: string;
+    name: string;
+    description: string | null;
+    scope: string;
+    ownerId: string | null;
+    transport: string;
+    command: string | null;
+    args: unknown;
+    url: string | null;
+    env: unknown;
+    enabled: boolean;
+    createdAt: Date;
+  };
+
   // Prisma → MCPServerConfig 转换
-  function toConfig(row: any): MCPServerConfig {
+  function toConfig(row: MCPServerRow): MCPServerConfig {
     return {
       id: row.id,
       name: row.name,
@@ -251,12 +267,12 @@ export function createMcpRouter(
       notifyMCPRegistryChanged();
 
       res.json({ message: 'MCP Server 已更新', server });
-    } catch (err: any) {
-      if (err.code === 'P2025') {
+    } catch (err: unknown) {
+      if ((err as { code?: string }).code === 'P2025') {
         res.status(404).json({ error: 'MCP Server 不存在' });
         return;
       }
-      next(err);
+      next(err instanceof Error ? err : new Error(String(err)));
     }
   });
 
@@ -271,12 +287,12 @@ export function createMcpRouter(
       const server = await prisma.mCPServer.findUnique({ where: { id } });
       if (server) {
         const allAgents = await prisma.agent.findMany({ select: { name: true, ownerId: true, mcpFilter: true } });
-        const referencingAgents = allAgents.filter((a: any) => {
+        const referencingAgents = allAgents.filter((a) => {
           const filter = a.mcpFilter as string[] | null;
           return Array.isArray(filter) && (filter.includes(id) || filter.includes(server.name));
         });
         if (referencingAgents.length > 0) {
-          const names = referencingAgents.map((a: any) => `${a.ownerId}/${a.name}`).join(', ');
+          const names = referencingAgents.map((a) => `${a.ownerId}/${a.name}`).join(', ');
           res.status(409).json({ error: `无法删除：以下 Agent 仍在使用此 MCP Server：${names}。请先取消关联后再删除。` });
           return;
         }
@@ -292,12 +308,12 @@ export function createMcpRouter(
       notifyMCPRegistryChanged();
 
       res.json({ message: 'MCP Server 已删除' });
-    } catch (err: any) {
-      if (err.code === 'P2025') {
+    } catch (err: unknown) {
+      if ((err as { code?: string }).code === 'P2025') {
         res.status(404).json({ error: 'MCP Server 不存在' });
         return;
       }
-      next(err);
+      next(err instanceof Error ? err : new Error(String(err)));
     }
   });
 
@@ -337,10 +353,10 @@ export function createMcpRouter(
           tools: [],
         });
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       res.json({
         success: false,
-        message: `连接测试失败: ${err.message}`,
+        message: `连接测试失败: ${err instanceof Error ? err.message : String(err)}`,
         tools: [],
       });
     }
@@ -621,8 +637,10 @@ export function createMcpRouter(
         );
         if (venvOut) installLogs.push(venvOut);
         if (venvErr) installLogs.push(venvErr);
-      } catch (err: any) {
-        installLogs.push(err.stderr || err.message);
+      } catch (err: unknown) {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        const errStderr = (err as { stderr?: string }).stderr;
+        installLogs.push(errStderr || errMsg);
         res.status(500).json({
           error: 'Python 虚拟环境创建失败',
           logs: installLogs,
@@ -639,8 +657,10 @@ export function createMcpRouter(
         );
         if (pipOut) installLogs.push(pipOut);
         if (pipErr) installLogs.push(pipErr);
-      } catch (err: any) {
-        installLogs.push(err.stderr || err.message);
+      } catch (err: unknown) {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        const errStderr = (err as { stderr?: string }).stderr;
+        installLogs.push(errStderr || errMsg);
         res.status(500).json({
           error: '依赖安装失败，请检查 packages 目录是否完整',
           logs: installLogs,
@@ -790,12 +810,12 @@ export function createMcpRouter(
 
       // 引用完整性检查
       const allAgents = await prisma.agent.findMany({ where: { ownerId: user.id }, select: { name: true, ownerId: true, mcpFilter: true } });
-      const referencingAgents = allAgents.filter((a: any) => {
+      const referencingAgents = allAgents.filter((a) => {
         const filter = a.mcpFilter as string[] | null;
         return Array.isArray(filter) && (filter.includes(id) || filter.includes(existing.name));
       });
       if (referencingAgents.length > 0) {
-        const names = referencingAgents.map((a: any) => a.name).join(', ');
+        const names = referencingAgents.map((a) => a.name).join(', ');
         res.status(409).json({ error: `无法删除：以下 Agent 仍在使用此 MCP Server：${names}。请先取消关联后再删除。` });
         return;
       }
@@ -842,7 +862,7 @@ export async function getMergedMCPServers(
   });
 
   if (agentMcpFilter !== null) {
-    return servers.filter((s: any) => agentMcpFilter.includes(s.name) || agentMcpFilter.includes(s.id));
+    return servers.filter((s) => agentMcpFilter.includes(s.name) || agentMcpFilter.includes(s.id));
   }
 
   return servers;

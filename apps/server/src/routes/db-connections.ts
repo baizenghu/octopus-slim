@@ -11,10 +11,11 @@ import { Router, NextFunction } from 'express';
 import { randomUUID } from 'crypto';
 import type { AuthService } from '@octopus/auth';
 import { createAuthMiddleware, type AuthenticatedRequest } from '../middleware/auth';
+import type { AppPrismaClient } from '../types/prisma';
 import { encryptPassword } from '../utils/crypto';
 import { invalidatePromptCache } from '../services/SystemPromptBuilder';
 
-export function createDbConnectionsRouter(authService: AuthService, prisma: any): Router {
+export function createDbConnectionsRouter(authService: AuthService, prisma: AppPrismaClient): Router {
   const router = Router();
   const authMiddleware = createAuthMiddleware(authService, prisma);
 
@@ -27,10 +28,10 @@ export function createDbConnectionsRouter(authService: AuthService, prisma: any)
         orderBy: { createdAt: 'desc' },
       });
       // 密码脱敏
-      const safe = connections.map((c: any) => ({ ...c, dbPassword: '••••••' }));
+      const safe = connections.map((c) => ({ ...c, dbPassword: '••••••' }));
       res.json({ data: safe });
-    } catch (err: any) {
-      next(err);
+    } catch (err: unknown) {
+      next(err instanceof Error ? err : new Error(String(err)));
     }
   });
 
@@ -57,8 +58,8 @@ export function createDbConnectionsRouter(authService: AuthService, prisma: any)
       invalidatePromptCache(userId);
 
       res.json({ data: { ...conn, dbPassword: '••••••' } });
-    } catch (err: any) {
-      next(err);
+    } catch (err: unknown) {
+      next(err instanceof Error ? err : new Error(String(err)));
     }
   });
 
@@ -73,7 +74,8 @@ export function createDbConnectionsRouter(authService: AuthService, prisma: any)
         return;
       }
       const { name, dbType, host, port, dbUser, dbPassword, dbName, enabled } = req.body;
-      const updateData: any = {};
+      // Prisma 动态更新参数：字段来自用户输入，无法静态推导
+      const updateData: Record<string, unknown> = {};
       if (name !== undefined) updateData.name = name;
       if (dbType !== undefined) updateData.dbType = dbType;
       if (host !== undefined) updateData.host = host;
@@ -86,8 +88,8 @@ export function createDbConnectionsRouter(authService: AuthService, prisma: any)
       invalidatePromptCache(userId);
 
       res.json({ data: { ...conn, dbPassword: '••••••' } });
-    } catch (err: any) {
-      next(err);
+    } catch (err: unknown) {
+      next(err instanceof Error ? err : new Error(String(err)));
     }
   });
 
@@ -107,12 +109,12 @@ export function createDbConnectionsRouter(authService: AuthService, prisma: any)
         where: { ownerId: userId },
         select: { name: true, allowedConnections: true },
       });
-      const referencingAgents = userAgents.filter((a: any) => {
+      const referencingAgents = userAgents.filter((a) => {
         const conns = a.allowedConnections as string[] | null;
         return Array.isArray(conns) && (conns.includes(id) || conns.includes(existing.name));
       });
       if (referencingAgents.length > 0) {
-        const names = referencingAgents.map((a: any) => a.name).join(', ');
+        const names = referencingAgents.map((a) => a.name).join(', ');
         res.status(409).json({ error: `无法删除：以下 Agent 仍在使用此数据库连接：${names}。请先取消关联后再删除。` });
         return;
       }
@@ -121,8 +123,8 @@ export function createDbConnectionsRouter(authService: AuthService, prisma: any)
       invalidatePromptCache(userId);
 
       res.json({ ok: true });
-    } catch (err: any) {
-      next(err);
+    } catch (err: unknown) {
+      next(err instanceof Error ? err : new Error(String(err)));
     }
   });
 

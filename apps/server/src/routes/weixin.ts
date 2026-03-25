@@ -35,8 +35,8 @@ export function createWeixinRoutes(params: {
         qrcodeUrl: result.qrcodeUrl,
         sessionKey: result.sessionKey,
       });
-    } catch (e: any) {
-      next(e);
+    } catch (e: unknown) {
+      next(e instanceof Error ? e : new Error(String(e)));
     }
   });
 
@@ -59,8 +59,8 @@ export function createWeixinRoutes(params: {
       } else {
         res.json({ status: result.status });
       }
-    } catch (e: any) {
-      next(e);
+    } catch (e: unknown) {
+      next(e instanceof Error ? e : new Error(String(e)));
     }
   });
 
@@ -81,8 +81,8 @@ export function createWeixinRoutes(params: {
       const userId = req.user!.id;
       await weixinManager.unbindUser(userId);
       res.json({ success: true });
-    } catch (e: any) {
-      next(e);
+    } catch (e: unknown) {
+      next(e instanceof Error ? e : new Error(String(e)));
     }
   });
 
@@ -102,8 +102,8 @@ export function createWeixinRoutes(params: {
     try {
       await weixinManager.startUser(userId);
       res.json({ success: true, message: `Adapter started for ${userId}` });
-    } catch (e: any) {
-      res.status(500).json({ error: e.message });
+    } catch (e: unknown) {
+      res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
     }
   });
 

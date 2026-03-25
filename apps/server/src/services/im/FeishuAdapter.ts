@@ -16,6 +16,7 @@ const logger = createLogger('FeishuAdapter');
 export class FeishuAdapter implements IMAdapter {
   readonly channel = 'feishu';
   private client: lark.Client;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private wsClient: any;
   private handler?: (msg: IMIncomingMessage) => void;
   /** 消息去重集合 */
@@ -36,10 +37,11 @@ export class FeishuAdapter implements IMAdapter {
 
   async start(): Promise<void> {
     const eventDispatcher = new lark.EventDispatcher({}).register({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       'im.message.receive_v1': async (data: any) => {
         try {
           await this.handleMessage(data);
-        } catch (e: any) {
+        } catch (e: unknown) {
           logger.error('[feishu] Message handling error:', { error: e instanceof Error ? e.message : String(e), stack: e instanceof Error ? e.stack : undefined });
         }
       },
@@ -103,11 +105,12 @@ export class FeishuAdapter implements IMAdapter {
       } as any,
     });
 
-    const resAny = uploadRes as any;
-    if (resAny.code !== undefined && resAny.code !== 0) {
-      throw new Error(`飞书文件上传失败: ${resAny.msg || `code ${resAny.code}`}`);
+    const resAny = uploadRes as Record<string, unknown>;
+    if (resAny['code'] !== undefined && resAny['code'] !== 0) {
+      throw new Error(`飞书文件上传失败: ${resAny['msg'] || `code ${resAny['code']}`}`);
     }
-    const fileKey = resAny.file_key ?? resAny.data?.file_key;
+    const resData = resAny['data'] as Record<string, unknown> | undefined;
+    const fileKey = resAny['file_key'] ?? resData?.['file_key'];
     if (!fileKey) throw new Error('飞书文件上传失败: 未返回 file_key');
 
     // Step 2: 发送文件消息
@@ -127,16 +130,16 @@ export class FeishuAdapter implements IMAdapter {
   }
 
   /** 处理收到的飞书消息事件 */
-  private async handleMessage(data: any): Promise<void> {
-    const msg = data?.message;
+  private async handleMessage(data: Record<string, unknown>): Promise<void> {
+    const msg = data['message'] as Record<string, unknown> | undefined;
     if (!msg) return;
 
     // 只处理私聊文本消息
-    if (msg.chat_type !== 'p2p') return;
-    if (msg.message_type !== 'text') return;
+    if (msg['chat_type'] !== 'p2p') return;
+    if (msg['message_type'] !== 'text') return;
 
     // 去重
-    const msgId = msg.message_id;
+    const msgId = msg['message_id'] as string;
     if (this.processedMsgIds.has(msgId)) return;
     this.processedMsgIds.add(msgId);
     if (this.processedMsgIds.size > this.MSG_DEDUP_MAX) {
@@ -147,20 +150,22 @@ export class FeishuAdapter implements IMAdapter {
     // 解析消息内容
     let text = '';
     try {
-      const content = JSON.parse(msg.content);
+      const content = JSON.parse(msg['content'] as string) as { text?: string };
       text = content.text?.trim() || '';
     } catch {
       return;
     }
     if (!text) return;
 
-    const senderId = data.sender?.sender_id?.open_id;
+    const sender = data['sender'] as Record<string, unknown> | undefined;
+    const senderId = (sender?.['sender_id'] as Record<string, unknown> | undefined)?.['open_id'] as string | undefined;
     if (!senderId) return;
+    const senderIdObj = sender?.['sender_id'] as Record<string, unknown> | undefined;
 
     this.handler?.({
       channel: 'feishu',
       imUserId: senderId,
-      imUserName: data.sender?.sender_id?.user_id,
+      imUserName: senderIdObj?.['user_id'] as string | undefined,
       text,
       messageId: msgId,
     });
