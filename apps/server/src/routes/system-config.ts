@@ -13,6 +13,9 @@ import path from 'path';
 import type { AuthService } from '@octopus/auth';
 import { createAuthMiddleware, adminOnly, type AuthenticatedRequest } from '../middleware/auth';
 import type { EngineAdapter } from '../services/EngineAdapter';
+import { createLogger } from '../utils/logger';
+
+const logger = createLogger('system-config');
 
 const projectRoot = path.resolve(__dirname, '..', '..', '..', '..');
 
@@ -98,7 +101,7 @@ export function createSystemConfigRouter(
       }
 
       await bridge.configApplyFull(c);
-      console.log(`[system-config] Models updated by ${req.user!.username}`);
+      logger.info('Models updated', { username: req.user!.username });
       res.json({ ok: true });
     } catch (err) {
       next(err);
@@ -137,7 +140,7 @@ export function createSystemConfigRouter(
 
       // 插件变更需要重启才能生效，直接写文件即可（不依赖引擎 RPC）
       await writeConfigToFile(c);
-      console.log(`[system-config] Plugins updated by ${req.user!.username}`);
+      logger.info('Plugins updated', { username: req.user!.username });
       res.json({ ok: true });
     } catch (err) {
       next(err);
@@ -175,7 +178,7 @@ export function createSystemConfigRouter(
       }
 
       await bridge.configApplyFull(c);
-      console.log(`[system-config] Tools updated by ${req.user!.username}`);
+      logger.info('Tools updated', { username: req.user!.username });
       res.json({ ok: true });
     } catch (err) {
       next(err);
@@ -209,7 +212,7 @@ export function createSystemConfigRouter(
       const { initRuntimeConfig: init } = await import('../config');
       init(enterprise);
 
-      console.log(`[system-config] Runtime config updated by ${req.user!.username}`);
+      logger.info('Runtime config updated', { username: req.user!.username });
       res.json({ ok: true });
     } catch (err) {
       next(err);

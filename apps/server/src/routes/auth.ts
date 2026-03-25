@@ -16,6 +16,9 @@ import { createAuthMiddleware, type AuthenticatedRequest } from '../middleware/a
 import { securityMonitor } from '../services/SecurityMonitor';
 import { validatePassword } from '../utils/password';
 import { createAvatarUpload, mimeToExt } from '../utils/avatar';
+import { createLogger } from '../utils/logger';
+
+const logger = createLogger('auth');
 
 export function createAuthRouter(authService: AuthService, workspaceManager: WorkspaceManager, prisma?: any, dataRoot?: string): Router {
   const router = Router();
@@ -62,7 +65,7 @@ export function createAuthRouter(authService: AuthService, workspaceManager: Wor
             return;
           }
         } catch (dbErr: any) {
-          console.warn('[auth] User sync warning:', dbErr.message);
+          logger.warn('User sync warning', { error: dbErr.message });
         }
       }
 

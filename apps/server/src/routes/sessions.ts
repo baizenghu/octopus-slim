@@ -25,6 +25,9 @@ import { createAuthMiddleware, type AuthenticatedRequest } from '../middleware/a
 import { EngineAdapter } from '../services/EngineAdapter';
 import { validateSessionOwnership } from '../utils/ownership';
 import { sanitizeUserContent, sanitizeAssistantContent, isInternalMessage } from '../utils/ContentSanitizer';
+import { createLogger } from '../utils/logger';
+
+const logger = createLogger('sessions');
 
 /**
  * 自动生成会话标题（从首条用户消息截断）
@@ -68,7 +71,7 @@ export async function autoGenerateTitle(bridge: EngineAdapter, sessionId: string
 
     const trimmed = content.replace(/\s+/g, ' ');
     const title = trimmed.length > 24 ? trimmed.slice(0, 24) + '…' : trimmed;
-    console.log(`[TitleGen] generated title: "${title}"`);
+    logger.info('generated title', { title });
 
     if (title && title !== '新对话') {
       // 尝试 patch 标题，遇到 label 重复时加时间戳后缀重试（最多 2 次）
@@ -83,7 +86,7 @@ export async function autoGenerateTitle(bridge: EngineAdapter, sessionId: string
             const now = new Date();
             const suffix = `${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
             finalTitle = `${title} (${suffix}${attempt > 0 ? `-${attempt}` : ''})`;
-            console.warn(`[autoGenerateTitle] label 重复，重试: ${finalTitle}`);
+            logger.warn('label 重复，重试', { finalTitle });
             continue;
           }
           // 非 label 重复错误，直接抛出
@@ -91,11 +94,11 @@ export async function autoGenerateTitle(bridge: EngineAdapter, sessionId: string
         }
       }
       // 重试耗尽，静默放弃（不抛出，防止调用方再重试）
-      console.warn(`[autoGenerateTitle] label 重复重试耗尽，放弃: ${finalTitle}`);
+      logger.warn('label 重复重试耗尽，放弃', { finalTitle });
       return null;
     }
   } catch (err) {
-    console.error(`[autoGenerateTitle] ${sessionId}:`, err);
+    logger.error('autoGenerateTitle failed', { sessionId, error: err });
   }
   return null;
 }
@@ -245,7 +248,7 @@ export function createSessionsRouter(
           sessionsNeedingTitle.map((s: any) =>
             autoGenerateTitle(bridge!, s.key || s.sessionKey).catch(() => null)
           )
-        ).catch(err => console.error('[sessions] background title generation error:', err));
+        ).catch(err => logger.error('background title generation error', { error: err }));
       }
 
       const sessions = rawSessions.map((s: any) => ({
@@ -550,9 +553,9 @@ export function createSessionsRouter(
         res.status(403).json({ error: 'Access denied' });
         return;
       }
-      console.log(`[chat] abort request: sessionId=${sessionId}, resolved sessionKey=${sessionKey}`);
+      logger.info('abort request', { sessionId, sessionKey });
       const result = await bridge.chatAbort(sessionKey);
-      console.log(`[chat] abort result:`, result);
+      logger.info('abort result', { result });
       res.json({ success: true, result });
     } catch (err) {
       next(err);

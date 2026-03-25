@@ -35,6 +35,9 @@ import { securityMonitor } from '../services/SecurityMonitor';
 import { loadConfig, getRuntimeConfig } from '../config';
 import type { AppPrismaClient } from '../types/prisma';
 import type Redis from 'ioredis';
+import { createLogger } from '../utils/logger';
+
+const logger = createLogger('startup');
 
 type AppConfig = ReturnType<typeof loadConfig>;
 
@@ -138,7 +141,7 @@ export async function initRoutes(params: {
 
   // Fail-fast: DB 连接失败时直接退出，避免路由运行时 TypeError
   if (!prismaClient) {
-    console.error('❌ 数据库连接失败，Gateway 无法启动');
+    logger.error('数据库连接失败，Gateway 无法启动');
     process.exit(1);
   }
 
@@ -188,27 +191,27 @@ export async function initRoutes(params: {
         if (!dbIds.has(dir.name)) {
           fs.rmSync(path.join(enterpriseSkillsDir, dir.name), { recursive: true, force: true });
           cleaned++;
-          console.log(`[skills] Cleaned orphan skill directory: ${dir.name}`);
+          logger.info(`Cleaned orphan skill directory: ${dir.name}`);
         }
       }
       if (cleaned > 0) {
-        console.log(`[skills] Cleaned ${cleaned} orphan skill director${cleaned > 1 ? 'ies' : 'y'}`);
+        logger.info(`Cleaned ${cleaned} orphan skill director${cleaned > 1 ? 'ies' : 'y'}`);
       }
     }
   } catch (e: any) {
-    console.warn('[skills] Orphan cleanup failed:', e.message);
+    logger.warn('Orphan cleanup failed', { error: e.message });
   }
 
   // ── 启动服务器 ──
   const bindHost = process.env.BIND_HOST || '127.0.0.1';
-  console.log(`[gateway] Attempting to listen on ${bindHost}:${config.port} (PID: ${process.pid})...`);
+  logger.info(`Attempting to listen on ${bindHost}:${config.port} (PID: ${process.pid})`);
   const server = app.listen(config.port, bindHost, () => {
-    console.log(`✅ Gateway started on http://${bindHost}:${config.port}`);
-    console.log(`   Health: http://localhost:${config.port}/health`);
-    console.log('   Model: configured in octopus.json (unified)');
-    console.log(`   LDAP: ${config.mockLdap ? 'Mock (dev)' : config.ldap.url}`);
-    console.log(`   Data: ${config.workspace.dataRoot}`);
-    console.log(`   Audit: ${config.audit.logDir} (${config.audit.retentionDays}d retention)`);
+    logger.info(`✅ Gateway started on http://${bindHost}:${config.port}`);
+    logger.info(`Health: http://localhost:${config.port}/health`);
+    logger.info('Model: configured in octopus.json (unified)');
+    logger.info(`LDAP: ${config.mockLdap ? 'Mock (dev)' : config.ldap.url}`);
+    logger.info(`Data: ${config.workspace.dataRoot}`);
+    logger.info(`Audit: ${config.audit.logDir} (${config.audit.retentionDays}d retention)`);
   });
 
   return { app, server };

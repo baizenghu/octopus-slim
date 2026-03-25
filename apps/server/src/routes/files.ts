@@ -24,6 +24,9 @@ import { getRuntimeConfig } from '../config';
 import { createAuthMiddleware, type AuthenticatedRequest } from '../middleware/auth';
 import type { AuthService } from '@octopus/auth';
 import type { WorkspaceManager } from '@octopus/workspace';
+import { createLogger } from '../utils/logger';
+
+const logger = createLogger('files');
 
 // 一次性下载 token 存储（替代 URL 中传递 JWT）
 const downloadTokens = new Map<string, { userId: string; filePath: string; expires: number }>();
@@ -162,7 +165,7 @@ export function createFilesRouter(
         });
       } catch (err: any) {
         // Upload handler 内无法使用 next()（multer 回调上下文），保留直接响应但隐藏内部信息
-        console.error(`[error] POST /api/files/upload:`, err.message, err.stack?.split('\n')[1]?.trim());
+        logger.error('POST /api/files/upload', { error: err.message });
         res.status(500).json({ error: '服务器内部错误，请稍后重试' });
       }
     });
@@ -301,7 +304,7 @@ export function createFilesRouter(
 
       // 回退：兼容旧的 JWT token（打印 deprecation 警告）
       if (!req.headers.authorization) {
-        console.warn('[files] DEPRECATED: JWT 通过 URL 查询参数传递，请改用 /download-token 接口');
+        logger.warn('DEPRECATED: JWT 通过 URL 查询参数传递，请改用 /download-token 接口');
         req.headers.authorization = `Bearer ${queryToken}`;
       }
     }

@@ -6,6 +6,9 @@
 import { EngineAdapter } from '../services/EngineAdapter';
 import { IMService } from '../services/im';
 import type { AppPrismaClient } from '../types/prisma';
+import { createLogger } from '../utils/logger';
+
+const logger = createLogger('engine-events');
 
 export function initEngineEvents(params: {
   bridge: EngineAdapter;
@@ -17,7 +20,7 @@ export function initEngineEvents(params: {
   // 监听 native cron 事件（仅用于调试/日志）
   bridge.on('cron', (payload: any) => {
     if (payload?.action === 'started' || payload?.action === 'finished') {
-      console.log(`[cron] job ${payload.jobId} ${payload.action}`);
+      logger.info(`job ${payload.jobId} ${payload.action}`);
     }
   });
 
@@ -30,7 +33,7 @@ export function initEngineEvents(params: {
   bridge.on('heartbeat', (evt: any) => {
     const content = evt.preview || evt.reply || '';
     const isAlert = content && !content.includes('HEARTBEAT_OK');
-    console.log(`[heartbeat] event: status=${evt.status}, reason=${evt.reason || 'n/a'}, alert=${isAlert}, agent=${evt.agentId || 'default'}`);
+    logger.info('heartbeat event', { status: evt.status, reason: evt.reason || 'n/a', alert: isAlert, agent: evt.agentId || 'default' });
 
     // 推送条件：有内容且不含 HEARTBEAT_OK
     if (isAlert) {
@@ -49,8 +52,8 @@ export function initEngineEvents(params: {
           const alert = `🚨 心跳巡检告警\n时间: ${new Date().toLocaleString('zh-CN')}\n\n${content.slice(0, 2000)}`;
           for (const uid of uids) {
             heartbeatImService.sendToUser(uid, alert).then(sent => {
-              if (sent > 0) console.log(`[heartbeat] Alert pushed to ${uid} via IM`);
-            }).catch((e2: any) => console.warn(`[heartbeat] IM push to ${uid} failed: ${e2.message}`));
+              if (sent > 0) logger.info(`Alert pushed to ${uid} via IM`);
+            }).catch((e2: any) => logger.warn(`IM push to ${uid} failed`, { error: e2.message }));
           }
         }).catch(() => { /* DB 查询失败不阻塞 */ });
         return; // 异步处理，提前返回
@@ -58,8 +61,8 @@ export function initEngineEvents(params: {
       const alertText = `🚨 心跳巡检告警\n时间: ${new Date().toLocaleString('zh-CN')}\n\n${content.slice(0, 2000)}`;
       for (const uid of userIds) {
         heartbeatImService.sendToUser(uid, alertText).then(sent => {
-          if (sent > 0) console.log(`[heartbeat] Alert pushed to ${uid} via IM`);
-        }).catch((e: any) => console.warn(`[heartbeat] IM push to ${uid} failed: ${e.message}`));
+          if (sent > 0) logger.info(`Alert pushed to ${uid} via IM`);
+        }).catch((e: any) => logger.warn(`IM push to ${uid} failed`, { error: e.message }));
       }
     }
   });

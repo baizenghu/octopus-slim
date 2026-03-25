@@ -13,12 +13,15 @@ import * as path from 'path';
 import * as fs from 'fs';
 import type { IMService } from '../services/im';
 import type { WorkspaceManager } from '@octopus/workspace';
+import { createLogger } from '../utils/logger';
+
+const logger = createLogger('im-internal');
 
 export function createImInternalRouter(imService: IMService, workspaceManager?: WorkspaceManager): Router {
   const router = Router();
   const token = process.env['INTERNAL_API_TOKEN'];
   if (!token) {
-    console.error('[im-internal] INTERNAL_API_TOKEN 未设置，内部 IM API 已禁用');
+    logger.error('INTERNAL_API_TOKEN 未设置，内部 IM API 已禁用');
     router.use((_req, res) => {
       res.status(503).json({ error: 'Internal IM API disabled: INTERNAL_API_TOKEN not configured' });
     });
@@ -57,7 +60,7 @@ export function createImInternalRouter(imService: IMService, workspaceManager?: 
       const sent = await imService.sendToUser(userId, message);
       res.json({ sent });
     } catch (err: any) {
-      console.error(`[im-internal] send failed for ${userId}:`, err.message);
+      logger.error('send failed', { userId, error: err.message });
       res.status(500).json({ error: 'Internal send error' });
     }
   });
@@ -102,7 +105,7 @@ export function createImInternalRouter(imService: IMService, workspaceManager?: 
       const sent = await imService.sendFileToUser(userId, filePath, safeName);
       res.json({ sent });
     } catch (err: any) {
-      console.error(`[im-internal] send-file failed for ${userId}:`, err.message);
+      logger.error('send-file failed', { userId, error: err.message });
       res.status(500).json({ error: 'Internal send error' });
     }
   });

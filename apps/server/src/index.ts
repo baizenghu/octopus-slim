@@ -30,9 +30,12 @@ import { initServices } from './startup/init-services';
 import { initIM } from './startup/init-im';
 import { initEngineEvents } from './startup/init-engine-events';
 import { initRoutes } from './startup/init-routes';
+import { createLogger } from './utils/logger';
+
+const logger = createLogger('gateway');
 
 async function main() {
-  console.log('🚀 Starting Octopus AI Gateway...');
+  logger.info('🚀 Starting Octopus AI Gateway...');
 
   const config = loadConfig();
   const services = await initServices(config);
@@ -50,8 +53,8 @@ async function main() {
         config,
       });
     } catch (err: any) {
-      console.warn('   Native Gateway: connection failed -', err.message);
-      console.warn('   Chat will not work until native gateway is available');
+      logger.warn('Native Gateway: connection failed', { error: err.message });
+      logger.warn('Chat will not work until native gateway is available');
     }
   }
 
@@ -73,7 +76,7 @@ async function main() {
 
   // Graceful shutdown
   const shutdown = async () => {
-    console.log('Shutting down gracefully...');
+    logger.info('Shutting down gracefully...');
     server.close();
     services.bridge?.shutdown();
     await services.prismaClient?.$disconnect();
@@ -84,6 +87,6 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error('❌ Gateway failed to start:', err);
+  logger.error('❌ Gateway failed to start', { error: err });
   process.exit(1);
 });

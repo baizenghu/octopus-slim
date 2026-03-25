@@ -33,6 +33,9 @@ import { createAuthMiddleware, adminOnly, isAdmin, type AuthenticatedRequest } f
 import { getRuntimeConfig } from '../config';
 import { Prisma } from '@prisma/client';
 import type { AppPrismaClient } from '../types/prisma';
+import { createLogger } from '../utils/logger';
+
+const logger = createLogger('skills');
 
 export function createSkillsRouter(
   authService: AuthService,
@@ -62,9 +65,9 @@ export function createSkillsRouter(
     if (!bridge) return;
     try {
       await bridge.configApply({ skills: { entries: { [skillId]: { enabled } } } });
-      console.log(`[skills] Synced ${skillId} enabled=${enabled} to engine`);
+      logger.info('Synced to engine', { skillId, enabled });
     } catch (e: any) {
-      console.warn(`[skills] Failed to sync ${skillId} to engine:`, e.message);
+      logger.warn('Failed to sync to engine', { skillId, error: e.message });
     }
   }
 
@@ -263,7 +266,7 @@ export function createSkillsRouter(
         if (fs.existsSync(venvPip)) {
           try {
             const depsDir = path.join(skillDir, 'deps');
-            console.log(`[skills] Installing ${deps.whlFiles!.length} .whl packages to shared venv for enterprise skill ${skillId}...`);
+            logger.info('Installing .whl packages to shared venv for enterprise skill', { count: deps.whlFiles!.length, skillId });
             const { execSync } = await import('child_process');
             execSync(`${venvPip} install "${depsDir}/"*.whl --quiet --disable-pip-version-check --no-deps`, {
               timeout: 120000,
@@ -271,9 +274,9 @@ export function createSkillsRouter(
             });
             deps.depsType = 'python-shared-venv';
             deps.depsInfo = `${deps.whlFiles!.length} 个 .whl 包已安装到共享虚拟环境`;
-            console.log(`[skills] .whl packages installed for enterprise skill ${skillId}`);
+            logger.info('.whl packages installed for enterprise skill', { skillId });
           } catch (installErr: any) {
-            console.warn(`[skills] .whl install failed for enterprise skill ${skillId}:`, installErr.message);
+            logger.warn('.whl install failed for enterprise skill', { skillId, error: installErr.message });
             deps.depsInfo = `安装失败: ${installErr.stderr?.toString().slice(-200) || installErr.message}。请检查 .whl 文件平台兼容性`;
           }
         }
@@ -284,7 +287,7 @@ export function createSkillsRouter(
       try {
         scanReport = await scanner.scan(skillId, skillDir);
       } catch (scanErr: any) {
-        console.warn(`[skills] scan error for ${skillId}:`, scanErr.message);
+        logger.warn('scan error', { skillId, error: scanErr.message });
       }
 
       // 合并依赖信息到 scanReport

@@ -37,6 +37,9 @@ import type { AuthService } from '@octopus/auth';
 import { createAuthMiddleware, adminOnly, isAdmin, type AuthenticatedRequest } from '../middleware/auth';
 import type { AppPrismaClient } from '../types/prisma';
 import { validateMcpUrl } from '../utils/url-validator';
+import { createLogger } from '../utils/logger';
+
+const logger = createLogger('mcp');
 
 const execFileAsync = promisify(execFile);
 
@@ -63,7 +66,7 @@ export function createMcpRouter(
     try {
       fs.writeFileSync(signalPath, Date.now().toString());
     } catch (err: any) {
-      console.warn('[mcp] Failed to write refresh signal:', err.message);
+      logger.warn('Failed to write refresh signal', { error: err.message });
     }
   }
 

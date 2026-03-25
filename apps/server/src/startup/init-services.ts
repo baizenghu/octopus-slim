@@ -17,6 +17,9 @@ import { ensureAgentTemplates } from '../services/SoulTemplate';
 import { initRuntimeConfig } from '../config';
 import type { AppPrismaClient } from '../types/prisma';
 import type { loadConfig } from '../config';
+import { createLogger } from '../utils/logger';
+
+const logger = createLogger('startup');
 
 type AppConfig = ReturnType<typeof loadConfig>;
 
@@ -42,9 +45,9 @@ export async function initServices(config: AppConfig): Promise<Services> {
         retryStrategy: (times) => (times > 3 ? null : Math.min(times * 200, 2000)),
       });
       await redisClient.connect();
-      console.log('   Redis: connected (auth)');
+      logger.info('Redis: connected (auth)');
     } catch (err: any) {
-      console.warn('   Redis: unavailable for auth, using in-memory fallback');
+      logger.warn('Redis: unavailable for auth, using in-memory fallback');
       redisClient = undefined;
     }
   }
@@ -66,7 +69,7 @@ export async function initServices(config: AppConfig): Promise<Services> {
   try {
     const { getPrismaClient } = await import('@octopus/database');
     prismaClient = getPrismaClient();
-    console.log('   Database: connected');
+    logger.info('Database: connected');
 
     // 迁移明文密码为 bcrypt 哈希（兼容旧数据，只执行一次）
     if (prismaClient && !(globalThis as any).__passwordMigrationDone) {
@@ -88,10 +91,10 @@ export async function initServices(config: AppConfig): Promise<Services> {
           }
         }
         if (migrated > 0) {
-          console.log(`   Password migration: upgraded ${migrated} plaintext passwords to bcrypt`);
+          logger.info(`Password migration: upgraded ${migrated} plaintext passwords to bcrypt`);
         }
       } catch (migrateErr: any) {
-        console.warn('   Password migration warning:', migrateErr.message);
+        logger.warn('Password migration warning', { error: migrateErr.message });
       }
     }
 
@@ -120,14 +123,14 @@ export async function initServices(config: AppConfig): Promise<Services> {
           }
         }
         if (synced > 0 || failed.length > 0) {
-          console.log(`   MockLDAP: synced ${synced}/${dbUsers.length} users from database${failed.length > 0 ? ` (${failed.length} failed: ${failed.join(', ')})` : ''}`);
+          logger.info(`MockLDAP: synced ${synced}/${dbUsers.length} users from database${failed.length > 0 ? ` (${failed.length} failed: ${failed.join(', ')})` : ''}`);
         }
       } catch (syncErr: any) {
-        console.warn('   MockLDAP sync warning:', syncErr.message);
+        logger.warn('MockLDAP sync warning', { error: syncErr.message });
       }
     }
   } catch (err) {
-    console.warn('   Database: unavailable (admin features will be limited)');
+    logger.warn('Database: unavailable (admin features will be limited)');
   }
 
   // ── AuditLogger ──
@@ -139,7 +142,7 @@ export async function initServices(config: AppConfig): Promise<Services> {
   });
 
   auditLogger.cleanup().then((n: number) => {
-    if (n > 0) console.log(`[audit] Cleaned up ${n} expired export files`);
+    if (n > 0) logger.info(`Cleaned up ${n} expired export files`);
   }).catch(() => {});
 
   // ── FileCleanupService ──
@@ -159,16 +162,16 @@ export async function initServices(config: AppConfig): Promise<Services> {
     bridge = new EngineAdapter();
     try {
       await bridge.initialize(19791);
-      console.log('   Engine: initialized (single-process)');
+      logger.info('Engine: initialized (single-process)');
 
       // 从独立的 enterprise.json 读取运行时配置（不放 octopus.json 避免引擎校验失败）
       try {
         const stateDir = process.env.OCTOPUS_STATE_DIR!;
         const raw = await fsPromises.readFile(path.join(stateDir, 'enterprise.json'), 'utf-8');
         initRuntimeConfig(JSON.parse(raw));
-        console.log('[runtime-config] Loaded from enterprise.json');
+        logger.info('Loaded from enterprise.json');
       } catch (err) {
-        console.warn('[runtime-config] enterprise.json not found, using defaults');
+        logger.warn('enterprise.json not found, using defaults');
         initRuntimeConfig();
       }
 
@@ -190,23 +193,23 @@ export async function initServices(config: AppConfig): Promise<Services> {
           for (const r of createResults) {
             if (r.status === 'rejected') {
               failCount++;
-              console.error('[startup] Agent create failed:', r.reason);
+              logger.error('Agent create failed', { reason: r.reason });
             }
           }
           if (agents.length > 0) {
             const successCount = agents.length - failCount;
-            console.log(`   Native Gateway: synced ${successCount}/${agents.length} agents (concurrent)`);
+            logger.info(`Native Gateway: synced ${successCount}/${agents.length} agents (concurrent)`);
           }
         } catch (syncErr: any) {
-          console.warn('   Native Gateway agent sync warning:', syncErr.message);
+          logger.warn('Native Gateway agent sync warning', { error: syncErr.message });
         }
       }
     } catch (err: any) {
-      console.warn('   Native Gateway: connection failed -', err.message);
-      console.warn('   Chat will not work until native gateway is available');
+      logger.warn('Native Gateway: connection failed', { error: err.message });
+      logger.warn('Chat will not work until native gateway is available');
     }
   } else {
-    console.warn('   Native Gateway: OCTOPUS_GATEWAY_TOKEN not set, bridge disabled');
+    logger.warn('Native Gateway: OCTOPUS_GATEWAY_TOKEN not set, bridge disabled');
   }
 
   // ── MCP + Agent 模板 ──
@@ -218,7 +221,7 @@ export async function initServices(config: AppConfig): Promise<Services> {
   const enterpriseMcpDir = path.join(config.workspace.dataRoot, 'mcp-servers');
   if (!fs.existsSync(enterpriseMcpDir)) {
     fs.mkdirSync(enterpriseMcpDir, { recursive: true });
-    console.log(`   MCP: created enterprise directory ${enterpriseMcpDir}`);
+    logger.info(`MCP: created enterprise directory ${enterpriseMcpDir}`);
   }
 
   return {
