@@ -67,9 +67,15 @@ describe('AuditLogger', () => {
   afterEach(async () => {
     // 先关闭 Winston 日志器，释放文件句柄
     await auditLogger.close();
+    // 等待文件句柄完全释放
+    await new Promise(r => setTimeout(r, 50));
     // 再清理测试目录
-    if (fs.existsSync(TEST_LOG_DIR)) {
-      fs.rmSync(TEST_LOG_DIR, { recursive: true, force: true });
+    try {
+      if (fs.existsSync(TEST_LOG_DIR)) {
+        fs.rmSync(TEST_LOG_DIR, { recursive: true, force: true });
+      }
+    } catch {
+      // ignore cleanup errors
     }
   });
 
@@ -301,7 +307,7 @@ describe('AuditLogger', () => {
       expect(fs.existsSync(filepath)).toBe(true);
 
       const content = fs.readFileSync(filepath, 'utf-8');
-      expect(content).toContain('logId,userId,action');
+      expect(content).toContain('logId,userId,username,action');
       expect(content).toContain('user-001');
       expect(content).toContain('auth:login');
     });

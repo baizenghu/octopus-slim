@@ -132,7 +132,7 @@ describe('TokenManager', () => {
       const accessToken = tokenManager.generateAccessToken(user);
 
       await expect(tokenManager.verifyRefreshToken(accessToken))
-        .rejects.toThrow('Not a refresh token');
+        .rejects.toThrow('Refresh token key version not support');
     });
   });
 
@@ -188,7 +188,7 @@ describe('TokenManager', () => {
 
       // refresh token 不能通过 verifyToken（access 验证）
       await expect(tokenManager.verifyToken(refreshToken))
-        .rejects.toThrow('Token type mismatch');
+        .rejects.toThrow('Token key version not supported');
     });
 
     it('should include type=access in access token payload', async () => {
