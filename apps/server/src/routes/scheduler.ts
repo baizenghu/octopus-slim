@@ -241,7 +241,6 @@ export function createSchedulerRouter(
         res.json({ task: job });
       } else {
         // fallback: DB only
-        const { randomUUID } = await import('crypto');
         const task = await prisma.scheduledTask.create({
           data: {
             id: randomUUID().replace(/-/g, '').slice(0, 16),

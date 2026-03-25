@@ -10,6 +10,8 @@
 
 import { Router, NextFunction } from 'express';
 import { execFileSync } from 'child_process';
+import * as path from 'path';
+import { rm } from 'fs/promises';
 import bcrypt from 'bcryptjs';
 import type { AuthService } from '@octopus/auth';
 import type { AuditLogger } from '@octopus/audit';
@@ -336,8 +338,6 @@ export function createAdminRouter(
       // ── 延迟清理 .octopus-state/agents/ 目录（等原生 gateway 异步处理完成） ──
       if (nativeAgentIds.length > 0) {
         setTimeout(async () => {
-          const path = await import('path');
-          const fs = await import('fs/promises');
           const projectRoot = path.resolve(process.cwd(), '..', '..');
           const stateBase = path.resolve(
             process.env.OCTOPUS_STATE_DIR || path.join(projectRoot, '.octopus-state'),
@@ -346,7 +346,7 @@ export function createAdminRouter(
           for (const nid of nativeAgentIds) {
             const stateDir = path.join(stateBase, nid);
             try {
-              await fs.rm(stateDir, { recursive: true, force: true });
+              await rm(stateDir, { recursive: true, force: true });
               console.log(`[admin] Cleaned state dir: ${stateDir}`);
             } catch { }
           }

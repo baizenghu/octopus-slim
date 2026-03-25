@@ -9,6 +9,8 @@
 import { createHash, randomUUID } from 'crypto';
 import { EventEmitter } from 'events';
 import { Mutex } from 'async-mutex';
+import JSON5 from 'json5';
+import { deepMerge } from '../utils/deep-merge';
 import { ConfigBatcher } from '../utils/config-batcher';
 import { getRuntimeConfig } from '../config';
 
@@ -501,7 +503,6 @@ export class EngineAdapter extends EventEmitter {
 
   async configApply(patch: Record<string, unknown>): Promise<void> {
     return this.configMutex.runExclusive(async () => {
-      const { deepMerge } = await import('../utils/deep-merge');
       const maxRetries = getRuntimeConfig().engine.maxConfigRetries;
       for (let attempt = 0; attempt < maxRetries; attempt++) {
         const { config, hash: baseHash } = await this.configGetParsed();
@@ -533,7 +534,6 @@ export class EngineAdapter extends EventEmitter {
       try {
         config = JSON.parse(result.raw);
       } catch {
-        const JSON5 = (await import('json5')).default;
         config = JSON5.parse(result.raw);
       }
     }

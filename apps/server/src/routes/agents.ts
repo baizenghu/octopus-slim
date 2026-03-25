@@ -17,7 +17,7 @@ import * as path from 'path';
 import type { AuthService } from '@octopus/auth';
 import type { WorkspaceManager } from '@octopus/workspace';
 import { createAuthMiddleware, type AuthenticatedRequest } from '../middleware/auth';
-import type { EngineAdapter } from '../services/EngineAdapter';
+import { EngineAdapter } from '../services/EngineAdapter';
 import { syncAgentToEngine, ensureAndSyncNativeAgent } from '../services/AgentConfigSync';
 import { invalidatePromptCache } from '../services/SystemPromptBuilder';
 import { createAvatarUpload, mimeToExt } from '../utils/avatar';
@@ -35,7 +35,7 @@ async function filterEnabledSkills(prisma: AppPrismaClient, skillsFilter: string
   return skillsFilter.filter(name => enabledSet.has(name));
 }
 import { resolve as pathResolve } from 'path';
-import { readFile } from 'fs/promises';
+import { readFile, rm } from 'fs/promises';
 
 /** Agent workspace 中允许读写的配置文件白名单 */
 const AGENT_CONFIG_FILES = ['IDENTITY.md', 'SOUL.md', 'AGENTS.md', 'BOOTSTRAP.md', 'HEARTBEAT.md', 'TOOLS.md', 'USER.md'];
@@ -83,8 +83,7 @@ export function createAgentsRouter(
    */
   async function syncToolsMd(userId: string, agentName: string, mcpFilter: string[], toolsFilter?: string[]) {
     if (!bridge?.isConnected) return;
-    const { EngineAdapter: OCB } = await import('../services/EngineAdapter');
-    const nativeAgentId = OCB.userAgentId(userId, agentName);
+    const nativeAgentId = EngineAdapter.userAgentId(userId, agentName);
 
     try {
       const lines = ['# 可用工具', '', '以下是你当前被授权使用的所有工具，请在需要时主动使用：', ''];
@@ -413,15 +412,13 @@ export function createAgentsRouter(
         const nativeAgentId = req.tenantBridge!.agentId(existing.name);
         await bridge.agentsDelete(nativeAgentId).catch(() => { });
         // 清理残留的 state 目录（原生 gateway deleteFiles 清内容但可能留空目录/sessions）
-        const path = await import('path');
-        const fs = await import('fs/promises');
         // process.cwd() 是 apps/gateway/，需要向上两级到项目根目录
         const projectRoot = path.resolve(process.cwd(), '..', '..');
         const stateDir = path.resolve(process.env.OCTOPUS_STATE_DIR || path.join(projectRoot, '.octopus-state'), 'agents', nativeAgentId);
         // 延迟 2 秒，等原生 gateway 异步清理完再删目录
         setTimeout(async () => {
           try {
-            await fs.rm(stateDir, { recursive: true, force: true });
+            await rm(stateDir, { recursive: true, force: true });
             console.log(`[agents] Cleaned state dir: ${stateDir}`);
           } catch (e: any) {
             console.error(`[agents] Failed to clean state dir ${stateDir}:`, e.message);

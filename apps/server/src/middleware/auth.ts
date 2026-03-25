@@ -7,7 +7,7 @@
 import type { Request, Response, NextFunction } from 'express';
 import type { AuthService, User, Role } from '@octopus/auth';
 import { getRuntimeConfig } from '../config';
-import type { TenantEngineAdapter } from '../services/TenantEngineAdapter';
+import { TenantEngineAdapter } from '../services/TenantEngineAdapter';
 
 /** 扩展 Express Request 类型，附加 user 信息 */
 export interface AuthenticatedRequest extends Request {
@@ -112,7 +112,6 @@ export function createAuthMiddleware(
 
       // 按登录用户注入 TenantEngineAdapter（engine 存在时）
       if (engine) {
-        const { TenantEngineAdapter } = await import('../services/TenantEngineAdapter');
         req.tenantBridge = new TenantEngineAdapter(engine, user.id, isAdmin(user));
       }
 
