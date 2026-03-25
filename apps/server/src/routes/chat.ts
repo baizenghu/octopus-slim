@@ -33,6 +33,9 @@ import { sanitizeResponse } from '../utils/ContentSanitizer';
 import { stripReasoningTagsFromText } from '../utils/reasoning-tags';
 import { autoGenerateTitle, loadAgentFromDb } from './sessions';
 import { buildEnterpriseSystemPrompt } from '../services/SystemPromptBuilder';
+import { createLogger } from '../utils/logger';
+
+const logger = createLogger('chat');
 
 /**
  * Session 级偏好存储（进程内一级缓存，重启后清空，TTL 可配置）。
@@ -430,7 +433,7 @@ export function createChatRouter(
             case 'tool_call':
               if (event.toolName?.includes('sessions_spawn')) {
                 hasDelegation = true;
-                console.log(`[chat] sessions_spawn detected, hasDelegation=true`);
+                logger.info(`[chat] sessions_spawn detected, hasDelegation=true`);
               }
               res.write(`data: ${JSON.stringify({ content: '', toolCall: true, tools: [event.toolName], toolCallId: event.toolCallId, toolArgs: event.toolArgs, toolResult: event.toolResult, done: false })}\n\n`);
               break;
@@ -451,12 +454,12 @@ export function createChatRouter(
             case 'done': {
               streamDone = true;
               // 返回完整 sessionKey（而非短 sid），前端轮询和后续请求需要完整 key
-              console.log(`[chat] done event: hasDelegation=${hasDelegation}, sessionKey=${sessionKey}`);
+              logger.info(`[chat] done event: hasDelegation=${hasDelegation}, sessionKey=${sessionKey}`);
               res.write(`data: ${JSON.stringify({ content: '', done: true, sessionId: sessionKey, ...(hasDelegation ? { delegated: true } : {}) })}\n\n`);
               clearInterval(heartbeat);
               res.end();
               // 异步生成标题（不阻塞响应）
-              autoGenerateTitle(bridge!, sessionKey).catch(err => console.error('[TitleGen] Failed:', err));
+              autoGenerateTitle(bridge!, sessionKey).catch(err => logger.error('[TitleGen] Failed:', { error: err instanceof Error ? err.message : String(err), stack: err instanceof Error ? err.stack : undefined }));
               break;
             }
             case 'error':
@@ -577,7 +580,7 @@ export function createChatRouter(
       const purified = sanitizeResponse(fullContent);
 
       // 异步尝试生成标题（不阻塞对话响应）
-      autoGenerateTitle(bridge!, sessionKey).catch(err => console.error('[TitleGen] Failed:', err));
+      autoGenerateTitle(bridge!, sessionKey).catch(err => logger.error('[TitleGen] Failed:', { error: err instanceof Error ? err.message : String(err), stack: err instanceof Error ? err.stack : undefined }));
 
       res.json({ message: purified, sessionId: sessionKey });
     } catch (err) {

@@ -14,6 +14,9 @@ import {
   listAllAccountUserIds,
   type WeixinAccount,
 } from './account';
+import { createLogger } from '../../../utils/logger';
+
+const logger = createLogger('manager');
 
 export class WeixinManager {
   private adapters = new Map<string, WeixinAdapter>();
@@ -29,11 +32,11 @@ export class WeixinManager {
         await this.startUser(userId);
         started++;
       } catch (e: any) {
-        console.error(`[wechat] Failed to start adapter for ${userId}: ${e.message}`);
+        logger.error(`Failed to start adapter for ${userId}`, { error: e instanceof Error ? e.message : String(e) });
       }
     }
     if (started > 0) {
-      console.log(`   IM: WeChat started ${started} adapter(s)`);
+      logger.info(`IM: WeChat started ${started} adapter(s)`);
     }
   }
 

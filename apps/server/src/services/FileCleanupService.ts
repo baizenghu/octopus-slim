@@ -12,6 +12,9 @@ import * as fsp from 'fs/promises';
 import * as path from 'path';
 import type { PrismaClient } from '@prisma/client';
 import type { FileCleanupConfig } from '@octopus/workspace';
+import { createLogger } from '../utils/logger';
+
+const logger = createLogger('FileCleanupService');
 
 interface CleanupServiceConfig {
   dataRoot: string;
@@ -35,17 +38,17 @@ export class FileCleanupService {
 
     // 启动时立即执行一次
     this.runCleanup().catch(err =>
-      console.error('[cleanup] 首次清理失败:', err.message),
+      logger.error('首次清理失败:', { error: err instanceof Error ? err.message : String(err), stack: err instanceof Error ? err.stack : undefined }),
     );
 
     // 定时清理
     this.timer = setInterval(() => {
       this.runCleanup().catch(err =>
-        console.error('[cleanup] 定时清理失败:', err.message),
+        logger.error('定时清理失败:', { error: err instanceof Error ? err.message : String(err), stack: err instanceof Error ? err.stack : undefined }),
       );
     }, intervalMs);
 
-    console.log(`[cleanup] 文件清理服务已启动（间隔 ${this.config.cleanup.cleanupIntervalMinutes} 分钟）`);
+    logger.info(`文件清理服务已启动（间隔 ${this.config.cleanup.cleanupIntervalMinutes} 分钟）`);
   }
 
   /** 停止定时清理 */
@@ -70,7 +73,7 @@ export class FileCleanupService {
     }
 
     if (dbCleaned > 0 || tempCleaned > 0 || filesCleaned > 0) {
-      console.log(`[cleanup] 清理完成: DB过期文件=${dbCleaned}, 临时文件=${tempCleaned}, 过期附件=${filesCleaned}`);
+      logger.info(`清理完成: DB过期文件=${dbCleaned}, 临时文件=${tempCleaned}, 过期附件=${filesCleaned}`);
     }
 
     return { dbCleaned, fsCleaned: filesCleaned, tempCleaned };
@@ -92,14 +95,14 @@ export class FileCleanupService {
         try {
           if (fs.existsSync(absPath)) await fsp.unlink(absPath);
         } catch (err: any) {
-          console.warn(`[cleanup] 删除文件失败 ${absPath}: ${err.message}`);
+          logger.warn(`删除文件失败 ${absPath}: ${err.message}`);
         }
         await prisma.generatedFile.update({ where: { id: file.id }, data: { status: 'deleted' } });
         cleaned++;
       }
       return cleaned;
     } catch (err: any) {
-      console.error('[cleanup] DB 清理失败:', err.message);
+      logger.error('DB 清理失败:', { error: err instanceof Error ? err.message : String(err), stack: err instanceof Error ? err.stack : undefined });
       return 0;
     }
   }
@@ -136,7 +139,7 @@ export class FileCleanupService {
         }
       }
     } catch (err: any) {
-      console.error('[cleanup] temp 清理失败:', err.message);
+      logger.error('temp 清理失败:', { error: err instanceof Error ? err.message : String(err), stack: err instanceof Error ? err.stack : undefined });
     }
     return cleaned;
   }
@@ -169,7 +172,7 @@ export class FileCleanupService {
         }
       }
     } catch (err: any) {
-      console.error('[cleanup] files/ 清理失败:', err.message);
+      logger.error('files/ 清理失败:', { error: err instanceof Error ? err.message : String(err), stack: err instanceof Error ? err.stack : undefined });
     }
     return cleaned;
   }
@@ -234,16 +237,16 @@ export class FileCleanupService {
                 await fsp.unlink(fullPath);
               }
               cleaned++;
-              console.log(`[cleanup] 孤儿文件已清理: ${user.name}/outputs/${fileName}`);
+              logger.info(`孤儿文件已清理: ${user.name}/outputs/${fileName}`);
             }
           } catch { /* 忽略单文件失败 */ }
         }
       }
     } catch (err: any) {
-      console.error('[cleanup] 孤儿检测失败:', err.message);
+      logger.error('孤儿检测失败:', { error: err instanceof Error ? err.message : String(err), stack: err instanceof Error ? err.stack : undefined });
     }
 
-    if (cleaned > 0) console.log(`[cleanup] 孤儿文件清理: ${cleaned} 个`);
+    if (cleaned > 0) logger.info(`孤儿文件清理: ${cleaned} 个`);
     return cleaned;
   }
 }

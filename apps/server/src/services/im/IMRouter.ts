@@ -21,6 +21,9 @@ import { AuditAction } from '@octopus/audit';
 import { randomUUID } from 'crypto';
 import { stripReasoningTagsFromText } from '../../utils/reasoning-tags';
 import { getRuntimeConfig } from '../../config';
+import { createLogger } from '../../utils/logger';
+
+const logger = createLogger('IMRouter');
 
 // FILE_SIZE_LIMIT 现在通过 getRuntimeConfig().im.fileSizeLimitBytes 获取
 
@@ -45,7 +48,7 @@ function saveActiveAgents(map: Map<string, string>): void {
   try {
     fs.writeFileSync(ACTIVE_AGENTS_FILE, JSON.stringify(Object.fromEntries(map)));
   } catch (e: any) {
-    console.warn('[im-router] Failed to save activeAgents:', e.message);
+    logger.warn('[im-router] Failed to save activeAgents:', { error: e instanceof Error ? e.message : String(e), stack: e instanceof Error ? e.stack : undefined });
   }
 }
 
@@ -81,7 +84,7 @@ export class IMRouter {
   attach(adapter: IMAdapter): void {
     adapter.onMessage((msg) => {
       this.handleMessage(adapter, msg).catch((e: any) => {
-        console.error(`[im-router] Error handling message from ${msg.channel}:`, e.message);
+        logger.error(`[im-router] Error handling message from ${msg.channel}:`, { error: e instanceof Error ? e.message : String(e), stack: e instanceof Error ? e.stack : undefined });
       });
     });
   }
@@ -243,7 +246,7 @@ export class IMRouter {
         this.bindAttempts.set(imUserId, { count: 1, firstAttempt: Date.now() });
       }
       // 安全：日志中不记录密码，仅记录用户名
-      console.error(`[im-router] Bind error for user=${username}:`, e.message);
+      logger.error(`[im-router] Bind error for user=${username}:`, { error: e instanceof Error ? e.message : String(e), stack: e instanceof Error ? e.stack : undefined });
       // 审计记录
       this.auditLogger?.log({
         userId: null,
@@ -267,7 +270,7 @@ export class IMRouter {
     if (adapter.deleteMessage) {
       adapter.deleteMessage(messageId).catch((e: any) => {
         // 删除失败不阻塞（权限不足、消息已删等情况均可忽略）
-        console.warn(`[im-router] Failed to delete sensitive message ${messageId}:`, e.message);
+        logger.warn(`[im-router] Failed to delete sensitive message ${messageId}:`, { error: e instanceof Error ? e.message : String(e), stack: e instanceof Error ? e.stack : undefined });
       });
     }
   }
@@ -336,7 +339,7 @@ export class IMRouter {
     try {
       await this.bridge.chatAbort(run.sessionKey);
     } catch (e: any) {
-      console.warn(`[im-router] chatAbort failed for ${run.sessionKey}:`, e.message);
+      logger.warn(`[im-router] chatAbort failed for ${run.sessionKey}:`, { error: e instanceof Error ? e.message : String(e), stack: e instanceof Error ? e.stack : undefined });
     }
     this.activeRuns.delete(imKey);
     await adapter.sendText(msg.imUserId, '已取消当前任务。');
@@ -417,7 +420,7 @@ export class IMRouter {
       // 更新 Map 并持久化
       this.activeAgents.set(imKey, targetName);
       saveActiveAgents(this.activeAgents);
-      console.log(`[im-router] agentSwitch: imKey=${imKey}, set to ${targetName}, map size=${this.activeAgents.size}`);
+      logger.info(`[im-router] agentSwitch: imKey=${imKey}, set to ${targetName}, map size=${this.activeAgents.size}`);
 
       // 审计记录
       this.auditLogger?.log({
@@ -432,7 +435,7 @@ export class IMRouter {
       const displayName = (agent.identity as any)?.name || agent.name;
       await adapter.sendText(imUserId, `已切换到 ${displayName}。使用 /agent default 切回主助手。`);
     } catch (e: any) {
-      console.error(`[im-router] Agent switch error:`, e.message);
+      logger.error(`[im-router] Agent switch error:`, { error: e instanceof Error ? e.message : String(e), stack: e instanceof Error ? e.stack : undefined });
       await adapter.sendText(imUserId, '切换 Agent 失败，请稍后重试。');
     }
   }
@@ -471,22 +474,22 @@ export class IMRouter {
             try {
               await adapter.sendFile!(imUserId, filePath, fileName);
             } catch (firstErr) {
-              console.warn(`[im-router] sendFile first attempt failed for ${fileName}:`, firstErr);
+              logger.warn(`[im-router] sendFile first attempt failed for ${fileName}:`, { error: firstErr instanceof Error ? firstErr.message : String(firstErr), stack: firstErr instanceof Error ? firstErr.stack : undefined });
               await new Promise(r => setTimeout(r, 1000));
               await adapter.sendFile!(imUserId, filePath, fileName);
             }
-            console.log(`[im-router] Sent file via IM: ${fileName} (${(stat.size / 1024).toFixed(0)}KB)`);
+            logger.info(`[im-router] Sent file via IM: ${fileName} (${(stat.size / 1024).toFixed(0)}KB)`);
           } else {
             const sizeMB = (stat.size / 1024 / 1024).toFixed(1);
             await adapter.sendText(imUserId, `📎 文件 ${fileName} (${sizeMB}MB) 过大，请到 Web 端下载。`);
           }
         } catch (e: any) {
-          console.error(`[im-router] Failed to send file ${fileName}:`, e.message);
+          logger.error(`[im-router] Failed to send file ${fileName}:`, { error: e instanceof Error ? e.message : String(e), stack: e instanceof Error ? e.stack : undefined });
           await adapter.sendText(imUserId, `📎 文件 ${fileName} 发送失败，请到 Web 端下载。`);
         }
       }
     } catch (e: any) {
-      console.error('[im-router] sendNewOutputFiles error:', e.message);
+      logger.error('[im-router] sendNewOutputFiles error:', { error: e instanceof Error ? e.message : String(e), stack: e instanceof Error ? e.stack : undefined });
     }
   }
 
@@ -498,7 +501,7 @@ export class IMRouter {
   ): Promise<void> {
     const imKey = `${msg.channel}:${msg.imUserId}`;
     const agentName = this.activeAgents.get(imKey) || 'default';
-    console.log(`[im-router] routeToAgent: imKey=${imKey}, agentName=${agentName}, activeAgents size=${this.activeAgents.size}`);
+    logger.info(`[im-router] routeToAgent: imKey=${imKey}, agentName=${agentName}, activeAgents size=${this.activeAgents.size}`);
     const tenant = TenantEngineAdapter.forUser(this.bridge, userId);
     const agentId = tenant.agentId(agentName);
     const sessionId = `im-${msg.channel}-${msg.imUserId}`;
@@ -636,7 +639,7 @@ export class IMRouter {
     } catch (e: any) {
       clearTimeout(timeoutTimer);
       this.activeRuns.delete(imKey);
-      console.error(`[im-router] Agent call error for ${userId}:`, e.message);
+      logger.error(`[im-router] Agent call error for ${userId}:`, { error: e instanceof Error ? e.message : String(e), stack: e instanceof Error ? e.stack : undefined });
       await adapter.sendText(msg.imUserId, '处理消息时出错，请稍后重试。');
     }
   }

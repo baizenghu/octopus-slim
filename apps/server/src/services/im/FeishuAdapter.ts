@@ -9,6 +9,9 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as lark from '@larksuiteoapi/node-sdk';
 import type { IMAdapter, IMIncomingMessage } from './IMAdapter';
+import { createLogger } from '../../utils/logger';
+
+const logger = createLogger('FeishuAdapter');
 
 export class FeishuAdapter implements IMAdapter {
   readonly channel = 'feishu';
@@ -37,7 +40,7 @@ export class FeishuAdapter implements IMAdapter {
         try {
           await this.handleMessage(data);
         } catch (e: any) {
-          console.error('[feishu] Message handling error:', e.message);
+          logger.error('[feishu] Message handling error:', { error: e instanceof Error ? e.message : String(e), stack: e instanceof Error ? e.stack : undefined });
         }
       },
     });
@@ -50,13 +53,13 @@ export class FeishuAdapter implements IMAdapter {
 
     // eventDispatcher 作为 start() 的参数传入
     await this.wsClient.start({ eventDispatcher } as any);
-    console.log('[feishu] WebSocket connected');
+    logger.info('[feishu] WebSocket connected');
   }
 
   async stop(): Promise<void> {
     this.wsClient = null;
     this.processedMsgIds.clear();
-    console.log('[feishu] Adapter stopped');
+    logger.info('[feishu] Adapter stopped');
   }
 
   /** 发送文本消息，超长自动分段（2000 字符） */

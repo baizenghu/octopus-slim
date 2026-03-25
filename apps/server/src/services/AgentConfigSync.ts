@@ -14,6 +14,9 @@ import type { EngineAdapter } from './EngineAdapter';
 import { TenantEngineAdapter } from './TenantEngineAdapter';
 import type { WorkspaceManager } from '@octopus/workspace';
 import { getSoulTemplate, getMemoryTemplate } from './SoulTemplate';
+import { createLogger } from '../utils/logger';
+
+const logger = createLogger('AgentConfigSync');
 
 /**
  * 根据 toolsFilter（read/write/exec 三组）计算需要 deny 的文件/命令工具
@@ -108,7 +111,7 @@ export async function syncAgentToEngine(
     (config as any).agents.list = agentsList.filter((a: any) => a.id !== deleteId);
     if ((config as any).agents.list.length !== before) {
       changed = true;
-      console.log(`[AgentConfigSync] deleted agent entry: ${deleteId}`);
+      logger.info(`deleted agent entry: ${deleteId}`);
     }
   }
 
@@ -131,7 +134,7 @@ export async function syncAgentToEngine(
             delete entry.model;
           }
           changed = true;
-          console.log(`[AgentConfigSync] model: ${targetId} → ${newModel || '(global default)'}`);
+          logger.info(`model: ${targetId} → ${newModel || '(global default)'}`);
         }
       }
 
@@ -194,7 +197,7 @@ export async function syncAgentToEngine(
           entry.tools = newTools;
           if (!entry.tools.deny) delete entry.tools.deny;
           changed = true;
-          console.log(`[AgentConfigSync] tools: ${targetId} → profile=${newProfile}, alsoAllow=[${newAlsoAllow}], deny=[${newDeny.join(', ')}]`);
+          logger.info(`tools: ${targetId} → profile=${newProfile}, alsoAllow=[${newAlsoAllow}], deny=[${newDeny.join(', ')}]`);
         }
       }
 
@@ -210,21 +213,21 @@ export async function syncAgentToEngine(
         if (JSON.stringify(newSkills) !== JSON.stringify(currentSkills)) {
           (entry as any).skills = newSkills;
           changed = true;
-          console.log(`[AgentConfigSync] skills: ${targetId} → [${newSkills.join(', ')}]`);
+          logger.info(`skills: ${targetId} → [${newSkills.join(', ')}]`);
         }
 
         if (!hasSkills && !hasRunSkillDeny) {
           // 技能全部禁用 → deny run_skill
           entry.tools = { ...entry.tools, deny: [...currentDeny, 'run_skill'] };
           changed = true;
-          console.log(`[AgentConfigSync] skills disabled: ${targetId} → deny run_skill`);
+          logger.info(`skills disabled: ${targetId} → deny run_skill`);
         } else if (hasSkills && hasRunSkillDeny) {
           // 有技能权限 → 移除 deny（允许调用 run_skill）
           const newDeny = currentDeny.filter(t => t !== 'run_skill');
           entry.tools = { ...entry.tools, deny: newDeny.length > 0 ? newDeny : undefined };
           if (!entry.tools.deny) delete entry.tools.deny;
           changed = true;
-          console.log(`[AgentConfigSync] skills enabled: ${targetId} → removed run_skill deny`);
+          logger.info(`skills enabled: ${targetId} → removed run_skill deny`);
         }
       }
     }
@@ -240,14 +243,14 @@ export async function syncAgentToEngine(
         if (entry.heartbeat) {
           delete entry.heartbeat;
           changed = true;
-          console.log(`[AgentConfigSync] heartbeat deleted: ${targetId}`);
+          logger.info(`heartbeat deleted: ${targetId}`);
         }
       } else {
         const oldHb = JSON.stringify(entry.heartbeat);
         entry.heartbeat = opts.heartbeat;
         if (oldHb !== JSON.stringify(entry.heartbeat)) {
           changed = true;
-          console.log(`[AgentConfigSync] heartbeat updated: ${targetId} → every=${opts.heartbeat.every}`);
+          logger.info(`heartbeat updated: ${targetId} → every=${opts.heartbeat.every}`);
         }
       }
     }
@@ -280,7 +283,7 @@ export async function syncAgentToEngine(
     }
 
     if (changed) {
-      console.log(`[AgentConfigSync] allowAgents updated for user ${userId}, specialists: [${specialistIds.join(', ')}]`);
+      logger.info(`allowAgents updated for user ${userId}, specialists: [${specialistIds.join(', ')}]`);
     }
   }
 
@@ -347,9 +350,9 @@ export async function syncAgentToEngine(
     }
 
     await bridge.configApply(patch);
-    console.log(`[AgentConfigSync] config applied (incremental) for user ${userId}`);
+    logger.info(`config applied (incremental) for user ${userId}`);
   } else {
-    console.log(`[AgentConfigSync] no changes needed for user ${userId}`);
+    logger.info(`no changes needed for user ${userId}`);
   }
 }
 
@@ -367,7 +370,7 @@ async function setFileWithRetry(
     await bridge.agentFilesSet(nativeAgentId, fileName, content);
   } catch (e: any) {
     if (logPrefix === '[agents]') {
-      console.warn(`${logPrefix} agentFilesSet ${fileName} failed for ${nativeAgentId}, retrying in 1.5s:`, e.message);
+      logger.warn(`${logPrefix} agentFilesSet ${fileName} failed for ${nativeAgentId}, retrying in 1.5s:`, { message: e.message });
     }
     await new Promise(r => setTimeout(r, 1500));
     await bridge.agentFilesSet(nativeAgentId, fileName, content);
@@ -454,7 +457,7 @@ export async function ensureAndSyncNativeAgent(
       if (msg.includes('already exists')) {
         agentReady = true;
       } else {
-        console.error(`${logPrefix} agentsCreate failed for ${nativeAgentId}: ${msg}`);
+        logger.error(`${logPrefix} agentsCreate failed for ${nativeAgentId}: ${msg}`);
       }
     }
   } else {
@@ -474,12 +477,12 @@ export async function ensureAndSyncNativeAgent(
           agentReady = true;
           break;
         }
-        console.warn(`${logPrefix} agentsCreate attempt ${attempt + 1} failed for ${nativeAgentId}: ${msg}`);
+        logger.warn(`${logPrefix} agentsCreate attempt ${attempt + 1} failed for ${nativeAgentId}: ${msg}`);
         if (attempt < 2) await new Promise(r => setTimeout(r, 2000));
       }
     }
     if (!agentReady) {
-      console.error(`${logPrefix} syncToNative: agent ${nativeAgentId} creation failed after 3 attempts, skipping file sync`);
+      logger.error(`${logPrefix} syncToNative: agent ${nativeAgentId} creation failed after 3 attempts, skipping file sync`);
       return;
     }
   }
@@ -490,10 +493,10 @@ export async function ensureAndSyncNativeAgent(
   if (useCache && isNewAgent) {
     // chat.ts 模式：新建时无条件写 SOUL.md + MEMORY.md（不写 IDENTITY.md）
     await setFileWithRetry(bridge, nativeAgentId, 'SOUL.md', getSoulTemplate(dataRoot, agentName), logPrefix).catch((e: any) => {
-      console.error(`${logPrefix} agentFilesSet SOUL.md failed for ${nativeAgentId}:`, e.message);
+      logger.error(`${logPrefix} agentFilesSet SOUL.md failed for ${nativeAgentId}:`, { message: e.message });
     });
     await setFileWithRetry(bridge, nativeAgentId, 'MEMORY.md', getMemoryTemplate(dataRoot, agentName), logPrefix).catch((e: any) => {
-      console.error(`${logPrefix} agentFilesSet MEMORY.md failed for ${nativeAgentId}:`, e.message);
+      logger.error(`${logPrefix} agentFilesSet MEMORY.md failed for ${nativeAgentId}:`, { message: e.message });
     });
   } else if (!useCache) {
     // agents.ts 模式：条件写 IDENTITY.md + SOUL.md + MEMORY.md
@@ -511,27 +514,27 @@ export async function ensureAndSyncNativeAgent(
     }
     if (identityParts.length > 0) {
       await setFileWithRetry(bridge, nativeAgentId, 'IDENTITY.md', identityParts.join('\n'), logPrefix).catch((e: any) => {
-        console.error(`${logPrefix} agentFilesSet IDENTITY.md ultimately failed for ${nativeAgentId}:`, e.message);
+        logger.error(`${logPrefix} agentFilesSet IDENTITY.md ultimately failed for ${nativeAgentId}:`, { message: e.message });
       });
     }
 
     // SOUL.md：有明确的 systemPrompt 时写入；否则仅在文件不存在时用模板填充
     if (systemPrompt) {
       await setFileWithRetry(bridge, nativeAgentId, 'SOUL.md', systemPrompt, logPrefix).catch((e: any) => {
-        console.error(`${logPrefix} agentFilesSet SOUL.md ultimately failed for ${nativeAgentId}:`, e.message);
+        logger.error(`${logPrefix} agentFilesSet SOUL.md ultimately failed for ${nativeAgentId}:`, { message: e.message });
       });
     } else if (!isUpdate) {
       try {
         const existing = await bridge.agentFilesGet(nativeAgentId, 'SOUL.md') as any;
         if (!existing?.content) {
           await setFileWithRetry(bridge, nativeAgentId, 'SOUL.md', getSoulTemplate(dataRoot, agentName), logPrefix).catch((e: any) => {
-            console.error(`${logPrefix} agentFilesSet SOUL.md ultimately failed for ${nativeAgentId}:`, e.message);
+            logger.error(`${logPrefix} agentFilesSet SOUL.md ultimately failed for ${nativeAgentId}:`, { message: e.message });
           });
         }
       } catch {
         // 文件不存在，用模板填充
         await setFileWithRetry(bridge, nativeAgentId, 'SOUL.md', getSoulTemplate(dataRoot, agentName), logPrefix).catch((e: any) => {
-          console.error(`${logPrefix} agentFilesSet SOUL.md ultimately failed for ${nativeAgentId}:`, e.message);
+          logger.error(`${logPrefix} agentFilesSet SOUL.md ultimately failed for ${nativeAgentId}:`, { message: e.message });
         });
       }
     }
@@ -543,13 +546,13 @@ export async function ensureAndSyncNativeAgent(
         if (!existing?.content) {
           const memDisplayName = identity?.name || agentName;
           await setFileWithRetry(bridge, nativeAgentId, 'MEMORY.md', getMemoryTemplate(dataRoot, memDisplayName), logPrefix).catch((e: any) => {
-            console.error(`${logPrefix} agentFilesSet MEMORY.md ultimately failed for ${nativeAgentId}:`, e.message);
+            logger.error(`${logPrefix} agentFilesSet MEMORY.md ultimately failed for ${nativeAgentId}:`, { message: e.message });
           });
         }
       } catch {
         const memDisplayName = identity?.name || agentName;
         await setFileWithRetry(bridge, nativeAgentId, 'MEMORY.md', getMemoryTemplate(dataRoot, memDisplayName), logPrefix).catch((e: any) => {
-          console.error(`${logPrefix} agentFilesSet MEMORY.md ultimately failed for ${nativeAgentId}:`, e.message);
+          logger.error(`${logPrefix} agentFilesSet MEMORY.md ultimately failed for ${nativeAgentId}:`, { message: e.message });
         });
       }
     }

@@ -13,6 +13,9 @@ import JSON5 from 'json5';
 import { deepMerge } from '../utils/deep-merge';
 import { ConfigBatcher } from '../utils/config-batcher';
 import { getRuntimeConfig } from '../config';
+import { createLogger } from '../utils/logger';
+
+const logger = createLogger('EngineAdapter');
 
 // 全局 Symbol，与引擎 server-plugins.ts 中一致
 const FALLBACK_GATEWAY_CONTEXT_KEY = Symbol.for("octopus.fallbackGatewayContextState");
@@ -102,15 +105,15 @@ export class EngineAdapter extends EventEmitter {
       }
       if (onHbEvent) {
         this.unsubHeartbeatEvents = onHbEvent((evt: any) => {
-          console.log('[engine] heartbeat event received:', JSON.stringify(evt).slice(0, 500));
+          logger.info('heartbeat event received:', { event: JSON.stringify(evt).slice(0, 500) });
           this.emit('heartbeat', evt);
         });
-        console.log('[engine] Heartbeat event listener registered');
+        logger.info('Heartbeat event listener registered');
       } else {
-        console.warn('[engine] onHeartbeatEvent not found in engine modules');
+        logger.warn('onHeartbeatEvent not found in engine modules');
       }
     } catch (e: any) {
-      console.warn('[engine] Heartbeat event listener failed:', e.message);
+      logger.warn('Heartbeat event listener failed:', { error: e instanceof Error ? e.message : String(e), stack: e instanceof Error ? e.stack : undefined });
     }
 
     // 订阅 cron 事件（通过 fallback context 拿到 cron service）
@@ -125,14 +128,14 @@ export class EngineAdapter extends EventEmitter {
             this.emit('cron_finished', evt);
           }
         };
-        console.log('[engine] Cron event listener registered');
+        logger.info('Cron event listener registered');
       }
     } catch (e: any) {
-      console.warn('[engine] Cron event listener failed:', e.message);
+      logger.warn('Cron event listener failed:', { error: e instanceof Error ? e.message : String(e), stack: e instanceof Error ? e.stack : undefined });
     }
 
     this.initialized = true;
-    console.log(`[engine] EngineAdapter initialized (single-process, port=${port})`);
+    logger.info(`EngineAdapter initialized (single-process, port=${port})`);
   }
 
   async shutdown(): Promise<void> {
@@ -150,7 +153,7 @@ export class EngineAdapter extends EventEmitter {
     }
     this.configBatcher.destroy();
     this.initialized = false;
-    console.log('[engine] EngineAdapter shut down');
+    logger.info('EngineAdapter shut down');
   }
 
   get isConnected(): boolean {
@@ -209,7 +212,7 @@ export class EngineAdapter extends EventEmitter {
             // agent handler 的第二次 respond（异步执行完成/失败后）。
             if (!ok && method === 'agent') {
               const runId = (payload as any)?.runId || (params as any)?.idempotencyKey;
-              console.error(`[engine] agent run ${runId} async error:`, error?.message);
+              logger.error(`agent run ${runId} async error:`, { error: error?.message });
               this.emit('_agent_async_error', { runId, error: error?.message ?? 'unknown error' });
             }
             return;
@@ -321,7 +324,7 @@ export class EngineAdapter extends EventEmitter {
     const asyncErrorHandler = (data: { runId: string; error: string }) => {
       const effectiveRunId = serverRunId || idempotencyKey;
       if (data.runId !== effectiveRunId) return;
-      console.error('[engine] agent async failure, synthesizing error event:', data.error);
+      logger.error('agent async failure, synthesizing error event:', { error: data.error });
       // 合成 lifecycle error 事件，让 listener 能收到结束信号
       emitAgentEvent({
         runId: effectiveRunId,
@@ -491,7 +494,7 @@ export class EngineAdapter extends EventEmitter {
             const delay = e.message?.includes('rate limit')
               ? (parseInt(e.message.match(/retry after (\d+)s/)?.[1] || '10', 10) * 1000 + 1000)
               : (500 * (attempt + 1));
-            console.warn(`[engine] configApplyFull attempt ${attempt + 1} failed: ${e.message}, retrying in ${delay}ms`);
+            logger.warn(`configApplyFull attempt ${attempt + 1} failed: ${e.message}, retrying in ${delay}ms`);
             await new Promise(r => setTimeout(r, delay));
             continue;
           }
@@ -516,7 +519,7 @@ export class EngineAdapter extends EventEmitter {
             const delay = e.message?.includes('rate limit')
               ? (parseInt(e.message.match(/retry after (\d+)s/)?.[1] || '10', 10) * 1000 + 1000)
               : (500 * (attempt + 1));
-            console.warn(`[engine] configApply attempt ${attempt + 1} failed: ${e.message}, retrying in ${delay}ms`);
+            logger.warn(`configApply attempt ${attempt + 1} failed: ${e.message}, retrying in ${delay}ms`);
             await new Promise(r => setTimeout(r, delay));
             continue;
           }

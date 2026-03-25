@@ -1,5 +1,8 @@
 import { EventEmitter } from 'events';
 import { getRuntimeConfig } from '../config';
+import { createLogger } from '../utils/logger';
+
+const logger = createLogger('SecurityMonitor');
 
 interface SecurityEvent {
   type: 'login_failure_burst' | 'suspicious_api_pattern' | 'sandbox_anomaly' | 'auth_bypass_attempt';
@@ -112,7 +115,7 @@ export class SecurityMonitor extends EventEmitter {
 
     // 记录到日志
     const prefix = event.severity === 'critical' ? 'CRITICAL' : 'WARNING';
-    console.warn(`[SecurityMonitor] ${prefix}: ${event.message}`);
+    logger.warn(`${prefix}: ${event.message}`);
 
     // 发出事件（可被外部监听）
     this.emit('alert', event);
@@ -142,7 +145,7 @@ export class SecurityMonitor extends EventEmitter {
         }),
       });
       if (!resp.ok) {
-        console.warn(`[SecurityMonitor] IM 告警发送失败: ${resp.status}`);
+        logger.warn(`IM 告警发送失败: ${resp.status}`);
       }
     } catch {
       // 静默失败，不阻塞主流程

@@ -15,6 +15,9 @@ import * as crypto from 'crypto';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { getUploadUrl, type WeixinApiOptions } from './api';
+import { createLogger } from '../../../utils/logger';
+
+const logger = createLogger('cdn');
 
 // ---------------------------------------------------------------------------
 // AES-128-ECB crypto (from aes-ecb.ts)
@@ -92,7 +95,7 @@ async function uploadBufferToCdn(params: {
       lastError = err;
       if (err instanceof Error && err.message.includes('client error')) throw err;
       if (attempt < UPLOAD_MAX_RETRIES) {
-        console.warn(`[weixin-cdn] upload attempt ${attempt} failed, retrying in ${RETRY_DELAY_MS}ms...`);
+        logger.warn(`[weixin-cdn] upload attempt ${attempt} failed, retrying in ${RETRY_DELAY_MS}ms...`);
         await new Promise(r => setTimeout(r, RETRY_DELAY_MS));
       }
     }
@@ -278,7 +281,7 @@ export async function uploadAndSendFile(opts: {
     } catch (e: any) {
       if (e.message.includes('error')) throw e;
     }
-    console.log(`[wechat-cdn] sendMessage item OK: type=${item.type}, response: ${resBody.slice(0, 300)}`);
+    logger.info(`[wechat-cdn] sendMessage item OK: type=${item.type}, response: ${resBody.slice(0, 300)}`);
   }
 
   return { messageId: clientId };

@@ -8,6 +8,9 @@
 import { MCPRegistry, MCPExecutor } from '@octopus/mcp';
 import type { MCPServerConfig } from '@octopus/mcp';
 import type { AppPrismaClient } from '../types/prisma';
+import { createLogger } from '../utils/logger';
+
+const logger = createLogger('MCPTools');
 
 /** 分隔符（双下划线，避免与工具名内单下划线冲突） */
 const SEP = '__';
@@ -130,11 +133,11 @@ export async function getMCPToolsForUser(
           });
         }
       } catch (err: any) {
-        console.warn(`[mcp-tools] Failed to load tools from ${row.name} (${row.id}):`, err.message);
+        logger.warn(`Failed to load tools from ${row.name} (${row.id}):`, { error: err instanceof Error ? err.message : String(err), stack: err instanceof Error ? err.stack : undefined });
       }
     }
   } catch (err: any) {
-    console.error('[mcp-tools] Failed to query MCP servers:', err.message);
+    logger.error('Failed to query MCP servers:', { error: err instanceof Error ? err.message : String(err), stack: err instanceof Error ? err.stack : undefined });
   }
 
   return tools;

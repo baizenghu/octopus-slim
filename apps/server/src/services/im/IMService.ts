@@ -14,6 +14,9 @@ import type { AuthService } from '@octopus/auth';
 import type { AppPrismaClient } from '../../types/prisma';
 import type { WorkspaceManager } from '@octopus/workspace';
 import type { AuditLogger } from '@octopus/audit';
+import { createLogger } from '../../utils/logger';
+
+const logger = createLogger('IMService');
 
 export class IMService {
   private adapters: IMAdapter[] = [];
@@ -54,9 +57,9 @@ export class IMService {
       try {
         await feishu.start();
         this.adapters.push(feishu);
-        console.log('   IM: Feishu adapter started');
+        logger.info('   IM: Feishu adapter started');
       } catch (e: any) {
-        console.error('   IM: Feishu adapter failed to start:', e.message);
+        logger.error('   IM: Feishu adapter failed to start:', { error: e instanceof Error ? e.message : String(e), stack: e instanceof Error ? e.stack : undefined });
       }
     }
 
@@ -96,7 +99,7 @@ export class IMService {
         sent++;
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
-        console.error(`[im-service] Failed to send to ${binding.channel}/${binding.imUserId}: ${msg}`);
+        logger.error(`[im-service] Failed to send to ${binding.channel}/${binding.imUserId}: ${msg}`);
       }
     }
 
@@ -108,7 +111,7 @@ export class IMService {
         sent += weixinSent;
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
-        console.error(`[im-service] Failed to send to wechat/${userId}: ${msg}`);
+        logger.error(`[im-service] Failed to send to wechat/${userId}: ${msg}`);
       }
     }
 
@@ -139,7 +142,7 @@ export class IMService {
         }
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
-        console.error(`[im-service] Failed to send file to ${binding.channel}/${binding.imUserId}: ${msg}`);
+        logger.error(`[im-service] Failed to send file to ${binding.channel}/${binding.imUserId}: ${msg}`);
       }
     }
 
@@ -150,7 +153,7 @@ export class IMService {
         sent += weixinSent;
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
-        console.error(`[im-service] Failed to send file to wechat/${userId}: ${msg}`);
+        logger.error(`[im-service] Failed to send file to wechat/${userId}: ${msg}`);
       }
     }
 

@@ -12,6 +12,9 @@ import type { WeixinAccount } from './weixin/account';
 import { loadSyncBuf, saveSyncBuf } from './weixin/account';
 import { getUpdates, sendTextMessage, markdownToPlainText, splitText } from './weixin/api';
 import { uploadAndSendFile } from './weixin/cdn';
+import { createLogger } from '../../utils/logger';
+
+const logger = createLogger('WeixinAdapter');
 
 function sleep(ms: number): Promise<void> {
   return new Promise(r => setTimeout(r, ms));
@@ -42,20 +45,20 @@ export class WeixinAdapter implements IMAdapter {
     this.running = true;
     this.abortController = new AbortController();
     this.pollLoop();
-    console.log(`[wechat] Long-poll started for user ${this.octopusUserId}`);
+    logger.info(`[wechat] Long-poll started for user ${this.octopusUserId}`);
   }
 
   async stop(): Promise<void> {
     this.running = false;
     this.abortController?.abort();
     this.processedMsgIds.clear();
-    console.log(`[wechat] Adapter stopped for user ${this.octopusUserId}`);
+    logger.info(`[wechat] Adapter stopped for user ${this.octopusUserId}`);
   }
 
   async sendText(imUserId: string, text: string): Promise<void> {
     const contextToken = this.contextTokens.get(imUserId);
     if (!contextToken) {
-      console.warn(`[wechat] 无法回复 ${imUserId}，缺少 contextToken（需等待用户发一条消息）`);
+      logger.warn(`[wechat] 无法回复 ${imUserId}，缺少 contextToken（需等待用户发一条消息）`);
       return;
     }
     const plainText = markdownToPlainText(text);
@@ -79,7 +82,7 @@ export class WeixinAdapter implements IMAdapter {
         await this.sendText(imUserId, text);
         sent++;
       } catch (e: any) {
-        console.error(`[wechat] broadcastText failed for ${imUserId}: ${e.message}`);
+        logger.error(`[wechat] broadcastText failed for ${imUserId}: ${e.message}`, { error: e instanceof Error ? e.message : String(e), stack: e instanceof Error ? e.stack : undefined });
       }
     }
     return sent;
@@ -93,7 +96,7 @@ export class WeixinAdapter implements IMAdapter {
         await this.sendFile(imUserId, filePath, fileName);
         sent++;
       } catch (e: any) {
-        console.error(`[wechat] broadcastFile failed for ${imUserId}: ${e.message}`);
+        logger.error(`[wechat] broadcastFile failed for ${imUserId}: ${e.message}`, { error: e instanceof Error ? e.message : String(e), stack: e instanceof Error ? e.stack : undefined });
       }
     }
     return sent;
@@ -110,7 +113,7 @@ export class WeixinAdapter implements IMAdapter {
     if (!contextToken) {
       throw new Error(`无法发送文件给 ${imUserId}，缺少 contextToken`);
     }
-    console.log(`[wechat] sendFile: ${_fileName} → ${imUserId}`);
+    logger.info(`[wechat] sendFile: ${_fileName} → ${imUserId}`);
     await uploadAndSendFile({
       filePath,
       to: imUserId,
@@ -118,7 +121,7 @@ export class WeixinAdapter implements IMAdapter {
       cdnBaseUrl: this.account.cdnBaseUrl,
       contextToken,
     });
-    console.log(`[wechat] sendFile OK: ${_fileName}`);
+    logger.info(`[wechat] sendFile OK: ${_fileName}`);
   }
 
   // --- 内部方法 ---
@@ -135,7 +138,7 @@ export class WeixinAdapter implements IMAdapter {
 
         // Session 过期（errcode -14）
         if (result.errcode === -14) {
-          console.error(`[wechat] Session 已过期 (user: ${this.octopusUserId})，请重新扫码绑定`);
+          logger.error(`[wechat] Session 已过期 (user: ${this.octopusUserId})，请重新扫码绑定`);
           await sleep(3600000); // 暂停 1 小时
           continue;
         }
@@ -176,10 +179,10 @@ export class WeixinAdapter implements IMAdapter {
         this.retryCount++;
         if (this.retryCount <= 3) {
           const wait = Math.min(2000 * Math.pow(2, this.retryCount), 30000);
-          console.warn(`[wechat] 连接断开，${wait / 1000}s 后重试 (${this.retryCount}/3)`);
+          logger.warn(`[wechat] 连接断开，${wait / 1000}s 后重试 (${this.retryCount}/3)`);
           await sleep(wait);
         } else {
-          console.error('[wechat] 连接失败，已重试3次，30s 后继续');
+          logger.error('[wechat] 连接失败，已重试3次，30s 后继续');
           await sleep(30000);
           this.retryCount = 0;
         }

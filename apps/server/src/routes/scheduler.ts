@@ -18,6 +18,9 @@ import { getRuntimeConfig } from '../config';
 import { EngineAdapter } from '../services/EngineAdapter';
 import type { EngineAdapter as BridgeType } from '../services/EngineAdapter';
 import { syncAgentToEngine } from '../services/AgentConfigSync';
+import { createLogger } from '../utils/logger';
+
+const logger = createLogger('scheduler');
 
 function normalizeHeartbeatContent(content: string): string {
   return content.trim();
@@ -208,9 +211,9 @@ export function createSchedulerRouter(
         // 通过 RPC 写 HEARTBEAT.md 到原生 agent 目录
         try {
           await writeHeartbeatToAgent(bridge, nativeAgentId, renderHeartbeatFileContent(content));
-          console.log(`[scheduler] HEARTBEAT.md written for ${nativeAgentId}`);
+          logger.info(`[scheduler] HEARTBEAT.md written for ${nativeAgentId}`);
         } catch (e: any) {
-          console.error(`[scheduler] writeHeartbeatToAgent failed for ${nativeAgentId}:`, e.message);
+          logger.error(`[scheduler] writeHeartbeatToAgent failed for ${nativeAgentId}:`, { error: e instanceof Error ? e.message : String(e) });
         }
 
         // 通过 AgentConfigSync 更新 heartbeat 配置（复用 read-diff-write 逻辑，避免 configApplyFull）
@@ -334,7 +337,7 @@ export function createSchedulerRouter(
             await writeHeartbeatToAgent(bridge, nextNativeAgentId, renderHeartbeatFileContent(newContent));
           }
         } catch (e: any) {
-          console.error(`[scheduler] HEARTBEAT.md write failed during update:`, e.message);
+          logger.error(`[scheduler] HEARTBEAT.md write failed during update:`, { error: e instanceof Error ? e.message : String(e) });
         }
 
         // every / enabled / 绑定 agent 变了 → configApply
@@ -431,7 +434,7 @@ export function createSchedulerRouter(
           try {
             await clearHeartbeatFromAgent(bridge, nativeAgentId);
           } catch (e: any) {
-            console.error(`[scheduler] clearHeartbeatFromAgent failed for ${nativeAgentId}:`, e.message);
+            logger.error(`[scheduler] clearHeartbeatFromAgent failed for ${nativeAgentId}:`, { error: e instanceof Error ? e.message : String(e) });
           }
 
           // 通过 AgentConfigSync 删除 heartbeat 配置（避免 configApplyFull）
@@ -528,13 +531,13 @@ export function createSchedulerRouter(
             ? `✅ 心跳巡检正常\nAgent: ${agent.name}\n时间: ${new Date().toLocaleString('zh-CN')}`
             : `🚨 心跳巡检告警\nAgent: ${agent.name}\n时间: ${new Date().toLocaleString('zh-CN')}\n\n${resultSummary}`;
           imService.sendToUser(user.id, alertText).then(sent => {
-            if (sent > 0) console.log(`[scheduler] Heartbeat result sent to ${user.id} via IM (${sent} channel(s))`);
-          }).catch(e => console.warn(`[scheduler] IM send failed: ${e.message}`));
+            if (sent > 0) logger.info(`[scheduler] Heartbeat result sent to ${user.id} via IM (${sent} channel(s))`);
+          }).catch((e: any) => logger.warn(`[scheduler] IM send failed: ${e instanceof Error ? e.message : String(e)}`));
         }
 
         // 清理隔离 session
         bridge.sessionsDelete(sessionKey).catch((e: any) => {
-          console.warn(`[scheduler] Failed to cleanup heartbeat session ${sessionKey}: ${e.message}`);
+          logger.warn(`[scheduler] Failed to cleanup heartbeat session ${sessionKey}: ${e instanceof Error ? e.message : String(e)}`);
         });
         await prisma.scheduledTask.update({
           where: { id: dbTask.id },
@@ -608,7 +611,7 @@ export function createSchedulerRouter(
         }));
       res.json({ reminders: dueReminders });
     } catch (err: any) {
-      console.error('[scheduler] Reminders query error:', err.message);
+      logger.error('[scheduler] Reminders query error:', { error: err instanceof Error ? err.message : String(err) });
       res.json({ reminders: [] });
     }
   });
@@ -631,7 +634,7 @@ export function createSchedulerRouter(
       res.json({ ok: true });
     } catch (err: any) {
       // 可能已被自动删除，静默处理
-      console.warn('[scheduler] Dismiss error (ignored):', err.message);
+      logger.warn('[scheduler] Dismiss error (ignored):', { error: err instanceof Error ? err.message : String(err) });
       res.json({ ok: true });
     }
   });

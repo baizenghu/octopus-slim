@@ -6,6 +6,9 @@
  */
 
 import { saveWeixinAccount, type WeixinAccount } from './account';
+import { createLogger } from '../../../utils/logger';
+
+const logger = createLogger('login');
 
 export const DEFAULT_BASE_URL = 'https://ilinkai.weixin.qq.com';
 export const DEFAULT_CDN_BASE_URL = 'https://novac2c.cdn.weixin.qq.com/c2c';
@@ -142,19 +145,19 @@ export async function weixinLoginCLI(opts: {
 }): Promise<void> {
   const baseUrl = opts.baseUrl || DEFAULT_BASE_URL;
 
-  console.log('[微信登录] 正在获取二维码...');
+  logger.info('[微信登录] 正在获取二维码...');
   const qr = await fetchQRCode(baseUrl);
   if (!qr.qrcode_img_content) throw new Error('服务器未返回二维码 URL');
 
-  console.log(`\n二维码链接: ${qr.qrcode_img_content}\n`);
+  logger.info(`二维码链接: ${qr.qrcode_img_content}`);
   try {
     const qrt = await import('qrcode-terminal');
     qrt.default.generate(qr.qrcode_img_content, { small: true }, (text: string) => {
-      console.log(text);
+      logger.info(text);
     });
   } catch { /* qrcode-terminal not available */ }
 
-  console.log('请使用微信扫描上方二维码...\n');
+  logger.info('请使用微信扫描上方二维码...');
 
   const deadline = Date.now() + LOGIN_TIMEOUT_MS;
   let scannedPrinted = false;
@@ -168,7 +171,7 @@ export async function weixinLoginCLI(opts: {
         break;
       case 'scaned':
         if (!scannedPrinted) {
-          console.log('\n👀 已扫码，请在微信上确认...');
+          logger.info('已扫码，请在微信上确认...');
           scannedPrinted = true;
         }
         break;
@@ -185,9 +188,7 @@ export async function weixinLoginCLI(opts: {
           weixinUserId: status.ilink_bot_id,
           loginAt: new Date().toISOString(),
         });
-        console.log(`\n✅ 微信连接成功！`);
-        console.log(`   Bot ID: ${status.ilink_bot_id}`);
-        console.log(`   Bound to user: ${opts.userId}`);
+        logger.info('微信连接成功', { botId: status.ilink_bot_id, userId: opts.userId });
         return;
       }
     }

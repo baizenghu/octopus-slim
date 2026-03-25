@@ -12,6 +12,9 @@ import type { EngineAdapter } from '../services/EngineAdapter';
 import { TenantEngineAdapter } from '../services/TenantEngineAdapter';
 import type { WorkspaceManager } from '@octopus/workspace';
 import { ensureAndSyncNativeAgent } from '../services/AgentConfigSync';
+import { createLogger } from '../utils/logger';
+
+const logger = createLogger('chat-internal');
 
 export function createChatInternalRouter(
   bridge: EngineAdapter,
@@ -21,7 +24,7 @@ export function createChatInternalRouter(
   const router = Router();
   const token = process.env['INTERNAL_API_TOKEN'];
   if (!token) {
-    console.error('[chat-internal] INTERNAL_API_TOKEN 未设置，内部 Chat API 已禁用');
+    logger.error('[chat-internal] INTERNAL_API_TOKEN 未设置，内部 Chat API 已禁用');
     router.use((_req, res) => {
       res.status(503).json({ error: 'Internal Chat API disabled' });
     });
@@ -102,13 +105,13 @@ export function createChatInternalRouter(
         },
         () => {}, // 不处理流式事件
       ).catch((err: any) => {
-        console.error(`[chat-internal] callAgent failed for ${userId}:`, err.message);
+        logger.error(`[chat-internal] callAgent failed for ${userId}:`, { error: err instanceof Error ? err.message : String(err) });
       });
 
-      console.log(`[chat-internal] injected message to ${sessionKey} for ${userId}`);
+      logger.info(`[chat-internal] injected message to ${sessionKey} for ${userId}`);
       res.json({ success: true, sessionKey });
     } catch (err: any) {
-      console.error(`[chat-internal] inject failed for ${userId}:`, err.message);
+      logger.error(`[chat-internal] inject failed for ${userId}:`, { error: err instanceof Error ? err.message : String(err) });
       res.status(500).json({ error: 'Inject failed' });
     }
   });

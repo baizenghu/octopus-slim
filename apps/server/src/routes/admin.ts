@@ -21,8 +21,11 @@ import { getRuntimeConfig } from '../config';
 import { EngineAdapter } from '../services/EngineAdapter';
 import { TenantEngineAdapter } from '../services/TenantEngineAdapter';
 import { validatePassword } from '../utils/password';
+import { createLogger } from '../utils/logger';
 
 import type { AppPrismaClient } from '../types/prisma';
+
+const logger = createLogger('admin');
 
 export function createAdminRouter(
   authService: AuthService,
@@ -143,7 +146,7 @@ export function createAdminRouter(
         { username, email, displayName: displayName || username, department: department || '' },
         hashedPassword,
       );
-      console.log(`[admin] User '${username}' created. MockLDAP registered: ${registered}`);
+      logger.info(`[admin] User '${username}' created. MockLDAP registered: ${registered}`);
     } catch (err: any) {
       next(err);
     }
@@ -252,7 +255,7 @@ export function createAdminRouter(
             }
           }
         } catch (e: any) {
-          console.error(`[admin] Cron cleanup failed for ${id}:`, e.message);
+          logger.error(`[admin] Cron cleanup failed for ${id}:`, { error: e instanceof Error ? e.message : String(e) });
         }
       }
 
@@ -299,12 +302,12 @@ export function createAdminRouter(
           const names = containers.split('\n').filter(Boolean);
           for (const name of names) {
             execFileSync('docker', ['rm', '-f', name], { timeout: 10000 });
-            console.log(`[admin] Removed sandbox container: ${name}`);
+            logger.info(`[admin] Removed sandbox container: ${name}`);
           }
-          console.log(`[admin] Cleaned ${names.length} sandbox container(s) for ${id}`);
+          logger.info(`[admin] Cleaned ${names.length} sandbox container(s) for ${id}`);
         }
       } catch (e: any) {
-        console.warn(`[admin] Failed to cleanup sandbox containers for ${id}:`, e.message);
+        logger.warn(`[admin] Failed to cleanup sandbox containers for ${id}:`, { error: e instanceof Error ? e.message : String(e) });
       }
 
       // ── 清理数据库关联记录 ──
@@ -327,12 +330,12 @@ export function createAdminRouter(
       if (workspaceManager) {
         try {
           await workspaceManager.deleteWorkspace(id);
-          console.log(`[admin] Workspace deleted for ${id}`);
+          logger.info(`[admin] Workspace deleted for ${id}`);
         } catch (e: any) {
-          console.error(`[admin] Workspace cleanup failed for ${id}:`, e.message);
+          logger.error(`[admin] Workspace cleanup failed for ${id}:`, { error: e instanceof Error ? e.message : String(e) });
         }
       } else {
-        console.warn(`[admin] workspaceManager not available, skipping workspace cleanup for ${id}`);
+        logger.warn(`[admin] workspaceManager not available, skipping workspace cleanup for ${id}`);
       }
 
       // ── 延迟清理 .octopus-state/agents/ 目录（等原生 gateway 异步处理完成） ──
@@ -347,7 +350,7 @@ export function createAdminRouter(
             const stateDir = path.join(stateBase, nid);
             try {
               await rm(stateDir, { recursive: true, force: true });
-              console.log(`[admin] Cleaned state dir: ${stateDir}`);
+              logger.info(`[admin] Cleaned state dir: ${stateDir}`);
             } catch { }
           }
         }, 2000);
@@ -370,14 +373,14 @@ export function createAdminRouter(
               }
             }
             await bridge.configApplyFull(configRaw);
-            console.log(`[admin] Removed ${agentsList.length - filtered.length} agent(s) from octopus.json for ${id}`);
+            logger.info(`[admin] Removed ${agentsList.length - filtered.length} agent(s) from octopus.json for ${id}`);
           }
         } catch (e: any) {
-          console.error(`[admin] Failed to clean octopus.json for ${id}:`, e.message);
+          logger.error(`[admin] Failed to clean octopus.json for ${id}:`, { error: e instanceof Error ? e.message : String(e) });
         }
       }
 
-      console.log(`[admin] User '${userToDelete.username}' deleted (${userAgents.length} agents cleaned)`);
+      logger.info(`[admin] User '${userToDelete.username}' deleted (${userAgents.length} agents cleaned)`);
       res.json({ message: 'User deleted' });
     } catch (err: any) {
       if (err.code === 'P2025') {

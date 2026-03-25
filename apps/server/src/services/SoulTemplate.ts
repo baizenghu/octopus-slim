@@ -11,6 +11,9 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { createLogger } from '../utils/logger';
+
+const logger = createLogger('SoulTemplate');
 
 // 内存缓存：文件路径 → { content, mtime }
 const cache = new Map<string, { content: string; mtime: number }>();
@@ -126,7 +129,7 @@ export function ensureAgentTemplates(dataRoot: string): void {
     const filePath = path.join(dir, name);
     if (!fs.existsSync(filePath)) {
       fs.writeFileSync(filePath, content, 'utf-8');
-      console.log(`[agent-template] 已生成默认模板: ${name}`);
+      logger.info(`已生成默认模板: ${name}`);
     }
   }
 }

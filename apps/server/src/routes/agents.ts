@@ -21,8 +21,11 @@ import { EngineAdapter } from '../services/EngineAdapter';
 import { syncAgentToEngine, ensureAndSyncNativeAgent } from '../services/AgentConfigSync';
 import { invalidatePromptCache } from '../services/SystemPromptBuilder';
 import { createAvatarUpload, mimeToExt } from '../utils/avatar';
+import { createLogger } from '../utils/logger';
 
 import type { AppPrismaClient } from '../types/prisma';
+
+const logger = createLogger('agents');
 
 /** 过滤 skillsFilter：只保留 DB 中 enabled=true 的 skill */
 async function filterEnabledSkills(prisma: AppPrismaClient, skillsFilter: string[]): Promise<string[]> {
@@ -105,7 +108,7 @@ export function createAgentsRouter(
         const raw = await readFile(TOOLS_CACHE_PATH, 'utf8');
         cachedTools = JSON.parse(raw);
       } catch {
-        console.warn('[agents] tools-cache.json not found, skipping cached tools');
+        logger.warn('[agents] tools-cache.json not found, skipping cached tools');
       }
 
       // 3. 从 DB 获取该用户的 personal MCP 工具名
@@ -153,14 +156,14 @@ export function createAgentsRouter(
       const nativeCount = toolsFilter?.length || 0;
       if (nativeCount === 0 && mcpToolCount === 0) {
         await bridge.agentFilesSet(nativeAgentId, 'TOOLS.md', '# 可用工具\n\n当前未配置任何工具。\n');
-        console.log(`[agents] TOOLS.md cleared for ${nativeAgentId} (no tools)`);
+        logger.info(`[agents] TOOLS.md cleared for ${nativeAgentId} (no tools)`);
         return;
       }
 
       await bridge.agentFilesSet(nativeAgentId, 'TOOLS.md', lines.join('\n'));
-      console.log(`[agents] TOOLS.md synced for ${nativeAgentId} (native: ${nativeCount}, mcp: ${mcpToolCount})`);
+      logger.info(`[agents] TOOLS.md synced for ${nativeAgentId} (native: ${nativeCount}, mcp: ${mcpToolCount})`);
     } catch (e: any) {
-      console.error(`[agents] syncToolsMd failed for ${agentName}:`, e.message);
+      logger.error(`[agents] syncToolsMd failed for ${agentName}:`, { error: e instanceof Error ? e.message : String(e) });
     }
   }
 
@@ -206,7 +209,7 @@ export function createAgentsRouter(
     // 首次创建 default agent 时同步 TOOLS.md（包含原生工具 + MCP 工具）
     const defaultToolsFilter = ['read', 'write', 'exec'];
     syncToolsMd(userId, 'default', defaultMcpFilter, defaultToolsFilter).catch((e: any) =>
-      console.error('[agents] syncToolsMd for new default agent failed:', e.message),
+      logger.error('[agents] syncToolsMd for new default agent failed:', { error: e instanceof Error ? e.message : String(e) }),
     );
   }
 
@@ -275,7 +278,7 @@ export function createAgentsRouter(
         // 创建时同步 TOOLS.md（原生工具 + MCP 工具）
         await syncToolsMd(user.id, agent.name, mcpFilter || [], toolsFilter || []);
       } catch (e: any) {
-        console.error('[agents] Native sync failed:', e.message);
+        logger.error('[agents] Native sync failed:', { error: e instanceof Error ? e.message : String(e) });
         // 同步失败不阻塞响应（DB 已写入）
       }
 
@@ -334,7 +337,7 @@ export function createAgentsRouter(
         try {
           await syncToNative(user.id, agent.name, null, agent.identity, true, agent.description);
         } catch (e: any) {
-          console.error('[agents] Native sync failed:', e.message);
+          logger.error('[agents] Native sync failed:', { error: e instanceof Error ? e.message : String(e) });
         }
       }
 
@@ -361,7 +364,7 @@ export function createAgentsRouter(
           syncOpts.enabledAgentNames = enabledAgents.map(a => a.name);
         }
         syncAgentToEngine(bridge!, user.id, syncOpts).catch((e: any) =>
-          console.error('[agents] syncAgentToEngine failed:', e.message),
+          logger.error('[agents] syncAgentToEngine failed:', { error: e instanceof Error ? e.message : String(e) }),
         );
       }
 
@@ -370,7 +373,7 @@ export function createAgentsRouter(
         const finalMcpFilter = mcpFilter ?? (existing.mcpFilter as string[]) ?? [];
         const finalToolsFilter = toolsFilter ?? (existing.toolsFilter as string[]) ?? [];
         syncToolsMd(user.id, agent.name, finalMcpFilter, finalToolsFilter).catch((e: any) =>
-          console.error('[agents] syncToolsMd failed:', e.message),
+          logger.error('[agents] syncToolsMd failed:', { error: e instanceof Error ? e.message : String(e) }),
         );
       }
 
@@ -419,17 +422,17 @@ export function createAgentsRouter(
         setTimeout(async () => {
           try {
             await rm(stateDir, { recursive: true, force: true });
-            console.log(`[agents] Cleaned state dir: ${stateDir}`);
+            logger.info(`[agents] Cleaned state dir: ${stateDir}`);
           } catch (e: any) {
-            console.error(`[agents] Failed to clean state dir ${stateDir}:`, e.message);
+            logger.error(`[agents] Failed to clean state dir ${stateDir}:`, { error: e instanceof Error ? e.message : String(e) });
           }
         }, 2000);
         // memory scope 无需清理：memory-lancedb-pro 默认行为不依赖 agentAccess 配置
       }
       // 清理专业 agent 的独立工作空间
       if (workspaceManager && existing.name !== 'default') {
-        workspaceManager.deleteAgentWorkspace(user.id, existing.name).catch((e) =>
-          console.error('[agents] Workspace cleanup failed:', e.message),
+        workspaceManager.deleteAgentWorkspace(user.id, existing.name).catch((e: any) =>
+          logger.error('[agents] Workspace cleanup failed:', { error: e instanceof Error ? e.message : String(e) }),
         );
       }
       // 清理 octopus.json 中 agents.list 的残留 entry + 更新 allowAgents（单次 config read/write）
@@ -438,8 +441,8 @@ export function createAgentsRouter(
         syncAgentToEngine(bridge!, user.id, {
           deleteAgentName: existing.name,
           enabledAgentNames: enabledAgents.map(a => a.name),
-        }).catch((e) =>
-          console.error('[agents] syncAgentToEngine after delete failed:', e.message),
+        }).catch((e: any) =>
+          logger.error('[agents] syncAgentToEngine after delete failed:', { error: e instanceof Error ? e.message : String(e) }),
         );
       }
 
@@ -495,7 +498,7 @@ export function createAgentsRouter(
             }
             return { name: fileName, content: text || '' };
           } catch (e: any) {
-            console.warn(`[agents] agentFilesGet ${fileName} failed:`, e.message);
+            logger.warn(`[agents] agentFilesGet ${fileName} failed:`, { error: e instanceof Error ? e.message : String(e) });
             return { name: fileName, content: '' };
           }
         }),
@@ -678,7 +681,7 @@ export function createAgentsRouter(
               lines.push(`avatar: ${avatarUrl}`);
               await bridge.agentFilesSet(nativeAgentId, 'IDENTITY.md', lines.join('\n'));
             } catch (e: any) {
-              console.error('[agents] avatar IDENTITY.md sync failed:', e.message);
+              logger.error('[agents] avatar IDENTITY.md sync failed:', { error: e instanceof Error ? e.message : String(e) });
             }
           }
 

@@ -1,4 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
+import { createLogger } from '../utils/logger';
+
+const logger = createLogger('error-handler');
 
 /**
  * 自定义应用错误，支持 HTTP 状态码
@@ -29,7 +32,7 @@ export function globalErrorHandler(
 
   // 记录详细错误到日志
   if (statusCode >= 500) {
-    console.error(`[error] ${_req.method} ${_req.path}:`, err.message, err.stack?.split('\n')[1]?.trim());
+    logger.error(`[error] ${_req.method} ${_req.path}: ${err.message}`, { stack: err.stack?.split('\n')[1]?.trim() });
   }
 
   res.status(statusCode).json({

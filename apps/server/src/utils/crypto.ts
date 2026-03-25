@@ -1,4 +1,7 @@
 import { createCipheriv, createDecipheriv, randomBytes } from 'crypto';
+import { createLogger } from './logger';
+
+const logger = createLogger('crypto');
 
 const ALGORITHM = 'aes-256-gcm';
 const IV_LENGTH = 12;
@@ -38,7 +41,7 @@ export function decryptPassword(ciphertext: string): string {
   if (parts.length !== 3) {
     // 格式不匹配：可能是未加密的旧数据
     if (ciphertext.length > 0) {
-      console.warn('[crypto] decryptPassword: 输入不是加密格式，返回原文（可能是未加密旧数据）');
+      logger.warn('decryptPassword: 输入不是加密格式，返回原文（可能是未加密旧数据）');
     }
     return ciphertext;
   }
@@ -54,7 +57,7 @@ export function decryptPassword(ciphertext: string): string {
     return decrypted.toString('utf8');
   } catch (err: any) {
     // 解密失败：密钥错误或数据损坏
-    console.error(`[crypto] decryptPassword: 解密失败（密钥可能已更换或数据损坏）: ${err.message}`);
+    logger.error('decryptPassword: 解密失败（密钥可能已更换或数据损坏）', { error: err instanceof Error ? err.message : String(err), stack: err instanceof Error ? err.stack : undefined });
     return ciphertext;
   }
 }
