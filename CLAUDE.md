@@ -65,6 +65,38 @@
 - 用户不需要手把手教你调试
 - CI 测试挂了？主动去修
 
+### 7. Engine-First Development（引擎优先）
+
+开发新功能前**必须**先检查引擎是否已有原生支持：
+
+1. **引擎 Config Schema**: `packages/engine/src/config/zod-schema*.ts` — 200+ 配置字段
+2. **引擎 RPC API**: `packages/engine/src/gateway/server-methods/` — 20+ 组方法
+3. **Context Engine 接口**: `packages/engine/src/context-engine/types.ts` — 可插拔上下文引擎
+4. **Plugin 接口**: `packages/engine/src/plugins/types.ts` — hook + registerTool
+5. **能力对照表**: 让 assistant 读 `~/.openclaw/workspace/octopus-engine-capability-map.md`
+
+**决策优先级（从上到下）：**
+
+| 优先级 | 方式 | 举例 |
+|---|---|---|
+| 1 | 引擎 JSON 配置 | `tools.loopDetection.enabled: true`、`session.dmScope`、`contextPruning` |
+| 2 | 引擎 RPC 调用 | `agents.create`、`cron.add`、`config.apply` |
+| 3 | 改引擎源码（我们有 fork） | 多租户 tenantId、自定义 Context Engine hook |
+| 4 | 企业层实现 | 仅限纯业务逻辑：用户管理、计费、IM 适配、前端管理 UI |
+
+**绝对禁止：**
+- 在企业层重新实现引擎已有的功能（哪怕"只是包一层"）
+- 在 SystemPromptBuilder 里用文字描述来"告诉" agent 它有/没有什么权限（引擎 tools.allow/deny 已经硬执行了）
+- 硬编码工具列表（用 `tools.profile` + `tools.alsoAllow`）
+- 用内存缓存跟踪引擎已有的状态（如 knownNativeAgents）
+
+**Checklist（新功能开发前逐项确认）：**
+- [ ] 搜索 `zod-schema*.ts` 是否有相关配置字段
+- [ ] 搜索 `server-methods/` 是否有相关 RPC
+- [ ] 搜索 `context-engine/types.ts` 是否有相关 hook
+- [ ] 如果引擎有但不完全满足 → 改引擎，不包一层
+- [ ] 只有引擎完全不支持 → 在企业层实现
+
 ---
 
 ## Part 2: Task Management（任务管理）
