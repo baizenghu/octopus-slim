@@ -85,6 +85,20 @@ export class WeixinAdapter implements IMAdapter {
     return sent;
   }
 
+  /** 向所有有 contextToken 的微信用户发送文件（用于主动推送场景） */
+  async broadcastFile(filePath: string, fileName: string): Promise<number> {
+    let sent = 0;
+    for (const [imUserId] of this.contextTokens) {
+      try {
+        await this.sendFile(imUserId, filePath, fileName);
+        sent++;
+      } catch (e: any) {
+        console.error(`[wechat] broadcastFile failed for ${imUserId}: ${e.message}`);
+      }
+    }
+    return sent;
+  }
+
   onMessage(handler: (msg: IMIncomingMessage) => void): void {
     this.messageHandler = handler;
   }
@@ -94,9 +108,9 @@ export class WeixinAdapter implements IMAdapter {
   async sendFile(imUserId: string, filePath: string, _fileName: string): Promise<void> {
     const contextToken = this.contextTokens.get(imUserId);
     if (!contextToken) {
-      console.warn(`[wechat] 无法发送文件给 ${imUserId}，缺少 contextToken`);
-      return;
+      throw new Error(`无法发送文件给 ${imUserId}，缺少 contextToken`);
     }
+    console.log(`[wechat] sendFile: ${_fileName} → ${imUserId}`);
     await uploadAndSendFile({
       filePath,
       to: imUserId,
@@ -104,6 +118,7 @@ export class WeixinAdapter implements IMAdapter {
       cdnBaseUrl: this.account.cdnBaseUrl,
       contextToken,
     });
+    console.log(`[wechat] sendFile OK: ${_fileName}`);
   }
 
   // --- 内部方法 ---

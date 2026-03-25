@@ -214,9 +214,9 @@ export async function buildEnterpriseSystemPrompt(
   // 权限逻辑：null/[] = 全部禁用，有值数组 = 白名单
   const tf = agent?.toolsFilter;
   const TOOL_GROUPS = [
-    { group: 'read', label: '文件读取', tools: ['list_files', 'read_file'] },
-    { group: 'write', label: '文件写入', tools: ['write_file'] },
-    { group: 'exec', label: '命令执行', tools: ['execute_command', 'search_files'] },
+    { group: 'read', label: '文件读取', tools: ['read'] },
+    { group: 'write', label: '文件写入', tools: ['write'] },
+    { group: 'exec', label: '命令执行', tools: ['exec'] },
   ];
 
   const enabledTools = new Set(tf || []);

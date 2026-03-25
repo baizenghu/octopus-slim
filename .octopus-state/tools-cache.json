@@ -577,47 +577,6 @@
     }
   },
   {
-    "serverId": "mcp-email-sender",
-    "serverName": "邮件发送器",
-    "toolName": "send_email",
-    "nativeToolName": "mcp_mcp_email_sender_send_email",
-    "description": "发送电子邮件。可以给指定收件人发送邮件，支持纯文本、HTML 格式和文件附件（包括压缩包）。",
-    "inputSchema": {
-      "type": "object",
-      "properties": {
-        "to": {
-          "type": "string",
-          "description": "收件人邮箱地址，多个用逗号分隔"
-        },
-        "subject": {
-          "type": "string",
-          "description": "邮件主题"
-        },
-        "body": {
-          "type": "string",
-          "description": "邮件正文内容（纯文本）"
-        },
-        "html": {
-          "type": "string",
-          "description": "邮件 HTML 内容（可选，优先于 body）"
-        },
-        "cc": {
-          "type": "string",
-          "description": "抄送地址（可选）"
-        },
-        "attachments": {
-          "type": "string",
-          "description": "附件文件路径，多个用逗号分隔（可选）"
-        }
-      },
-      "required": [
-        "to",
-        "subject",
-        "body"
-      ]
-    }
-  },
-  {
     "serverId": "mcp-nocobase-oa",
     "serverName": "OA办公系统",
     "toolName": "oa_query_leaves",

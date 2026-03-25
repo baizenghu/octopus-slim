@@ -4,8 +4,8 @@
  * 模板文件位于 data/templates/ 目录：
  *   - soul-default.md       主 Agent SOUL（通用助手，有协作能力）
  *   - soul-professional.md  专业 Agent SOUL（领域专家，无协作能力）
- *   - memory-rules.md       记忆铁律（所有 Agent 共用）
  *
+ * 铁律（含记忆规则）已迁移到 AGENTS.md 模板（docs/reference/templates/AGENTS.md）。
  * 身份信息由 IDENTITY.md 单独管理，SOUL 模板只定义行为准则。
  */
 
@@ -91,31 +91,6 @@ const PROFESSIONAL_SOUL_TEMPLATE = `# 工作准则
 - **使用工具/技能前先搜索相关经验教训，踩坑后主动存储教训**
 `;
 
-/** 默认的记忆铁律模板（fallback） */
-const DEFAULT_MEMORY_RULES = `## 记忆系统铁律（MANDATORY）
-
-### 1. 用户说"记住" → 必须存储
-用户明确要求记住的内容（规则、偏好、事实、准则），**必须**立即调用 \`memory_store\` 存入长期记忆。
-- 不能只口头说"好的我记住了"而不执行存储操作
-- 存储后用 \`memory_recall\` 验证可检索，找不到就重写重存
-
-### 2. 值得记住的内容主动存储
-以下类型信息即使用户没说"记住"，也应主动存储：
-- 用户的工作准则、行为偏好、沟通风格
-- 用户纠正你的地方（说明你之前做错了，下次别再犯）
-- 重要的事实信息（姓名、职位、常用联系方式、项目背景等）
-- 反复出现的任务模式（"每次都这样做"）
-
-### 3. 记忆卫生
-- 每条记忆短且原子化（< 500 字符），一条只记一件事
-- 使用关键词便于日后检索（如：\`用户偏好：...\`、\`工作准则：...\`、\`重要事实：...\`）
-- 不存大段对话原文、不存重复内容
-
-### 4. 回忆优先于提问
-要问用户之前，先 \`memory_recall\` 搜一下——用户可能已经告诉过你了。
-重复问已经回答过的问题会让用户失去耐心。
-`;
-
 /**
  * 读取模板文件（带 mtime 缓存，文件修改后自动刷新）
  */
@@ -146,7 +121,6 @@ export function ensureAgentTemplates(dataRoot: string): void {
   const files: [string, string][] = [
     ['soul-default.md', DEFAULT_SOUL_TEMPLATE],
     ['soul-professional.md', PROFESSIONAL_SOUL_TEMPLATE],
-    ['memory-rules.md', DEFAULT_MEMORY_RULES],
   ];
   for (const [name, content] of files) {
     const filePath = path.join(dir, name);
@@ -176,13 +150,11 @@ export function getSoulTemplate(
 }
 
 /**
- * 获取 MEMORY.md 初始内容（标题 + 记忆铁律）
+ * 获取 MEMORY.md 初始内容（纯数据文件，铁律已迁移到 AGENTS.md）
  *
  * @param dataRoot     数据根目录
  * @param displayName  Agent 显示名称（用于标题）
  */
-export function getMemoryTemplate(dataRoot: string, displayName: string): string {
-  const filePath = path.join(dataRoot, 'templates', 'memory-rules.md');
-  const rules = readTemplateFile(filePath, DEFAULT_MEMORY_RULES);
-  return `# MEMORY.md - ${displayName}\n\n${rules}`;
+export function getMemoryTemplate(_dataRoot: string, displayName: string): string {
+  return `# MEMORY.md - ${displayName}\n\n> 这里记录你的长期记忆。记忆规则详见 AGENTS.md 铁律部分。\n`;
 }

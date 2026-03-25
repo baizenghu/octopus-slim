@@ -170,6 +170,7 @@ export default function ChatPage() {
         content: m.role === 'user' ? restoreAttachmentDisplay(m.content) : m.content,
         thinking: m.thinking,
         ts: m.ts,
+        toolCalls: m.toolCalls,
       })));
     } catch { setMessages([]); }
   }, [currentAgentId]);

@@ -58,17 +58,10 @@ const EMOJI_OPTIONS = [
 ];
 
 const WORKSPACE_TOOLS = [
-  { value: 'read', label: '文件读取 (list_files + read_file)', engines: ['list_files', 'read_file'] },
-  { value: 'write', label: '文件写入 (write_file)', engines: ['write_file'] },
-  { value: 'exec', label: '命令执行 (execute_command + search_files)', engines: ['execute_command', 'search_files'] },
+  { value: 'read', label: '文件读取 (read)' },
+  { value: 'write', label: '文件写入 (write)' },
+  { value: 'exec', label: '命令执行 (exec)' },
 ];
-
-/** 原始工具名 → 引擎组映射（加载时将原始工具名折叠为组） */
-const TOOL_TO_GROUP: Record<string, string> = {
-  list_files: 'read', read_file: 'read',
-  write_file: 'write',
-  execute_command: 'exec', search_files: 'exec',
-};
 
 interface AgentsPageProps {
   onConfigAgent?: (agent: AgentInfo) => void;
@@ -268,9 +261,7 @@ export default function AgentsPage({ onConfigAgent }: AgentsPageProps) {
     setFormModel(agent.model || '');
     setFormEnabled(agent.enabled);
     setFormToolsFilterEnabled(Array.isArray(agent.toolsFilter) && agent.toolsFilter.length > 0);
-    // 将原始工具名折叠为引擎组
-    const loadedGroups = [...new Set((agent.toolsFilter || []).map((t: string) => TOOL_TO_GROUP[t] || t))];
-    setFormToolsFilter(loadedGroups);
+    setFormToolsFilter(agent.toolsFilter || []);
     setFormSkillsFilterEnabled(Array.isArray(agent.skillsFilter) && agent.skillsFilter.length > 0);
     setFormSkillsFilter(agent.skillsFilter || []);
     setFormMcpFilterEnabled(Array.isArray(agent.mcpFilter) && agent.mcpFilter.length > 0);
@@ -320,12 +311,7 @@ export default function AgentsPage({ onConfigAgent }: AgentsPageProps) {
         name: formName,
         model: formModel || null,
         identity,
-        toolsFilter: formToolsFilterEnabled
-          ? formToolsFilter.flatMap(t => {
-              const group = WORKSPACE_TOOLS.find(w => w.value === t);
-              return group ? group.engines : [t];
-            })
-          : [],
+        toolsFilter: formToolsFilterEnabled ? formToolsFilter : [],
         skillsFilter: formSkillsFilterEnabled ? formSkillsFilter : [],
         mcpFilter: formMcpFilterEnabled ? formMcpFilter : [],
         allowedConnections: formConnFilterEnabled ? formAllowedConnections : [],
@@ -432,7 +418,7 @@ export default function AgentsPage({ onConfigAgent }: AgentsPageProps) {
                 <div className="flex flex-wrap gap-1.5 mb-3">
                   {Array.isArray(agent.toolsFilter) && agent.toolsFilter.length > 0 ? (
                     <Badge variant="outline" className="text-xs text-blue-600 border-blue-200 bg-blue-50">
-                      工具: {[...new Set(agent.toolsFilter.map((t: string) => TOOL_TO_GROUP[t] || t))].length} 组
+                      工具: {agent.toolsFilter.length} 组
                     </Badge>
                   ) : (
                     <Badge variant="outline" className="text-xs text-red-600 border-red-200 bg-red-50">工具: 禁用</Badge>

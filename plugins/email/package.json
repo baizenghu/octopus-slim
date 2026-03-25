@@ -1,0 +1,13 @@
+{
+  "name": "enterprise-email",
+  "version": "1.0.0",
+  "main": "src/index.ts",
+  "octopus": {
+    "extensions": [
+      "./src/index.ts"
+    ]
+  },
+  "dependencies": {
+    "nodemailer": "^6.10.1"
+  }
+}

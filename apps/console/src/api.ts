@@ -192,6 +192,13 @@ class AdminApi {
   private async tryRefreshToken(): Promise<boolean> {
     if (!this.refreshToken) return false;
 
+    // 超过 2 小时无操作，不再续期
+    const lastActive = parseInt(localStorage.getItem('admin_last_active') || '0', 10);
+    const IDLE_TIMEOUT = 2 * 60 * 60 * 1000;
+    if (Date.now() - lastActive > IDLE_TIMEOUT) {
+      return false;
+    }
+
     // 并发请求复用同一个刷新 Promise
     if (this.refreshPromise) return this.refreshPromise;
 
@@ -225,6 +232,11 @@ class AdminApi {
   }
 
   private async request<T>(path: string, options?: RequestInit): Promise<T> {
+    // 每次请求更新最后活跃时间
+    if (!path.startsWith('/auth/')) {
+      localStorage.setItem('admin_last_active', Date.now().toString());
+    }
+
     let res = await fetch(`${API_BASE}${path}`, {
       ...options,
       headers: { ...this.headers(), ...options?.headers },
@@ -377,7 +389,7 @@ class AdminApi {
 
   async getChatHistory(sessionId: string, agentId?: string) {
     const qs = agentId ? `?agentId=${encodeURIComponent(agentId)}` : '';
-    return this.request<{ sessionId: string; messages: { role: string; content: string; thinking?: string; ts: string }[] }>(
+    return this.request<{ sessionId: string; messages: { role: string; content: string; thinking?: string; ts: string; toolCalls?: { name: string; toolCallId?: string; args?: string; result?: string }[] }[] }>(
       `/chat/history/${encodeURIComponent(sessionId)}${qs}`,
     );
   }

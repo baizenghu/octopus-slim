@@ -114,4 +114,46 @@ export class IMService {
 
     return sent;
   }
+
+  /**
+   * 向指定企业用户发送文件（查询所有 IM 绑定并逐一发送）
+   */
+  async sendFileToUser(userId: string, filePath: string, fileName: string): Promise<number> {
+    if (this.adapters.length === 0 && !this.weixinManager) return 0;
+
+    const bindings = await this.prisma.iMUserBinding.findMany({
+      where: { userId },
+    });
+
+    let sent = 0;
+    for (const binding of bindings) {
+      const adapter = this.adapters.find(a => a.channel === binding.channel);
+      if (!adapter) continue;
+      try {
+        if (adapter.sendFile) {
+          await adapter.sendFile(binding.imUserId, filePath, fileName);
+          sent++;
+        } else {
+          await adapter.sendText(binding.imUserId, `📎 文件 ${fileName}，请到 Web 端下载。`);
+          sent++;
+        }
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error(`[im-service] Failed to send file to ${binding.channel}/${binding.imUserId}: ${msg}`);
+      }
+    }
+
+    // 微信渠道
+    if (this.weixinManager) {
+      try {
+        const weixinSent = await this.weixinManager.sendFileToUser(userId, filePath, fileName);
+        sent += weixinSent;
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error(`[im-service] Failed to send file to wechat/${userId}: ${msg}`);
+      }
+    }
+
+    return sent;
+  }
 }

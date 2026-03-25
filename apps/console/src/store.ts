@@ -40,6 +40,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       localStorage.setItem('admin_token', result.accessToken);
       localStorage.setItem('admin_refresh_token', result.refreshToken);
       localStorage.setItem('admin_user', JSON.stringify(result.user));
+      localStorage.setItem('admin_last_active', Date.now().toString());
 
       set({
         user: result.user,
@@ -60,6 +61,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     localStorage.removeItem('admin_token');
     localStorage.removeItem('admin_refresh_token');
     localStorage.removeItem('admin_user');
+    localStorage.removeItem('admin_last_active');
     set({
       user: null,
       token: null,
@@ -74,6 +76,17 @@ export const useAuthStore = create<AuthState>((set) => ({
 
     if (token && userStr) {
       try {
+        // 检查是否超过 2 小时无操作
+        const lastActive = parseInt(localStorage.getItem('admin_last_active') || '0', 10);
+        const IDLE_TIMEOUT = 2 * 60 * 60 * 1000; // 2 小时
+        if (Date.now() - lastActive > IDLE_TIMEOUT) {
+          localStorage.removeItem('admin_token');
+          localStorage.removeItem('admin_refresh_token');
+          localStorage.removeItem('admin_user');
+          localStorage.removeItem('admin_last_active');
+          return;
+        }
+
         const user = JSON.parse(userStr);
         adminApi.setToken(token);
         adminApi.setRefreshToken(refreshToken);

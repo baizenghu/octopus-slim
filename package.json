@@ -19,8 +19,12 @@
     "@prisma/client": "6",
     "@types/node": "^22.0.0",
     "prisma": "6",
+    "tsx": "^4.7.0",
     "turbo": "^2.0.0",
     "typescript": "^5.4.0",
     "vitest": "^2.0.0"
+  },
+  "dependencies": {
+    "qrcode-terminal": "^0.12.0"
   }
 }

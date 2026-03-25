@@ -30,10 +30,19 @@ import { ensureAndSyncNativeAgent } from '../services/AgentConfigSync';
 
 import { validateSessionOwnership } from '../utils/ownership';
 import { sanitizeResponse } from '../utils/ContentSanitizer';
+import { stripReasoningTagsFromText } from '../utils/reasoning-tags';
 import { autoGenerateTitle, loadAgentFromDb } from './sessions';
 import { buildEnterpriseSystemPrompt } from '../services/SystemPromptBuilder';
 
-/** Session 级偏好存储（进程级，重启清空，TTL 可配置） */
+/**
+ * Session 级偏好存储（进程内一级缓存，重启后清空，TTL 可配置）。
+ *
+ * 已知限制：当前仅存储在内存 Map 中，进程重启后丢失。
+ * 引擎的 sessions.patch schema 使用 additionalProperties: false，
+ * 不支持存储任意 metadata（如 prefs）。若未来需要持久化，需先在
+ * SessionsPatchParamsSchema 中添加 prefs 字段，或新增专门的
+ * sessions.meta.patch RPC 方法。
+ */
 const sessionPrefs = new Map<string, { mcpId?: string; skillId?: string; updatedAt: number }>();
 
 // 清理过期条目
@@ -344,8 +353,6 @@ export function createChatRouter(
     }
 
     // 调用原生 agent RPC（events 通过回调异步推送）
-    // native data.text 是累积全量文本，prevContent 追踪已发送的部分，每次只推新增 delta
-    let prevContent = '';
     let hasDelegation = false; // 是否有 sessions_spawn 委派调用
     // 思考模式：追踪已发送的 thinking / answer 文本，分离推送
     let prevThinkingSent = '';
@@ -365,31 +372,39 @@ export function createChatRouter(
           switch (event.type) {
             case 'text_delta': {
               const fullText = event.content || '';
-              prevContent = fullText;
 
-              // 检测是否包含 <think> 标签（思考模式）
-              const thinkOpenIdx = fullText.indexOf('<think>');
-              if (thinkOpenIdx === -1) {
-                // 普通模式：直接推送增量
-                const delta = fullText.startsWith(prevAnswerSent)
-                  ? fullText.slice(prevAnswerSent.length)
-                  : fullText;
-                prevAnswerSent = fullText;
+              // 用引擎的 stripReasoningTagsFromText 统一处理各种模型输出格式
+              // 支持 <think>/<thinking>/<thought>/<antthinking> + <final> 标签
+              // 保护代码块内的标签不被误删
+              const thinkOpenMatch = fullText.match(/<\s*(?:think(?:ing)?|thought|antthinking)\b/i);
+              if (!thinkOpenMatch) {
+                // 普通模式：用引擎方式剥离可能的 <final> 等标签后推送增量
+                const cleaned = stripReasoningTagsFromText(fullText, { mode: 'preserve', trim: 'start' });
+                const delta = cleaned.startsWith(prevAnswerSent)
+                  ? cleaned.slice(prevAnswerSent.length)
+                  : cleaned;
+                prevAnswerSent = cleaned;
                 if (delta) {
                   res.write(`data: ${JSON.stringify({ content: delta, done: false })}\n\n`);
                 }
               } else {
                 // 思考模式：分离 thinking 和 answer
-                const thinkCloseIdx = fullText.indexOf('</think>');
-                const thinkContent = thinkCloseIdx !== -1
-                  ? fullText.slice(thinkOpenIdx + 7, thinkCloseIdx)
-                  : fullText.slice(thinkOpenIdx + 7);
+                const thinkOpenIdx = thinkOpenMatch.index!;
+                const thinkTagEnd = fullText.indexOf('>', thinkOpenIdx);
+                const thinkContentStart = thinkTagEnd !== -1 ? thinkTagEnd + 1 : thinkOpenIdx + thinkOpenMatch[0].length;
+                const thinkCloseMatch = fullText.match(/<\s*\/\s*(?:think(?:ing)?|thought|antthinking)\b[^>]*>/i);
+                const thinkCloseIdx = thinkCloseMatch?.index ?? -1;
 
-                // 提取正文（</think> 之后，去掉 <final>/</ final> 包装）
+                const thinkContent = thinkCloseIdx !== -1
+                  ? fullText.slice(thinkContentStart, thinkCloseIdx)
+                  : fullText.slice(thinkContentStart);
+
+                // 提取正文（</think> 之后，用引擎方式剥离 <final> 等标签）
                 let answerContent = '';
                 if (thinkCloseIdx !== -1) {
-                  const afterThink = fullText.slice(thinkCloseIdx + 8);
-                  answerContent = afterThink.replace(/<\/?final>/g, '').trim();
+                  const closeTagEnd = thinkCloseIdx + thinkCloseMatch![0].length;
+                  const afterThink = fullText.slice(closeTagEnd);
+                  answerContent = stripReasoningTagsFromText(afterThink, { mode: 'preserve', trim: 'start' });
                 }
 
                 // 推送 thinking 增量
@@ -435,30 +450,6 @@ export function createChatRouter(
             }
             case 'done': {
               streamDone = true;
-              // Parse enterprise reminder tag from accumulated response
-              // Format: <enterprise-reminder delay_seconds="180" message="..." />
-              const reminderMatch = prevContent.match(
-                /<enterprise-reminder\s+delay_seconds="(\d+)"\s+message="([^"]+)"\s*\/?>/
-              );
-              if (reminderMatch && bridge?.isConnected) {
-                const delaySeconds = Math.max(1, parseInt(reminderMatch[1], 10));
-                const reminderMsg = reminderMatch[2];
-                const reminderId = randomUUID().replace(/-/g, '').slice(0, 16);
-                const fireAt = new Date(Date.now() + delaySeconds * 1000).toISOString();
-                // 使用原生 cron 持久化提醒（重启不丢失）
-                bridge.cronAdd({
-                  name: `ent-reminder:${user.id}:${reminderId}`,
-                  agentId: nativeAgentId,
-                  schedule: { kind: 'at', at: fireAt },
-                  sessionTarget: 'isolated',
-                  payload: { kind: 'agentTurn', message: reminderMsg },
-                  deleteAfterRun: false,
-                }).then(() => {
-                  console.log(`[chat] Reminder scheduled via cron: ${fireAt} → "${reminderMsg}" for ${user.username}`);
-                }).catch((err: any) => {
-                  console.error(`[chat] Failed to schedule reminder:`, err.message);
-                });
-              }
               // 返回完整 sessionKey（而非短 sid），前端轮询和后续请求需要完整 key
               console.log(`[chat] done event: hasDelegation=${hasDelegation}, sessionKey=${sessionKey}`);
               res.write(`data: ${JSON.stringify({ content: '', done: true, sessionId: sessionKey, ...(hasDelegation ? { delegated: true } : {}) })}\n\n`);

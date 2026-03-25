@@ -1,0 +1,1050 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Octopus 企业级 AI Agent 智能协作平台</title>
+<style>
+  /* ========== Reset & Base ========== */
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+  html { font-size: 16px; scroll-behavior: smooth; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    background: #0a0e1a;
+    color: #e0e6f0;
+    overflow: hidden;
+    height: 100vh;
+  }
+
+  /* ========== Slide Container ========== */
+  .deck {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+  }
+  .slide {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 60px 80px;
+    opacity: 0;
+    pointer-events: none;
+    transform: translateX(60px);
+    transition: opacity .5s ease, transform .5s ease;
+    overflow-y: auto;
+  }
+  .slide.active {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateX(0);
+  }
+  .slide.prev {
+    transform: translateX(-60px);
+  }
+
+  /* ========== Typography ========== */
+  h1 {
+    font-size: 2.8rem;
+    font-weight: 700;
+    background: linear-gradient(135deg, #60a5fa, #a78bfa, #f472b6);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 16px;
+    line-height: 1.3;
+  }
+  h2 {
+    font-size: 2rem;
+    font-weight: 700;
+    color: #93c5fd;
+    margin-bottom: 12px;
+    line-height: 1.3;
+  }
+  h3 {
+    font-size: 1.35rem;
+    font-weight: 600;
+    color: #c4b5fd;
+    margin: 18px 0 8px;
+  }
+  p, li {
+    font-size: 1.1rem;
+    line-height: 1.7;
+    color: #cbd5e1;
+  }
+  .subtitle {
+    font-size: 1.3rem;
+    color: #94a3b8;
+    margin-bottom: 32px;
+  }
+  .highlight {
+    color: #fbbf24;
+    font-weight: 600;
+  }
+  .accent { color: #60a5fa; font-weight: 600; }
+  .accent-green { color: #34d399; font-weight: 600; }
+  .accent-purple { color: #a78bfa; font-weight: 600; }
+  .accent-pink { color: #f472b6; font-weight: 600; }
+  blockquote {
+    border-left: 4px solid #60a5fa;
+    padding: 12px 20px;
+    margin: 16px 0;
+    background: rgba(96, 165, 250, 0.08);
+    border-radius: 0 8px 8px 0;
+    font-size: 1.15rem;
+    color: #93c5fd;
+    font-style: italic;
+  }
+
+  /* ========== Cards & Grid ========== */
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 16px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; margin-top: 16px; }
+  .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-top: 16px; }
+  .card {
+    background: linear-gradient(135deg, rgba(30, 41, 59, 0.8), rgba(15, 23, 42, 0.9));
+    border: 1px solid rgba(148, 163, 184, 0.15);
+    border-radius: 16px;
+    padding: 24px;
+    transition: transform .2s, border-color .2s;
+  }
+  .card:hover { transform: translateY(-2px); border-color: rgba(96, 165, 250, 0.4); }
+  .card .icon {
+    font-size: 2.2rem;
+    margin-bottom: 12px;
+    display: block;
+  }
+  .card h3 { margin-top: 0; }
+  .card p { font-size: 0.95rem; color: #94a3b8; }
+  .card-sm {
+    background: rgba(30, 41, 59, 0.6);
+    border: 1px solid rgba(148, 163, 184, 0.1);
+    border-radius: 12px;
+    padding: 16px 20px;
+  }
+
+  /* ========== Tables ========== */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 16px 0;
+    font-size: 0.95rem;
+  }
+  thead th {
+    background: rgba(96, 165, 250, 0.15);
+    color: #93c5fd;
+    font-weight: 600;
+    text-align: left;
+    padding: 12px 16px;
+    border-bottom: 2px solid rgba(96, 165, 250, 0.3);
+  }
+  tbody td {
+    padding: 10px 16px;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+    color: #cbd5e1;
+  }
+  tbody tr:hover { background: rgba(96, 165, 250, 0.05); }
+
+  /* ========== Architecture Diagram ========== */
+  .arch-box {
+    background: rgba(15, 23, 42, 0.8);
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    border-radius: 12px;
+    padding: 20px 24px;
+    margin: 8px 0;
+    text-align: center;
+    font-size: 0.95rem;
+    position: relative;
+  }
+  .arch-box.blue { border-color: rgba(96, 165, 250, 0.4); background: rgba(96, 165, 250, 0.06); }
+  .arch-box.purple { border-color: rgba(167, 139, 250, 0.4); background: rgba(167, 139, 250, 0.06); }
+  .arch-box.green { border-color: rgba(52, 211, 153, 0.4); background: rgba(52, 211, 153, 0.06); }
+  .arch-box.pink { border-color: rgba(244, 114, 182, 0.4); background: rgba(244, 114, 182, 0.06); }
+  .arch-arrow {
+    text-align: center;
+    color: #475569;
+    font-size: 1.4rem;
+    margin: 4px 0;
+    letter-spacing: 2px;
+  }
+
+  /* ========== Tags ========== */
+  .tag {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    margin: 2px 4px 2px 0;
+  }
+  .tag-blue { background: rgba(96, 165, 250, 0.15); color: #60a5fa; border: 1px solid rgba(96, 165, 250, 0.3); }
+  .tag-green { background: rgba(52, 211, 153, 0.15); color: #34d399; border: 1px solid rgba(52, 211, 153, 0.3); }
+  .tag-purple { background: rgba(167, 139, 250, 0.15); color: #a78bfa; border: 1px solid rgba(167, 139, 250, 0.3); }
+  .tag-yellow { background: rgba(251, 191, 36, 0.15); color: #fbbf24; border: 1px solid rgba(251, 191, 36, 0.3); }
+  .tag-pink { background: rgba(244, 114, 182, 0.15); color: #f472b6; border: 1px solid rgba(244, 114, 182, 0.3); }
+
+  /* ========== Lists ========== */
+  ul { list-style: none; padding-left: 0; }
+  ul li { padding: 4px 0; padding-left: 24px; position: relative; }
+  ul li::before {
+    content: '';
+    position: absolute;
+    left: 6px;
+    top: 14px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #60a5fa;
+  }
+  .check-list li::before {
+    content: '\2713';
+    background: none;
+    color: #34d399;
+    font-weight: 700;
+    font-size: 0.9rem;
+    left: 2px;
+    top: 5px;
+  }
+
+  /* ========== Flow ========== */
+  .flow {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin: 16px 0;
+  }
+  .flow-step {
+    background: rgba(96, 165, 250, 0.1);
+    border: 1px solid rgba(96, 165, 250, 0.25);
+    border-radius: 10px;
+    padding: 10px 18px;
+    font-size: 0.9rem;
+    color: #93c5fd;
+    white-space: nowrap;
+  }
+  .flow-arrow { color: #475569; font-size: 1.2rem; }
+
+  /* ========== Shield layers ========== */
+  .shield-layers {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin: 16px 0;
+  }
+  .shield-layer {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 12px 20px;
+    border-radius: 10px;
+    font-size: 0.95rem;
+  }
+  .shield-layer .num {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 0.9rem;
+    flex-shrink: 0;
+  }
+  .shield-layer:nth-child(1) { background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.25); }
+  .shield-layer:nth-child(1) .num { background: rgba(239, 68, 68, 0.25); color: #fca5a5; }
+  .shield-layer:nth-child(2) { background: rgba(251, 146, 60, 0.1); border: 1px solid rgba(251, 146, 60, 0.25); }
+  .shield-layer:nth-child(2) .num { background: rgba(251, 146, 60, 0.25); color: #fdba74; }
+  .shield-layer:nth-child(3) { background: rgba(250, 204, 21, 0.1); border: 1px solid rgba(250, 204, 21, 0.25); }
+  .shield-layer:nth-child(3) .num { background: rgba(250, 204, 21, 0.25); color: #fde047; }
+  .shield-layer:nth-child(4) { background: rgba(52, 211, 153, 0.1); border: 1px solid rgba(52, 211, 153, 0.25); }
+  .shield-layer:nth-child(4) .num { background: rgba(52, 211, 153, 0.25); color: #6ee7b7; }
+  .shield-layer:nth-child(5) { background: rgba(96, 165, 250, 0.1); border: 1px solid rgba(96, 165, 250, 0.25); }
+  .shield-layer:nth-child(5) .num { background: rgba(96, 165, 250, 0.25); color: #93c5fd; }
+  .shield-layer:nth-child(6) { background: rgba(167, 139, 250, 0.1); border: 1px solid rgba(167, 139, 250, 0.25); }
+  .shield-layer:nth-child(6) .num { background: rgba(167, 139, 250, 0.25); color: #c4b5fd; }
+
+  /* ========== Nav ========== */
+  .nav {
+    position: fixed;
+    bottom: 24px;
+    right: 32px;
+    display: flex;
+    gap: 8px;
+    z-index: 100;
+  }
+  .nav button {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    border: 1px solid rgba(148, 163, 184, 0.3);
+    background: rgba(15, 23, 42, 0.9);
+    color: #94a3b8;
+    font-size: 1.1rem;
+    cursor: pointer;
+    transition: all .2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(8px);
+  }
+  .nav button:hover { background: rgba(96, 165, 250, 0.2); color: #60a5fa; border-color: rgba(96, 165, 250, 0.5); }
+  .progress {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 3px;
+    background: linear-gradient(90deg, #60a5fa, #a78bfa, #f472b6);
+    transition: width .4s ease;
+    z-index: 100;
+  }
+  .page-num {
+    position: fixed;
+    bottom: 30px;
+    left: 32px;
+    font-size: 0.85rem;
+    color: #475569;
+    z-index: 100;
+  }
+
+  /* ========== Cover specific ========== */
+  .cover { justify-content: center; align-items: center; text-align: center; }
+  .cover h1 { font-size: 3.5rem; margin-bottom: 8px; }
+  .cover .subtitle { font-size: 1.5rem; margin-bottom: 40px; }
+  .cover-meta { color: #64748b; font-size: 1rem; }
+
+  /* ========== Section title ========== */
+  .section-title {
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+  }
+  .section-title h1 { font-size: 3rem; }
+  .section-title .subtitle { font-size: 1.2rem; margin-top: 8px; }
+  .section-num {
+    font-size: 5rem;
+    font-weight: 800;
+    background: linear-gradient(135deg, rgba(96, 165, 250, 0.3), rgba(167, 139, 250, 0.3));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    line-height: 1;
+    margin-bottom: 8px;
+  }
+
+  /* ========== Two-col layout ========== */
+  .two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 40px;
+    margin-top: 16px;
+  }
+
+  /* ========== Compact slide ========== */
+  .slide.compact { padding: 40px 60px; }
+  .slide.compact h2 { font-size: 1.7rem; margin-bottom: 8px; }
+  .slide.compact p, .slide.compact li { font-size: 0.95rem; line-height: 1.6; }
+  .slide.compact table { font-size: 0.85rem; }
+  .slide.compact .card { padding: 16px 20px; }
+  .slide.compact .card p { font-size: 0.85rem; }
+</style>
+</head>
+<body>
+
+<div class="progress" id="progress"></div>
+<div class="page-num" id="pageNum"></div>
+
+<div class="deck" id="deck">
+
+<!-- ==================== SLIDE 1: Cover ==================== -->
+<div class="slide cover active" data-index="0">
+  <h1 style="-webkit-text-fill-color:#fff; font-size:3.2rem; margin-bottom:4px;">Octopus</h1>
+  <p style="font-size:1.8rem; font-weight:700; background:linear-gradient(135deg,#60a5fa,#a78bfa); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; margin-bottom:28px;">企业级智能 Agent 平台</p>
+  <p style="font-size:1.1rem; color:#7d8ca8; margin-bottom:36px;">让 AI 真正融入企业业务流程</p>
+  <p class="cover-meta">2026年3月</p>
+</div>
+
+<!-- ==================== SLIDE 2: Agenda ==================== -->
+<div class="slide" data-index="1">
+  <h2>汇报提纲</h2>
+  <div class="grid-2" style="margin-top:24px;">
+    <div class="card">
+      <span class="icon">01</span>
+      <h3>项目概述</h3>
+      <p>平台定位、核心能力、技术架构总览</p>
+    </div>
+    <div class="card">
+      <span class="icon">02</span>
+      <h3>安全性 &mdash; 六层纵深防御</h3>
+      <p>沙箱隔离、权限管控、审计追踪、行为熔断</p>
+    </div>
+    <div class="card">
+      <span class="icon">03</span>
+      <h3>创新性 &mdash; 六大核心功能</h3>
+      <p>记忆系统、MCP工具、技能系统、多Agent协作、心跳巡检、IM集成</p>
+    </div>
+    <div class="card">
+      <span class="icon">04</span>
+      <h3>前瞻性 &mdash; 架构演进</h3>
+      <p>插件化架构、配置热加载、多模型适配、数据主权</p>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== SLIDE 3: Section 1 ==================== -->
+<div class="slide section-title" data-index="2">
+  <div class="section-num">01</div>
+  <h1>项目概述</h1>
+  <p class="subtitle">自主研发的企业级 AI Agent 智能协作平台</p>
+</div>
+
+<!-- ==================== SLIDE 4: Project Overview ==================== -->
+<div class="slide compact" data-index="3">
+  <h2>核心定位</h2>
+  <p style="margin-bottom:16px; font-size:1.05rem;">面向<span class="highlight">企业内网环境</span>，提供安全可控的多智能体协作能力</p>
+  <div class="grid-4">
+    <div class="card" style="text-align:center;">
+      <span class="icon" style="font-size:2.5rem;">&#x1F3E2;</span>
+      <h3 style="font-size:1rem;">目标场景</h3>
+      <p>企业内网部署<br>数据不出域<br>安全合规</p>
+    </div>
+    <div class="card" style="text-align:center;">
+      <span class="icon" style="font-size:2.5rem;">&#x1F9E0;</span>
+      <h3 style="font-size:1rem;">核心能力</h3>
+      <p>多 Agent 协作<br>知识记忆<br>技能扩展 &middot; 工具集成</p>
+    </div>
+    <div class="card" style="text-align:center;">
+      <span class="icon" style="font-size:2.5rem;">&#x1F465;</span>
+      <h3 style="font-size:1rem;">用户群体</h3>
+      <p>企业全员<br>飞书 / 微信 / Web<br>三端统一接入</p>
+    </div>
+    <div class="card" style="text-align:center;">
+      <span class="icon" style="font-size:2.5rem;">&#x2699;</span>
+      <h3 style="font-size:1rem;">技术特色</h3>
+      <p>单进程架构<br>Docker 沙箱隔离<br>插件化扩展</p>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== SLIDE 5: Architecture ==================== -->
+<div class="slide compact" data-index="4">
+  <h2>技术架构总览</h2>
+  <div style="margin-top:8px;">
+    <div class="arch-box pink" style="display:flex; justify-content:center; gap:40px;">
+      <span>&#x1F4BB; Web 控制台</span>
+      <span>&#x1F4AC; 飞书机器人</span>
+      <span>&#x1F4F1; 微信机器人</span>
+    </div>
+    <div class="arch-arrow">&darr; HTTP / SSE / Webhook</div>
+    <div class="arch-box blue">
+      <div style="font-weight:700; color:#93c5fd; margin-bottom:8px;">企业网关层 Enterprise Gateway</div>
+      <div style="display:flex; justify-content:center; gap:20px; flex-wrap:wrap; font-size:0.85rem; color:#94a3b8;">
+        <span class="tag tag-blue">JWT + LDAP 认证</span>
+        <span class="tag tag-blue">RBAC 权限</span>
+        <span class="tag tag-blue">审计日志双写</span>
+        <span class="tag tag-blue">IM 多通道路由</span>
+        <span class="tag tag-blue">Agent 配置同步</span>
+        <span class="tag tag-blue">系统提示构建</span>
+      </div>
+    </div>
+    <div class="arch-arrow">&darr; 进程内函数调用（零网络开销）</div>
+    <div class="arch-box purple">
+      <div style="font-weight:700; color:#c4b5fd; margin-bottom:8px;">AI 引擎层 Native Engine</div>
+      <div style="display:flex; justify-content:center; gap:20px; flex-wrap:wrap; font-size:0.85rem; color:#94a3b8;">
+        <span class="tag tag-purple">Agent 执行</span>
+        <span class="tag tag-purple">会话管理</span>
+        <span class="tag tag-purple">Cron 调度</span>
+        <span class="tag tag-purple">工具系统</span>
+      </div>
+    </div>
+    <div class="arch-arrow">&darr;</div>
+    <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px;">
+      <div class="arch-box green" style="padding:14px;">
+        <div style="font-weight:600; color:#6ee7b7; font-size:0.9rem;">&#x1F50C; 插件系统</div>
+        <div style="font-size:0.8rem; color:#94a3b8; margin-top:4px;">审计 / MCP / 邮件 / 记忆</div>
+      </div>
+      <div class="arch-box" style="padding:14px; border-color:rgba(251,191,36,0.4); background:rgba(251,191,36,0.06);">
+        <div style="font-weight:600; color:#fde047; font-size:0.9rem;">&#x1F6E1; Docker 沙箱</div>
+        <div style="font-size:0.8rem; color:#94a3b8; margin-top:4px;">网络隔离 / uid=2000</div>
+      </div>
+      <div class="arch-box" style="padding:14px; border-color:rgba(244,114,182,0.4); background:rgba(244,114,182,0.06);">
+        <div style="font-weight:600; color:#f9a8d4; font-size:0.9rem;">&#x1F916; 大模型 API</div>
+        <div style="font-size:0.8rem; color:#94a3b8; margin-top:4px;">DeepSeek / Claude / Codex</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== SLIDE 6: Section 2 ==================== -->
+<div class="slide section-title" data-index="5">
+  <div class="section-num">02</div>
+  <h1>安全性</h1>
+  <p class="subtitle">六层纵深防御体系 &mdash; 安全靠架构硬执行，不靠文字指令软约束</p>
+</div>
+
+<!-- ==================== SLIDE 7: Security Overview ==================== -->
+<div class="slide compact" data-index="6">
+  <h2>六层纵深防御体系</h2>
+  <div class="shield-layers">
+    <div class="shield-layer">
+      <div class="num">1</div>
+      <div>
+        <strong style="color:#fca5a5;">Docker 沙箱隔离</strong>
+        <span style="color:#94a3b8; margin-left:12px;">容器 uid=2000 + 独立网络 172.30.0.0/16 + iptables 公网封锁 + workspace 挂载隔离</span>
+      </div>
+    </div>
+    <div class="shield-layer">
+      <div class="num">2</div>
+      <div>
+        <strong style="color:#fdba74;">用户命名空间隔离</strong>
+        <span style="color:#94a3b8; margin-left:12px;">ent_{userId}_{agentName} 三层命名空间，数据物理隔离</span>
+      </div>
+    </div>
+    <div class="shield-layer">
+      <div class="num">3</div>
+      <div>
+        <strong style="color:#fde047;">多层权限管控</strong>
+        <span style="color:#94a3b8; margin-left:12px;">三维度白名单（工具 / 技能 / MCP），提示词隐藏 + 执行层双保险校验</span>
+      </div>
+    </div>
+    <div class="shield-layer">
+      <div class="num">4</div>
+      <div>
+        <strong style="color:#6ee7b7;">企业级审计系统</strong>
+        <span style="color:#94a3b8; margin-left:12px;">双写日志（DB + JSONL）+ HMAC-SHA256 签名链防篡改，覆盖 20 个操作点</span>
+      </div>
+    </div>
+    <div class="shield-layer">
+      <div class="num">5</div>
+      <div>
+        <strong style="color:#93c5fd;">认证授权</strong>
+        <span style="color:#94a3b8; margin-left:12px;">JWT + LDAP/AD 集成 + Token 刷新 + 暴力破解防护 + 已删用户即时拦截</span>
+      </div>
+    </div>
+    <div class="shield-layer">
+      <div class="num">6</div>
+      <div>
+        <strong style="color:#c4b5fd;">AI 行为熔断</strong>
+        <span style="color:#94a3b8; margin-left:12px;">三级阈值（警告8 / 拒绝15 / 终止25）+ MCP 连续失败熔断 + 30分钟超时兜底</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== SLIDE 8: Sandbox ==================== -->
+<div class="slide compact" data-index="7">
+  <h2>第一层：Docker 沙箱隔离</h2>
+  <blockquote>AI Agent 需要执行代码、操作文件，如何防止越权访问和数据泄露？</blockquote>
+  <div class="grid-3">
+    <div class="card">
+      <h3 style="color:#fca5a5;">&#x1F464; 用户隔离</h3>
+      <p>容器内 <strong>uid=2000</strong>（非宿主机用户 uid=1000），防止 bind mount 权限穿透</p>
+      <p style="margin-top:8px;">即使容器逃逸也无法读取宿主机敏感文件</p>
+    </div>
+    <div class="card">
+      <h3 style="color:#fca5a5;">&#x1F310; 网络隔离</h3>
+      <p>独立 Docker 网络 + <strong>iptables 规则</strong></p>
+      <ul style="margin-top:8px;">
+        <li style="font-size:0.85rem;">允许：企业内网</li>
+        <li style="font-size:0.85rem;">封锁：互联网出站</li>
+        <li style="font-size:0.85rem;">封锁：MySQL/Redis/网关端口</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3 style="color:#fca5a5;">&#x1F4C1; 文件隔离</h3>
+      <p>仅挂载用户专属 workspace 目录</p>
+      <p style="margin-top:8px;"><strong>workspaceOnly=true</strong> 强制限制，每个用户/Agent 只能读写自己的工作空间</p>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== SLIDE 9: Namespace + Permission ==================== -->
+<div class="slide compact" data-index="8">
+  <h2>第二 ~ 三层：命名空间隔离 &amp; 权限管控</h2>
+  <div class="two-col">
+    <div>
+      <h3 style="color:#fdba74;">命名空间隔离</h3>
+      <div class="card-sm" style="margin:10px 0; font-family:monospace; font-size:0.85rem; color:#fde047; background:rgba(15,23,42,0.9);">
+        Agent ID: ent_{userId}_{agentName}<br>
+        Session:&nbsp; agent:ent_{userId}_{agentName}:session:{id}<br>
+        目录:&emsp;&emsp; data/users/{userId}/workspace/
+      </div>
+      <ul class="check-list" style="margin-top:12px;">
+        <li>Agent 配置：用户只能管理自己的 Agent</li>
+        <li>会话数据：用户只能查看自己的对话</li>
+        <li>文件存储：每个用户独立工作空间</li>
+        <li>AI 记忆：agentAccess 白名单控制</li>
+        <li>所有权校验：startsWith 前缀匹配</li>
+      </ul>
+    </div>
+    <div>
+      <h3 style="color:#fde047;">三维度白名单权限</h3>
+      <table>
+        <thead><tr><th>维度</th><th>控制对象</th></tr></thead>
+        <tbody>
+          <tr><td><span class="accent">工具权限</span></td><td>文件读写、命令执行</td></tr>
+          <tr><td><span class="accent-purple">技能权限</span></td><td>可调用的企业技能</td></tr>
+          <tr><td><span class="accent-pink">MCP 权限</span></td><td>外部工具 / 数据库连接</td></tr>
+        </tbody>
+      </table>
+      <div class="card-sm" style="margin-top:12px;">
+        <p style="font-size:0.9rem;"><strong style="color:#60a5fa;">双保险设计</strong></p>
+        <p style="font-size:0.85rem;">1. <strong>软限制</strong>：提示词层隐藏未授权工具</p>
+        <p style="font-size:0.85rem;">2. <strong>硬限制</strong>：执行层再次校验并拒绝</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== SLIDE 10: Audit + Auth + Fuse ==================== -->
+<div class="slide compact" data-index="9">
+  <h2>第四 ~ 六层：审计、认证、熔断</h2>
+  <div class="grid-3">
+    <div class="card">
+      <h3 style="color:#6ee7b7;">&#x1F4DD; 审计系统</h3>
+      <p><strong>双写策略</strong></p>
+      <ul style="margin:6px 0;">
+        <li style="font-size:0.85rem;">MySQL 实时存储 &rarr; 即时查询</li>
+        <li style="font-size:0.85rem;">JSONL 按天归档 &rarr; 离线分析</li>
+      </ul>
+      <p><strong>防篡改</strong></p>
+      <p style="font-size:0.85rem;">HMAC-SHA256 签名链，每条记录包含前一条哈希，删除/篡改即断裂</p>
+      <p style="margin-top:6px; font-size:0.85rem;">覆盖 <span class="highlight">20 个关键操作点</span></p>
+    </div>
+    <div class="card">
+      <h3 style="color:#93c5fd;">&#x1F512; 认证授权</h3>
+      <table style="font-size:0.8rem;">
+        <tbody>
+          <tr><td>企业认证</td><td>JWT + LDAP/AD</td></tr>
+          <tr><td>Token 安全</td><td>2h 过期 + 7d 刷新</td></tr>
+          <tr><td>暴力破解</td><td>10次/分钟 &rarr; 告警</td></tr>
+          <tr><td>已删用户</td><td>DB 实时校验拦截</td></tr>
+          <tr><td>环境变量</td><td>白名单注入</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="card">
+      <h3 style="color:#c4b5fd;">&#x26A1; AI 行为熔断</h3>
+      <p style="font-size:0.85rem;"><strong>三层熔断防护</strong></p>
+      <table style="font-size:0.8rem;">
+        <thead><tr><th>层级</th><th>阈值</th><th>动作</th></tr></thead>
+        <tbody>
+          <tr><td>警告</td><td>8 次</td><td>发送警告</td></tr>
+          <tr><td>拒绝</td><td>15 次</td><td>拒绝调用</td></tr>
+          <tr><td>终止</td><td>25 次</td><td>强制终止</td></tr>
+        </tbody>
+      </table>
+      <p style="font-size:0.85rem; margin-top:8px;">+ MCP 连续失败 3 次熔断<br>+ 30 分钟执行超时兜底</p>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== SLIDE 11: Section 3 ==================== -->
+<div class="slide section-title" data-index="10">
+  <div class="section-num">03</div>
+  <h1>创新性</h1>
+  <p class="subtitle">六大核心功能 &mdash; 让 AI 不只是"能聊天"</p>
+</div>
+
+<!-- ==================== SLIDE 12: Feature Overview ==================== -->
+<div class="slide compact" data-index="11">
+  <h2>六大核心功能总览</h2>
+  <div class="grid-3" style="margin-top:12px;">
+    <div class="card" style="text-align:center;">
+      <span class="icon" style="font-size:2.5rem;">&#x1F9E0;</span>
+      <h3 style="font-size:1.1rem;">智能记忆系统</h3>
+      <p>AI 越用越聪明<br>向量混合检索 + 角色隔离</p>
+    </div>
+    <div class="card" style="text-align:center;">
+      <span class="icon" style="font-size:2.5rem;">&#x1F527;</span>
+      <h3 style="font-size:1.1rem;">MCP 工具集成</h3>
+      <p>AI 能操作企业系统<br>数据库查询 / 邮件发送</p>
+    </div>
+    <div class="card" style="text-align:center;">
+      <span class="icon" style="font-size:2.5rem;">&#x1F3AF;</span>
+      <h3 style="font-size:1.1rem;">企业技能系统</h3>
+      <p>复杂流程一键复用<br>报表 / 分析 / PPT</p>
+    </div>
+    <div class="card" style="text-align:center;">
+      <span class="icon" style="font-size:2.5rem;">&#x1F91D;</span>
+      <h3 style="font-size:1.1rem;">多 Agent 协作</h3>
+      <p>主从协作、专业分工<br>团队化 AI 协作</p>
+    </div>
+    <div class="card" style="text-align:center;">
+      <span class="icon" style="font-size:2.5rem;">&#x1F4A1;</span>
+      <h3 style="font-size:1.1rem;">心跳巡检</h3>
+      <p>AI 自主巡检告警<br>自然语言监控</p>
+    </div>
+    <div class="card" style="text-align:center;">
+      <span class="icon" style="font-size:2.5rem;">&#x1F4AC;</span>
+      <h3 style="font-size:1.1rem;">多渠道 IM 集成</h3>
+      <p>飞书 / 微信 / Web<br>融入日常工作流</p>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== SLIDE 13: Memory System ==================== -->
+<div class="slide compact" data-index="12">
+  <h2>&#x1F9E0; 智能记忆系统</h2>
+  <blockquote>让 AI 拥有"长期记忆"，越用越聪明</blockquote>
+  <p style="margin:8px 0; font-size:0.95rem;"><strong>解决的问题：</strong>传统 AI 每次对话从零开始，无法记住用户偏好和历史决策</p>
+  <div class="flow" style="margin:12px 0;">
+    <div class="flow-step">用户对话</div><span class="flow-arrow">&rarr;</span>
+    <div class="flow-step">自动提取关键信息</div><span class="flow-arrow">&rarr;</span>
+    <div class="flow-step">向量化存储 (Jina)</div><span class="flow-arrow">&rarr;</span>
+    <div class="flow-step">语义检索召回</div><span class="flow-arrow">&rarr;</span>
+    <div class="flow-step">注入上下文</div><span class="flow-arrow">&rarr;</span>
+    <div class="flow-step" style="border-color:rgba(52,211,153,0.4); color:#34d399;">精准回答</div>
+  </div>
+  <table style="font-size:0.85rem;">
+    <thead><tr><th>核心特性</th><th>说明</th><th>业务价值</th></tr></thead>
+    <tbody>
+      <tr><td><span class="accent">混合检索</span></td><td>向量语义(70%) + BM25关键词(30%)</td><td>兼顾语义理解和精确匹配</td></tr>
+      <tr><td><span class="accent">时间衰减</span></td><td>14天半衰期，60天完全衰减</td><td>自动淡忘过期信息</td></tr>
+      <tr><td><span class="accent">智能提取</span></td><td>自动识别关键事实和决策</td><td>零成本积累知识</td></tr>
+      <tr><td><span class="accent">交叉重排序</span></td><td>Jina Reranker v3 精排</td><td>最相关记忆优先召回</td></tr>
+      <tr><td><span class="accent">角色级隔离</span></td><td>agentAccess 白名单控制</td><td>安全共享，防止跨角色泄露</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ==================== SLIDE 14: MCP ==================== -->
+<div class="slide compact" data-index="13">
+  <h2>&#x1F527; MCP 工具集成平台</h2>
+  <blockquote>让 AI 能操作企业内部系统，从"对话"升级为"执行"</blockquote>
+  <p style="margin:8px 0; font-size:0.95rem;"><strong>解决的问题：</strong>企业需要 AI 直接操作数据库、发邮件、调 API &mdash; 但必须安全可控</p>
+  <div class="flow" style="margin:12px 0;">
+    <div class="flow-step">管理员定义 MCP Server</div><span class="flow-arrow">&rarr;</span>
+    <div class="flow-step">平台自动发现工具</div><span class="flow-arrow">&rarr;</span>
+    <div class="flow-step">按权限分配给 Agent</div><span class="flow-arrow">&rarr;</span>
+    <div class="flow-step" style="border-color:rgba(52,211,153,0.4); color:#34d399;">AI 安全调用</div>
+  </div>
+  <div class="two-col" style="margin-top:8px;">
+    <div>
+      <h3 style="font-size:1rem;">三种运行模式</h3>
+      <table style="font-size:0.82rem;">
+        <thead><tr><th>模式</th><th>场景</th><th>隔离</th></tr></thead>
+        <tbody>
+          <tr><td>宿主机直连</td><td>企业受信基础设施</td><td>环境变量白名单</td></tr>
+          <tr><td>Docker 沙箱</td><td>用户自定义工具</td><td>完整容器隔离</td></tr>
+          <tr><td>HTTP 远程</td><td>第三方服务</td><td>网络级隔离</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div>
+      <h3 style="font-size:1rem;">企业级增强</h3>
+      <ul class="check-list" style="font-size:0.85rem;">
+        <li>Agent 级 MCP 权限白名单</li>
+        <li>数据库凭证 AES-256-GCM 加密</li>
+        <li>环境变量不继承全量 process.env</li>
+        <li>工具连续失败 3 次自动熔断</li>
+        <li>两级缓存（磁盘 + 内存）</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== SLIDE 15: Skill ==================== -->
+<div class="slide compact" data-index="14">
+  <h2>&#x1F3AF; 企业技能系统 (Skill)</h2>
+  <blockquote>将复杂的专业流程封装为"一键可用"的 AI 技能</blockquote>
+  <p style="margin:8px 0; font-size:0.95rem;"><strong>解决的问题：</strong>报表生成、数据分析等标准化流程，靠 AI 每次从头理解效率低、质量不稳定</p>
+  <div class="two-col" style="margin-top:8px;">
+    <div>
+      <h3 style="font-size:1rem;">技能包结构</h3>
+      <div class="card-sm" style="font-family:monospace; font-size:0.82rem; color:#94a3b8; background:rgba(15,23,42,0.9); line-height:1.8;">
+        skill-package/<br>
+        &nbsp;&nbsp;SKILL.md &emsp;&emsp;&emsp;&nbsp;# AI 操作指南<br>
+        &nbsp;&nbsp;scripts/main.py &nbsp;# 执行脚本<br>
+        &nbsp;&nbsp;examples/ &emsp;&emsp;&nbsp;&nbsp;# 示例数据<br>
+        &nbsp;&nbsp;templates/ &emsp;&emsp;&nbsp;# 报表/PPT 模板
+      </div>
+      <h3 style="font-size:1rem; margin-top:12px;">两种管理模式</h3>
+      <table style="font-size:0.82rem;">
+        <thead><tr><th>类型</th><th>管理方</th><th>隔离</th></tr></thead>
+        <tbody>
+          <tr><td>企业技能</td><td>管理员统一部署</td><td>引擎原生发现</td></tr>
+          <tr><td>个人技能</td><td>用户自行上传</td><td>Docker 沙箱</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div>
+      <h3 style="font-size:1rem;">安全保障</h3>
+      <ul class="check-list" style="font-size:0.85rem;">
+        <li>所有技能在 Docker 容器中执行</li>
+        <li>共享 Python 虚拟环境（预装常用库）</li>
+        <li>脚本只能读写用户 workspace</li>
+        <li>结果自动输出，用户可直接下载</li>
+      </ul>
+      <h3 style="font-size:1rem; margin-top:12px;">业务场景</h3>
+      <ul style="font-size:0.85rem;">
+        <li>"帮我分析这份销售数据" &rarr; 自动 ECharts 可视化报表</li>
+        <li>"把这份报告做成 PPT" &rarr; 直接输出成品文件</li>
+        <li>管理员部署新技能 &rarr; 全企业即刻可用</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== SLIDE 16: Multi-Agent ==================== -->
+<div class="slide compact" data-index="15">
+  <h2>&#x1F91D; 多 Agent 智能协作</h2>
+  <blockquote>主 Agent 统筹调度，专业 Agent 各司其职，团队化 AI 协作</blockquote>
+  <div class="two-col" style="margin-top:8px;">
+    <div>
+      <h3 style="font-size:1rem;">协作模型</h3>
+      <div style="margin:12px 0;">
+        <div class="arch-box blue" style="padding:12px;">&#x1F464; 用户</div>
+        <div class="arch-arrow">&updownarrow;</div>
+        <div class="arch-box purple" style="padding:12px;">&#x1F916; 主 Agent（通用助手，统筹协调）</div>
+        <div class="arch-arrow">&darr; 委派</div>
+        <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px;">
+          <div class="arch-box green" style="padding:8px; font-size:0.8rem;">&#x1F4CA; 数据分析</div>
+          <div class="arch-box" style="padding:8px; font-size:0.8rem; border-color:rgba(244,114,182,0.4); background:rgba(244,114,182,0.06);">&#x270D; 文案写作</div>
+          <div class="arch-box" style="padding:8px; font-size:0.8rem; border-color:rgba(251,191,36,0.4); background:rgba(251,191,36,0.06);">&#x1F4BB; 技术开发</div>
+        </div>
+      </div>
+    </div>
+    <div>
+      <h3 style="font-size:1rem;">能力对比</h3>
+      <table style="font-size:0.82rem;">
+        <thead><tr><th>能力</th><th>主 Agent</th><th>专业 Agent</th></tr></thead>
+        <tbody>
+          <tr><td>任务委派</td><td style="color:#34d399;">可委派</td><td style="color:#f87171;">禁止</td></tr>
+          <tr><td>记忆访问</td><td>所有下属记忆</td><td>自己+主Agent</td></tr>
+          <tr><td>工作空间</td><td>用户根目录</td><td>独立目录</td></tr>
+          <tr><td>人设定制</td><td>通用 SOUL.md</td><td>专业 SOUL.md</td></tr>
+        </tbody>
+      </table>
+      <h3 style="font-size:1rem; margin-top:12px;">安全控制</h3>
+      <ul class="check-list" style="font-size:0.85rem;">
+        <li>allowAgents 白名单控制委派目标</li>
+        <li>引擎层禁止嵌套委派（无递归风险）</li>
+        <li>委派结果自动回传整合</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== SLIDE 17: Heartbeat ==================== -->
+<div class="slide compact" data-index="16">
+  <h2>&#x1F4A1; 心跳巡检监控 &amp; &#x1F4AC; 多渠道 IM 集成</h2>
+  <div class="two-col" style="margin-top:8px;">
+    <div>
+      <h3 style="font-size:1.05rem;">心跳巡检 &mdash; AI 自主巡检告警</h3>
+      <p style="font-size:0.85rem; color:#94a3b8; margin-bottom:8px;">传统监控靠人工配置规则；心跳用自然语言描述巡检任务</p>
+      <div class="flow" style="flex-direction:column; align-items:stretch; gap:4px;">
+        <div class="flow-step" style="text-align:center;">管理员在 Web UI 配置巡检任务</div>
+        <div class="flow-arrow" style="text-align:center;">&darr;</div>
+        <div class="flow-step" style="text-align:center;">写入 HEARTBEAT.md（自然语言指令）</div>
+        <div class="flow-arrow" style="text-align:center;">&darr;</div>
+        <div class="flow-step" style="text-align:center;">Cron 定时触发 Agent 执行</div>
+        <div class="flow-arrow" style="text-align:center;">&darr;</div>
+        <div class="flow-step" style="text-align:center; border-color:rgba(52,211,153,0.4); color:#34d399;">正常 &rarr; HEARTBEAT_OK &nbsp;|&nbsp; 异常 &rarr; IM 推送告警</div>
+      </div>
+      <p style="font-size:0.85rem; margin-top:8px; color:#94a3b8;">
+        不仅能<span class="accent-green">"发现问题"</span>，还能<span class="accent-green">"处理问题"</span>（自动清理、归档）
+      </p>
+    </div>
+    <div>
+      <h3 style="font-size:1.05rem;">IM 集成 &mdash; 融入日常工作流</h3>
+      <p style="font-size:0.85rem; color:#94a3b8; margin-bottom:8px;">飞书、微信、Web 三端统一接入，降低使用门槛</p>
+      <div class="card-sm" style="margin:8px 0; font-size:0.82rem; font-family:monospace; color:#94a3b8; line-height:1.8;">
+        IMService（统一入口）<br>
+        &nbsp;&nbsp;FeishuAdapter &nbsp;&nbsp;← Webhook<br>
+        &nbsp;&nbsp;WeixinManager &nbsp;&nbsp;← iLink API（多账号）<br>
+        &nbsp;&nbsp;IMRouter（消息路由）<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;/bind &nbsp;&rarr; 账号绑定<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;/agent &rarr; 切换 Agent<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;/cancel &rarr; 取消任务
+      </div>
+      <ul class="check-list" style="font-size:0.82rem;">
+        <li>绑定后密码消息立即删除</li>
+        <li>Agent 生成文件自动发送到 IM</li>
+        <li>心跳告警实时推送</li>
+        <li>微信支持多机器人并联</li>
+        <li>30 分钟超时保护</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== SLIDE 18: Section 4 ==================== -->
+<div class="slide section-title" data-index="17">
+  <div class="section-num">04</div>
+  <h1>前瞻性</h1>
+  <p class="subtitle">架构设计与未来演进</p>
+</div>
+
+<!-- ==================== SLIDE 19: Forward-looking ==================== -->
+<div class="slide compact" data-index="18">
+  <h2>前瞻性架构设计</h2>
+  <div class="grid-3" style="margin-top:12px;">
+    <div class="card">
+      <h3 style="color:#60a5fa;">&#x1F50C; 插件化架构</h3>
+      <p style="font-size:0.85rem;">所有企业能力通过插件实现，不修改核心引擎</p>
+      <table style="font-size:0.78rem; margin-top:8px;">
+        <tbody>
+          <tr><td>enterprise-audit</td><td>审计日志</td></tr>
+          <tr><td>enterprise-mcp</td><td>工具集成</td></tr>
+          <tr><td>enterprise-email</td><td>邮件发送</td></tr>
+          <tr><td>memory-lancedb-pro</td><td>长期记忆</td></tr>
+        </tbody>
+      </table>
+      <p style="font-size:0.8rem; color:#94a3b8; margin-top:6px;">对扩展开放，对修改关闭</p>
+    </div>
+    <div class="card">
+      <h3 style="color:#34d399;">&#x26A1; 配置热加载</h3>
+      <p style="font-size:0.85rem;">智能 diff，按路径判断影响范围</p>
+      <ul style="font-size:0.82rem; margin-top:8px;">
+        <li>Agent 配置 &rarr; 热加载</li>
+        <li>插件配置 &rarr; 按需重启</li>
+        <li>乐观并发控制</li>
+      </ul>
+      <p style="font-size:0.8rem; color:#94a3b8; margin-top:6px;">生产环境零停机更新</p>
+    </div>
+    <div class="card">
+      <h3 style="color:#a78bfa;">&#x1F3E0; 内网优先</h3>
+      <p style="font-size:0.85rem;">设计之初面向企业内网部署</p>
+      <ul class="check-list" style="font-size:0.82rem; margin-top:8px;">
+        <li>无外部依赖（全内网）</li>
+        <li>数据不出域</li>
+        <li>LDAP/AD 无缝对接</li>
+        <li>模型内网代理接入</li>
+      </ul>
+    </div>
+  </div>
+  <div class="grid-2" style="margin-top:16px;">
+    <div class="card">
+      <h3 style="color:#f472b6;">&#x1F916; 多模型适配</h3>
+      <p style="font-size:0.85rem;">不绑定特定厂商，随时切换最优模型</p>
+      <div style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap;">
+        <span class="tag tag-blue">DeepSeek</span>
+        <span class="tag tag-purple">Claude</span>
+        <span class="tag tag-green">OpenAI Codex</span>
+        <span class="tag tag-yellow">MiniMax</span>
+      </div>
+    </div>
+    <div class="card">
+      <h3 style="color:#fbbf24;">&#x1F680; 单进程内嵌架构</h3>
+      <p style="font-size:0.85rem;">Enterprise Gateway + Native Engine 单进程运行</p>
+      <ul class="check-list" style="font-size:0.82rem; margin-top:8px;">
+        <li>零网络开销（函数调用替代 TCP）</li>
+        <li>配置原子性（无分布式一致性问题）</li>
+        <li>一键启动，运维简单</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== SLIDE 20: Matrix ==================== -->
+<div class="slide compact" data-index="19">
+  <h2>功能矩阵总览</h2>
+  <table style="margin-top:12px; font-size:0.88rem;">
+    <thead>
+      <tr>
+        <th style="width:15%;">功能模块</th>
+        <th style="width:28%;">核心能力</th>
+        <th style="width:37%;">解决的问题</th>
+        <th style="width:20%; text-align:center;">状态</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td><strong>安全隔离</strong></td><td>Docker 沙箱 + 命名空间 + 网络隔离</td><td>多用户安全共享，防止越权和数据泄露</td><td style="text-align:center;"><span class="tag tag-green">生产就绪</span></td></tr>
+      <tr><td><strong>权限管控</strong></td><td>三维度白名单 + 双层校验</td><td>精细化控制 Agent 能力边界</td><td style="text-align:center;"><span class="tag tag-green">生产就绪</span></td></tr>
+      <tr><td><strong>审计系统</strong></td><td>双写日志 + HMAC 签名链</td><td>合规审计、操作追溯、防篡改</td><td style="text-align:center;"><span class="tag tag-green">生产就绪</span></td></tr>
+      <tr><td><strong>记忆系统</strong></td><td>向量混合检索 + 角色隔离</td><td>AI 长期记忆，越用越聪明</td><td style="text-align:center;"><span class="tag tag-green">生产就绪</span></td></tr>
+      <tr><td><strong>MCP 工具</strong></td><td>三种运行模式 + 权限白名单</td><td>AI 安全操作企业内部系统</td><td style="text-align:center;"><span class="tag tag-green">生产就绪</span></td></tr>
+      <tr><td><strong>技能系统</strong></td><td>企业 + 个人技能 + 沙箱执行</td><td>标准化复杂流程，一键复用</td><td style="text-align:center;"><span class="tag tag-green">生产就绪</span></td></tr>
+      <tr><td><strong>多 Agent</strong></td><td>主从协作 + 委派控制</td><td>专业分工，团队化 AI 协作</td><td style="text-align:center;"><span class="tag tag-green">生产就绪</span></td></tr>
+      <tr><td><strong>心跳巡检</strong></td><td>Cron 定时 + 自然语言指令</td><td>自主发现问题，主动告警</td><td style="text-align:center;"><span class="tag tag-green">生产就绪</span></td></tr>
+      <tr><td><strong>IM 集成</strong></td><td>飞书 + 微信 + 适配器模式</td><td>融入日常工作流，降低使用门槛</td><td style="text-align:center;"><span class="tag tag-green">生产就绪</span></td></tr>
+      <tr><td><strong>内网部署</strong></td><td>数据不出域 + LDAP 集成</td><td>数据主权和信息合规</td><td style="text-align:center;"><span class="tag tag-green">生产就绪</span></td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ==================== SLIDE 21: Summary ==================== -->
+<div class="slide" data-index="20">
+  <h2 style="text-align:center; margin-bottom:24px;">总结</h2>
+  <div class="grid-3">
+    <div class="card" style="text-align:center; border-color:rgba(239, 68, 68, 0.3);">
+      <span class="icon" style="font-size:3rem;">&#x1F6E1;</span>
+      <h3 style="color:#fca5a5; font-size:1.3rem;">安全性</h3>
+      <p style="font-size:1rem; color:#cbd5e1; margin-top:8px;">六层纵深防御</p>
+      <p style="font-size:0.85rem; color:#94a3b8; margin-top:8px;">沙箱隔离 &rarr; 命名空间 &rarr; 权限管控 &rarr; 审计系统 &rarr; 认证授权 &rarr; 行为熔断</p>
+      <p style="font-size:0.85rem; color:#94a3b8; margin-top:8px;">满足企业级安全合规要求</p>
+    </div>
+    <div class="card" style="text-align:center; border-color:rgba(96, 165, 250, 0.3);">
+      <span class="icon" style="font-size:3rem;">&#x1F4A1;</span>
+      <h3 style="color:#93c5fd; font-size:1.3rem;">创新性</h3>
+      <p style="font-size:1rem; color:#cbd5e1; margin-top:8px;">六大核心功能</p>
+      <p style="font-size:0.85rem; color:#94a3b8; margin-top:8px;">记忆让 AI"越用越聪明"<br>MCP 让 AI"能做事"<br>多 Agent 让 AI"团队协作"<br>心跳让 AI"主动巡检"</p>
+    </div>
+    <div class="card" style="text-align:center; border-color:rgba(167, 139, 250, 0.3);">
+      <span class="icon" style="font-size:3rem;">&#x1F52D;</span>
+      <h3 style="color:#c4b5fd; font-size:1.3rem;">前瞻性</h3>
+      <p style="font-size:1rem; color:#cbd5e1; margin-top:8px;">面向未来的架构</p>
+      <p style="font-size:0.85rem; color:#94a3b8; margin-top:8px;">插件化无侵入扩展<br>多模型适配不绑定厂商<br>内网部署保障数据主权<br>配置热加载零停机更新</p>
+    </div>
+  </div>
+  <div style="text-align:center; margin-top:32px;">
+    <p style="font-size:1.2rem; color:#93c5fd;">全功能<span class="highlight">生产就绪</span>，为企业智能化升级提供坚实技术底座</p>
+  </div>
+</div>
+
+<!-- ==================== SLIDE 22: End ==================== -->
+<div class="slide cover" data-index="21">
+  <h1 style="font-size:3rem;">谢谢</h1>
+  <p class="subtitle" style="margin-top:16px;">Octopus &mdash; 企业级 AI Agent 智能协作平台</p>
+</div>
+
+</div><!-- end .deck -->
+
+<!-- ========== Navigation ========== -->
+<div class="nav">
+  <button onclick="go(-1)" title="上一页">&#x25C0;</button>
+  <button onclick="go(1)" title="下一页">&#x25B6;</button>
+</div>
+
+<script>
+(function(){
+  const slides = document.querySelectorAll('.slide');
+  const total = slides.length;
+  let cur = 0;
+
+  function show(idx) {
+    if (idx < 0 || idx >= total) return;
+    slides[cur].classList.remove('active');
+    if (idx > cur) slides[cur].classList.add('prev');
+    cur = idx;
+    slides[cur].classList.remove('prev');
+    slides[cur].classList.add('active');
+    slides[cur].scrollTop = 0;
+    document.getElementById('progress').style.width = ((cur / (total - 1)) * 100) + '%';
+    document.getElementById('pageNum').textContent = (cur + 1) + ' / ' + total;
+  }
+
+  window.go = function(d) { show(cur + d); };
+
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ' || e.key === 'PageDown') { e.preventDefault(); go(1); }
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowUp' || e.key === 'PageUp') { e.preventDefault(); go(-1); }
+    if (e.key === 'Home') { e.preventDefault(); show(0); }
+    if (e.key === 'End') { e.preventDefault(); show(total - 1); }
+  });
+
+  // Touch support
+  let touchStartX = 0;
+  document.addEventListener('touchstart', function(e) { touchStartX = e.touches[0].clientX; });
+  document.addEventListener('touchend', function(e) {
+    const diff = touchStartX - e.changedTouches[0].clientX;
+    if (Math.abs(diff) > 50) { diff > 0 ? go(1) : go(-1); }
+  });
+
+  show(0);
+})();
+</script>
+</body>
+</html>

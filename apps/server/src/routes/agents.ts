@@ -61,11 +61,9 @@ export function createAgentsRouter(
 
   /** 原生工具描述映射（用于 TOOLS.md 生成，面向 LLM 提示） */
   const NATIVE_TOOL_DESCRIPTIONS: Record<string, string> = {
-    list_files: '列出工作空间中的文件和目录',
-    read_file: '读取文件内容',
-    write_file: '写入或创建文件',
-    execute_command: '在沙箱中执行 Shell 命令（bash）',
-    search_files: '按文件名模式搜索文件',
+    read: '读取文件内容、列出目录',
+    write: '写入或创建文件',
+    exec: '在沙箱中执行 Shell 命令（bash）',
   };
 
   /**
@@ -188,7 +186,7 @@ export function createAgentsRouter(
         enabled: true,
         isDefault: true,
         identity: { name: 'Octopus AI', emoji: '🐙' },
-        toolsFilter: ['list_files', 'read_file', 'write_file', 'execute_command', 'search_files'],
+        toolsFilter: ['read', 'write', 'exec'],
         skillsFilter: skills.map((s: { name: string }) => s.name),
         mcpFilter: defaultMcpFilter,
         allowedConnections: connections.map((c: { name: string }) => c.name),
@@ -196,7 +194,7 @@ export function createAgentsRouter(
     });
 
     // 首次创建 default agent 时同步 TOOLS.md（包含原生工具 + MCP 工具）
-    const defaultToolsFilter = ['list_files', 'read_file', 'write_file', 'execute_command', 'search_files'];
+    const defaultToolsFilter = ['read', 'write', 'exec'];
     syncToolsMd(userId, 'default', defaultMcpFilter, defaultToolsFilter).catch((e: any) =>
       console.error('[agents] syncToolsMd for new default agent failed:', e.message),
     );
@@ -260,6 +258,8 @@ export function createAgentsRouter(
           agentName: agent.name,
           model: model?.trim() || null,
           toolsFilter: toolsFilter ?? [],
+          skillsFilter: skillsFilter ?? [],
+          mcpFilter: mcpFilter ?? [],
           enabledAgentNames: enabledAgents.map(a => a.name),
         });
         // 创建时同步 TOOLS.md（原生工具 + MCP 工具）
@@ -328,17 +328,23 @@ export function createAgentsRouter(
         }
       }
 
-      // model / toolsFilter / enabled 变化时统一同步到 native agents.list
+      // model / toolsFilter / skillsFilter / enabled 变化时统一同步到 native agents.list
       const modelChanged = model !== undefined &&
         (model?.trim() || null) !== (existing.model || null);
       const toolsFilterChanged = toolsFilter !== undefined &&
         JSON.stringify(toolsFilter) !== JSON.stringify(existing.toolsFilter);
-      if (modelChanged || toolsFilterChanged || enabledChanged) {
+      const skillsFilterChanged = skillsFilter !== undefined &&
+        JSON.stringify(skillsFilter) !== JSON.stringify(existing.skillsFilter);
+      const mcpFilterChanged = mcpFilter !== undefined &&
+        JSON.stringify(mcpFilter) !== JSON.stringify(existing.mcpFilter);
+      if (modelChanged || toolsFilterChanged || skillsFilterChanged || mcpFilterChanged || enabledChanged) {
         const syncOpts: Parameters<typeof syncAgentToEngine>[2] = {};
-        if (modelChanged || toolsFilterChanged) {
+        if (modelChanged || toolsFilterChanged || skillsFilterChanged || mcpFilterChanged) {
           syncOpts.agentName = agent.name;
           if (modelChanged) syncOpts.model = model?.trim() || null;
           if (toolsFilterChanged) syncOpts.toolsFilter = toolsFilter ?? [];
+          if (skillsFilterChanged) syncOpts.skillsFilter = skillsFilter ?? [];
+          if (mcpFilterChanged) syncOpts.mcpFilter = mcpFilter ?? [];
         }
         if (enabledChanged) {
           const enabledAgents = await prisma.agent.findMany({ where: { ownerId: user.id, enabled: true }, select: { name: true } });
@@ -350,8 +356,6 @@ export function createAgentsRouter(
       }
 
       // mcpFilter 或 toolsFilter 变化时同步 TOOLS.md（增删工具实时写入）
-      const mcpFilterChanged = mcpFilter !== undefined &&
-        JSON.stringify(mcpFilter) !== JSON.stringify(existing.mcpFilter);
       if (mcpFilterChanged || toolsFilterChanged) {
         const finalMcpFilter = mcpFilter ?? (existing.mcpFilter as string[]) ?? [];
         const finalToolsFilter = toolsFilter ?? (existing.toolsFilter as string[]) ?? [];

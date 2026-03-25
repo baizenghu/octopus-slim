@@ -14,34 +14,20 @@ import type { EngineAdapter } from './EngineAdapter';
 import type { WorkspaceManager } from '@octopus/workspace';
 import { getSoulTemplate, getMemoryTemplate } from './SoulTemplate';
 
-// 引擎 tools.allow 映射：企业语义名 → 引擎原生名
-const TOOL_NAME_TO_ENGINE: Record<string, string> = {
-  list_files: 'read',       // 引擎用 read 工具读目录
-  read_file: 'read',
-  write_file: 'write',
-  execute_command: 'exec',
-  search_files: 'exec',     // 搜索通过 exec 的 grep/find 实现
-};
-
-/** 基础工具（所有 agent 都需要的非文件类工具） */
-const BASE_TOOLS = [
-  'memory_search', 'memory_get',
-  'cron', 'image',
-];
-
-/** 仅主 agent 拥有的额外工具（会话管理/委派/列出 agent） */
-const DEFAULT_ONLY_TOOLS = [
-  'sessions_list', 'sessions_history', 'sessions_send', 'sessions_spawn',
-  'agents_list',
-];
-
-/** 将企业 toolsFilter 名称转换为引擎原生工具名（去重） */
-function mapToolsToEngine(tools: string[]): string[] {
-  const mapped = new Set<string>();
-  for (const t of tools) {
-    mapped.add(TOOL_NAME_TO_ENGINE[t] || t);
-  }
-  return [...mapped];
+/**
+ * 根据 toolsFilter（read/write/exec 三组）计算需要 deny 的文件/命令工具
+ * - toolsFilter 不含 read → deny read, edit, apply_patch
+ * - toolsFilter 不含 write → deny write
+ * - toolsFilter 不含 exec → deny exec, process
+ * - toolsFilter 为空/null → deny 全部
+ */
+function computeToolsDeny(toolsFilter: string[] | null): string[] {
+  const deny: string[] = [];
+  const tf = new Set(toolsFilter || []);
+  if (!tf.has('read'))  deny.push('read', 'edit', 'apply_patch');
+  if (!tf.has('write')) deny.push('write');
+  if (!tf.has('exec'))  deny.push('exec', 'process');
+  return deny;
 }
 
 /** 从 tools-cache.json 读取所有 MCP 工具，返回 { serverId, nativeToolName }[] */
@@ -85,7 +71,7 @@ function computeMcpDenyTools(mcpFilter: string[] | null): string[] {
  * @param opts - 同步选项
  *   - agentName: 要更新 model/tools 的 agent 名称
  *   - model: 模型配置（"provider/modelId" 格式），null 表示清除
- *   - toolsFilter: 工具白名单（企业语义名），null 表示不改变
+ *   - toolsFilter: 工具白名单（引擎原生名: read/write/exec），null 表示不改变
  *   - enabledAgentNames: 该用户所有 enabled 的 agent 名称列表（用于 allowAgents 同步）
  *   - deleteAgentName: 要从 agents.list 中删除的 agent 名称
  *   - skillsFilter: 技能白名单（空数组 = 禁用所有技能 → deny run_skill）
@@ -131,7 +117,7 @@ export async function syncAgentToEngine(
   const currentList: any[] = (config as any)?.agents?.list || [];
 
   // 2. 更新 model + tools.allow
-  if (opts.agentName && (opts.model !== undefined || opts.toolsFilter !== undefined || opts.skillsFilter !== undefined)) {
+  if (opts.agentName && (opts.model !== undefined || opts.toolsFilter !== undefined || opts.mcpFilter !== undefined || opts.skillsFilter !== undefined)) {
     const targetId = EA.userAgentId(userId, opts.agentName);
     const entry = currentList.find((a: any) => a.id === targetId);
     if (entry) {
@@ -150,42 +136,66 @@ export async function syncAgentToEngine(
         }
       }
 
-      // toolsFilter → 引擎 tools.allow 硬限制
-      if (opts.toolsFilter !== undefined) {
-        const tf = opts.toolsFilter;
-        // group:plugins 授权 agent 调用 MCP 插件工具。
-        // 所有有工具权限的 agent 都需要 group:plugins，否则 MCP 工具描述注入了但实际调用被引擎拒绝。
-        // MCP 级别的权限控制由 enterprise-mcp 插件内部的 mcpFilter 白名单负责。
+      // toolsFilter + mcpFilter → profile + alsoAllow + deny
+      if (opts.toolsFilter !== undefined || opts.mcpFilter !== undefined) {
         const isDefault = opts.agentName === 'default';
-        let newAllow: string[];
-        if (Array.isArray(tf) && tf.length > 0) {
-          const engineTools = mapToolsToEngine(tf);
-          newAllow = [...engineTools, ...BASE_TOOLS, 'group:plugins', ...(isDefault ? DEFAULT_ONLY_TOOLS : [])];
-        } else {
-          newAllow = [...BASE_TOOLS, 'group:plugins', ...(isDefault ? DEFAULT_ONLY_TOOLS : [])];
-        }
-        const oldAllow = JSON.stringify(entry.tools?.allow);
-        if (oldAllow !== JSON.stringify(newAllow)) {
-          entry.tools = { ...entry.tools, allow: newAllow };
-          changed = true;
-          console.log(`[AgentConfigSync] tools.allow: ${targetId} → [${newAllow.join(', ')}]`);
-        }
-      }
 
-      // mcpFilter → tools.deny 隐藏未授权的 MCP 工具
-      if (opts.mcpFilter !== undefined) {
-        const mcpDeny = computeMcpDenyTools(opts.mcpFilter);
+        // profile: coding 已包含 read/write/exec/memory/sessions/cron/image
+        const newProfile = 'coding';
+        // alsoAllow: group:plugins（MCP 工具）+ agents_list（仅 default）
+        const newAlsoAllow = isDefault
+          ? ['group:plugins', 'agents_list']
+          : ['group:plugins'];
+
+        // deny 合并三个来源：toolsFilter 关闭的工具组 + 专业 agent 限制 + MCP deny + skill deny
         const currentDeny: string[] = entry.tools?.deny || [];
-        // 移除旧的 MCP deny 项（以 mcp_ 开头），再加入新的
-        const nonMcpDeny = currentDeny.filter((t: string) => !t.startsWith('mcp_'));
-        const newDeny = [...nonMcpDeny, ...mcpDeny];
-        const oldDenyStr = JSON.stringify(currentDeny.sort());
-        const newDenyStr = JSON.stringify(newDeny.sort());
-        if (oldDenyStr !== newDenyStr) {
-          entry.tools = { ...entry.tools, deny: newDeny.length > 0 ? newDeny : undefined };
+
+        // 1. toolsFilter deny（read/write/exec 组）
+        const tf = opts.toolsFilter !== undefined ? opts.toolsFilter : (entry.tools?._toolsFilter as string[] | null);
+        const toolsDeny = computeToolsDeny(tf ?? null);
+
+        // 2. 专业 agent 限制
+        const specialistDeny = isDefault ? [] : ['sessions_spawn', 'subagents', 'agents_list'];
+
+        // 3. MCP deny（保留已有非 MCP deny 项中的 run_skill 等）
+        let mcpDeny: string[] = [];
+        if (opts.mcpFilter !== undefined) {
+          mcpDeny = computeMcpDenyTools(opts.mcpFilter);
+        } else {
+          mcpDeny = currentDeny.filter((t: string) => t.startsWith('mcp_'));
+        }
+
+        // 4. 保留 run_skill deny（由 skillsFilter 逻辑管理）
+        const runSkillDeny = currentDeny.includes('run_skill') ? ['run_skill'] : [];
+
+        const newDeny = [...new Set([...toolsDeny, ...specialistDeny, ...mcpDeny, ...runSkillDeny])];
+
+        // 比较并更新
+        const oldTools = JSON.stringify({
+          profile: entry.tools?.profile,
+          alsoAllow: entry.tools?.alsoAllow,
+          allow: entry.tools?.allow,
+          deny: entry.tools?.deny,
+        });
+        const newTools: Record<string, unknown> = {
+          profile: newProfile,
+          alsoAllow: newAlsoAllow,
+          deny: newDeny.length > 0 ? newDeny : undefined,
+          // 保存 toolsFilter 原值用于后续增量同步（引擎忽略未知字段）
+          _toolsFilter: tf,
+        };
+        // 清理 allow 字段（迁移到 profile 后不再需要）
+        const newToolsStr = JSON.stringify({
+          profile: newTools.profile,
+          alsoAllow: newTools.alsoAllow,
+          allow: undefined,
+          deny: newTools.deny,
+        });
+        if (oldTools !== newToolsStr) {
+          entry.tools = newTools;
           if (!entry.tools.deny) delete entry.tools.deny;
           changed = true;
-          console.log(`[AgentConfigSync] mcp tools.deny: ${targetId} → [${mcpDeny.join(', ')}]`);
+          console.log(`[AgentConfigSync] tools: ${targetId} → profile=${newProfile}, alsoAllow=[${newAlsoAllow}], deny=[${newDeny.join(', ')}]`);
         }
       }
 
@@ -345,9 +355,6 @@ export async function syncAgentToEngine(
 
 // ─── ensureAndSyncNativeAgent ───────────────────────────────────────────────
 
-/** 已确认存在的 native agent 缓存，避免每次 chat 都调 RPC */
-const knownNativeAgents = new Set<string>();
-
 /** agentFilesSet 带重试：原生 gateway 创建 agent 后异步初始化 workspace，立即调用会 "unknown agent id" */
 async function setFileWithRetry(
   bridge: EngineAdapter,
@@ -419,19 +426,8 @@ export async function ensureAndSyncNativeAgent(
   const nativeAgentId = EA.userAgentId(userId, agentName);
 
   // ── 1. 缓存检查（仅 chat.ts 模式） ──
-  if (useCache) {
-    if (knownNativeAgents.has(nativeAgentId)) return;
-
-    // 先检查引擎中是否已有该 agent
-    try {
-      const result = await bridge.agentsList() as any;
-      const agents: any[] = result?.agents || [];
-      for (const a of agents) knownNativeAgents.add(a.id);
-      if (knownNativeAgents.has(nativeAgentId)) return;
-    } catch {
-      // agents.list 失败时 fallback 到 create
-    }
-  }
+  // 利用 agentsCreate 幂等性：直接尝试创建，catch "already exists" 即可
+  // 无需维护 knownNativeAgents 缓存或轮询 agents.list
 
   // ── 2. 获取 workspace 路径 ──
   let workspacePath: string;
@@ -450,7 +446,7 @@ export async function ensureAndSyncNativeAgent(
   let isNewAgent = false;
 
   if (useCache) {
-    // chat.ts 模式：单次尝试，无重试
+    // chat.ts 模式：单次尝试，catch "already exists" = 已就绪
     try {
       await bridge.agentsCreate({ name: nativeAgentId, workspace: workspacePath });
       isNewAgent = true;
@@ -458,7 +454,6 @@ export async function ensureAndSyncNativeAgent(
     } catch (createErr: any) {
       const msg = createErr.message || '';
       if (msg.includes('already exists')) {
-        knownNativeAgents.add(nativeAgentId);
         agentReady = true;
       } else {
         console.error(`${logPrefix} agentsCreate failed for ${nativeAgentId}: ${msg}`);
@@ -491,19 +486,7 @@ export async function ensureAndSyncNativeAgent(
     }
   }
 
-  // ── 4. 等待 agent 就绪（仅 chat.ts 新建时） ──
-  if (useCache && isNewAgent) {
-    for (let i = 0; i < 5; i++) {
-      try {
-        const result = await bridge.agentsList() as any;
-        const agents: any[] = result?.agents || [];
-        if (agents.some((a: any) => a.id === nativeAgentId || a.name === nativeAgentId)) break;
-      } catch { /* retry */ }
-      await new Promise(r => setTimeout(r, 500));
-    }
-  }
-
-  // ── 5. 写文件 ──
+  // ── 4. 写文件 ──
   if (!agentReady) return;
 
   if (useCache && isNewAgent) {

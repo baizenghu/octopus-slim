@@ -449,7 +449,7 @@ async function main() {
     app.use('/api/user/weixin', createWeixinRoutes({ authService, prisma: prismaClient, weixinManager: imService.weixinManager }));
   }
   if (imService) {
-    app.use('/api/_internal/im', createImInternalRouter(imService));
+    app.use('/api/_internal/im', createImInternalRouter(imService, workspaceManager));
   }
   if (bridge) {
     app.use('/api/_internal/chat', createChatInternalRouter(bridge, workspaceManager, config.workspace.dataRoot));

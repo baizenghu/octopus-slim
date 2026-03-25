@@ -127,8 +127,8 @@ export default function UsersPage() {
     }
     try {
       if (editingUser) {
-        const { password: _p, ...rest } = formValues;
-        await adminApi.updateUser(editingUser.userId, rest);
+        const { password, ...rest } = formValues;
+        await adminApi.updateUser(editingUser.userId, password ? { ...rest, password } : rest);
         toast.success('用户已更新');
       } else {
         await adminApi.createUser(formValues);
@@ -299,17 +299,15 @@ export default function UsersPage() {
                 onChange={(e) => setFormValues({ ...formValues, username: e.target.value })}
               />
             </div>
-            {!editingUser && (
-              <div className="space-y-2">
-                <Label>密码 *</Label>
-                <Input
-                  type="password"
-                  placeholder="登录密码"
-                  value={formValues.password}
-                  onChange={(e) => setFormValues({ ...formValues, password: e.target.value })}
-                />
-              </div>
-            )}
+            <div className="space-y-2">
+              <Label>{editingUser ? '重置密码' : '密码 *'}</Label>
+              <Input
+                type="password"
+                placeholder={editingUser ? '留空则不修改' : '登录密码'}
+                value={formValues.password}
+                onChange={(e) => setFormValues({ ...formValues, password: e.target.value })}
+              />
+            </div>
             <div className="space-y-2">
               <Label>邮箱 *</Label>
               <Input

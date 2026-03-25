@@ -175,15 +175,17 @@ export async function uploadAndSendFile(opts: {
   });
 
   // 4. Send media message via ilink API
-  const aeskeyBase64 = aeskey.toString('base64');
+  // 与 OpenClaw 一致：hex 字符串的 UTF-8 编码再转 base64
+  const aeskeyBase64 = Buffer.from(aeskey.toString('hex')).toString('base64');
   const clientId = crypto.randomBytes(16).toString('hex');
 
-  // 根据 mediaType 构造不同的 item_list
+  // MessageItemType 枚举（与 api.ts 一致）
+  // TEXT=1, IMAGE=2, VOICE=3, FILE=4, VIDEO=5
   let itemList: any[];
   if (mediaType === 1) {
     // IMAGE
     itemList = [{
-      type: 'IMAGE',
+      type: 2,
       image_item: {
         media: {
           encrypt_query_param: downloadParam,
@@ -196,7 +198,7 @@ export async function uploadAndSendFile(opts: {
   } else if (mediaType === 2) {
     // VIDEO
     itemList = [{
-      type: 'VIDEO',
+      type: 5,
       video_item: {
         media: {
           encrypt_query_param: downloadParam,
@@ -209,7 +211,7 @@ export async function uploadAndSendFile(opts: {
   } else {
     // FILE
     itemList = [{
-      type: 'FILE',
+      type: 4,
       file_item: {
         media: {
           encrypt_query_param: downloadParam,
@@ -224,41 +226,59 @@ export async function uploadAndSendFile(opts: {
 
   // 如果有附带文本，加一个 TEXT item
   if (text) {
-    itemList.unshift({ type: 'TEXT', text_item: { text } });
+    itemList.unshift({ type: 1, text_item: { text } });
   }
 
-  // 发送 sendMessage
+  // 逐个 item 发送（与 OpenClaw 一致，每个 item 单独一次 sendMessage）
   const base = apiOpts.baseUrl.endsWith('/') ? apiOpts.baseUrl : `${apiOpts.baseUrl}/`;
-  const url = new URL('ilink/bot/sendmessage', base);
-  const randomUin = crypto.randomBytes(4).readUInt32BE(0);
-  const wechatUin = Buffer.from(String(randomUin), 'utf-8').toString('base64');
+  const sendUrl = new URL('ilink/bot/sendmessage', base).toString();
 
-  const body = JSON.stringify({
-    msg: {
-      to_user_id: to,
-      message_type: 'BOT',
-      message_state: 2, // FINISH
-      client_id: clientId,
-      item_list: itemList,
-      context_token: contextToken,
-    },
-    base_info: { channel_version: '1.0.0' },
-  });
+  for (const item of itemList) {
+    const itemClientId = crypto.randomBytes(16).toString('hex');
+    const randomUin = crypto.randomBytes(4).readUInt32BE(0);
+    const wechatUin = Buffer.from(String(randomUin), 'utf-8').toString('base64');
 
-  const res = await fetch(url.toString(), {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiOpts.token}`,
-      'X-WECHAT-UIN': wechatUin,
-      'Content-Length': String(Buffer.byteLength(body, 'utf-8')),
-    },
-    body,
-  });
+    const body = JSON.stringify({
+      msg: {
+        from_user_id: '',
+        to_user_id: to,
+        client_id: itemClientId,
+        message_type: 2, // BOT
+        message_state: 2, // FINISH
+        item_list: [item],
+        context_token: contextToken,
+      },
+    });
 
-  if (!res.ok) {
-    const errText = await res.text().catch(() => '');
-    throw new Error(`sendMessage (media) failed: ${res.status} ${errText}`);
+    const res = await fetch(sendUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'AuthorizationType': 'ilink_bot_token',
+        'Authorization': `Bearer ${apiOpts.token}`,
+        'X-WECHAT-UIN': wechatUin,
+        'Content-Length': String(Buffer.byteLength(body, 'utf-8')),
+      },
+      body,
+    });
+
+    const resBody = await res.text().catch(() => '');
+    if (!res.ok) {
+      throw new Error(`sendMessage (media) failed: ${res.status} ${resBody}`);
+    }
+    // 检查业务错误码
+    try {
+      const resJson = JSON.parse(resBody);
+      if (resJson.errcode && resJson.errcode !== 0) {
+        throw new Error(`sendMessage (media) biz error: errcode=${resJson.errcode} errmsg=${resJson.errmsg}`);
+      }
+      if (resJson.ret && resJson.ret !== 0) {
+        throw new Error(`sendMessage (media) ret error: ret=${resJson.ret}`);
+      }
+    } catch (e: any) {
+      if (e.message.includes('error')) throw e;
+    }
+    console.log(`[wechat-cdn] sendMessage item OK: type=${item.type}, response: ${resBody.slice(0, 300)}`);
   }
 
   return { messageId: clientId };

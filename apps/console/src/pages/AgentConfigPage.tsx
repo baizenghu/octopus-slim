@@ -1,7 +1,7 @@
 /**
- * Agent 配置页面 -- SOUL.md 编辑
+ * Agent 配置页面 -- SOUL.md / USER.md 编辑
  *
- * 直接展示 SOUL.md 内容的编辑器，支持在线编辑、下载、上传。
+ * 通过 tab 切换，支持在线编辑、下载、上传多个配置文件。
  */
 import { useState, useEffect, useRef } from 'react';
 import { ArrowLeft, Download, Upload, Save, Loader2 } from 'lucide-react';
@@ -10,33 +10,49 @@ import { adminApi, type AgentInfo } from '../api';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 interface AgentConfigPageProps {
   agent: AgentInfo;
   onBack: () => void;
 }
 
+const CONFIG_TABS = ['SOUL.md', 'USER.md'] as const;
+type ConfigTab = typeof CONFIG_TABS[number];
+
 export default function AgentConfigPage({ agent, onBack }: AgentConfigPageProps) {
-  const [content, setContent] = useState('');
-  const [originalContent, setOriginalContent] = useState('');
+  const [activeTab, setActiveTab] = useState<ConfigTab>('SOUL.md');
+  // 每个 tab 独立跟踪内容
+  const [contents, setContents] = useState<Record<ConfigTab, string>>({ 'SOUL.md': '', 'USER.md': '' });
+  const [originals, setOriginals] = useState<Record<ConfigTab, string>>({ 'SOUL.md': '', 'USER.md': '' });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const agentDisplayName = agent.identity?.name || agent.name;
 
-  // 加载 SOUL.md 内容
+  const content = contents[activeTab];
+  const originalContent = originals[activeTab];
+
+  const setContent = (text: string) => {
+    setContents(prev => ({ ...prev, [activeTab]: text }));
+  };
+
+  // 加载所有配置文件
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
       setLoading(true);
       try {
         const res = await adminApi.getAgentConfig(agent.id);
-        const soulFile = res.files?.find((f: { name: string }) => f.name === 'SOUL.md');
-        const text = soulFile?.content || '';
         if (!cancelled) {
-          setContent(text);
-          setOriginalContent(text);
+          const next: Record<ConfigTab, string> = { 'SOUL.md': '', 'USER.md': '' };
+          for (const tab of CONFIG_TABS) {
+            const f = res.files?.find((f: { name: string }) => f.name === tab);
+            next[tab] = f?.content || '';
+          }
+          setContents(next);
+          setOriginals(next);
         }
       } catch (err: any) {
         if (!cancelled) toast.error(err.message || '加载配置失败');
@@ -53,9 +69,9 @@ export default function AgentConfigPage({ agent, onBack }: AgentConfigPageProps)
   const handleSave = async () => {
     setSaving(true);
     try {
-      await adminApi.updateAgentConfig(agent.id, 'SOUL.md', content);
-      setOriginalContent(content);
-      toast.success('SOUL.md 已保存');
+      await adminApi.updateAgentConfig(agent.id, activeTab, content);
+      setOriginals(prev => ({ ...prev, [activeTab]: content }));
+      toast.success(`${activeTab} 已保存`);
     } catch (err: any) {
       toast.error(err.message || '保存失败');
     }
@@ -68,7 +84,7 @@ export default function AgentConfigPage({ agent, onBack }: AgentConfigPageProps)
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${agent.name}-SOUL.md`;
+    a.download = `${agent.name}-${activeTab}`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -121,6 +137,20 @@ export default function AgentConfigPage({ agent, onBack }: AgentConfigPageProps)
 
       <Card>
         <CardContent className="pt-6">
+          {/* Tab 切换 */}
+          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as ConfigTab)} className="mb-4">
+            <TabsList>
+              {CONFIG_TABS.map((tab) => {
+                const tabChanged = contents[tab] !== originals[tab];
+                return (
+                  <TabsTrigger key={tab} value={tab}>
+                    {tab}{tabChanged ? ' *' : ''}
+                  </TabsTrigger>
+                );
+              })}
+            </TabsList>
+          </Tabs>
+
           {/* 工具栏 */}
           <div className="flex gap-2 mb-4">
             <Button
@@ -151,7 +181,7 @@ export default function AgentConfigPage({ agent, onBack }: AgentConfigPageProps)
             value={content}
             onChange={(e) => setContent(e.target.value)}
             className="font-mono text-sm min-h-[400px] resize-y"
-            placeholder="在此编辑 SOUL.md..."
+            placeholder={`在此编辑 ${activeTab}...`}
           />
         </CardContent>
       </Card>

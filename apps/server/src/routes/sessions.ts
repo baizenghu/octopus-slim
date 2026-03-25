@@ -223,7 +223,14 @@ export function createSessionsRouter(
       const result = await bridge.sessionsList(nativeAgentId) as any;
       // 保留客户端 filter 作为二次防御
       const rawSessions = ((result?.sessions || result) as any[] || [])
-        .filter((s: any) => (s.key || s.sessionKey || '').startsWith(agentPrefix));
+        .filter((s: any) => {
+          const key = s.key || s.sessionKey || '';
+          if (!key.startsWith(agentPrefix)) return false;
+          // 排除心跳隔离会话
+          const sessionId = key.slice(agentPrefix.length);
+          if (sessionId.startsWith('heartbeat-')) return false;
+          return true;
+        });
 
       // P1-12: 异步补标题（fire-and-forget），不阻塞列表返回
       // 标题会在后台生成，前端下次刷新时看到
@@ -282,13 +289,32 @@ export function createSessionsRouter(
     try {
       const history = await bridge.chatHistory(sessionId) as any;
       // native gateway 的 content 字段是 [{type:'text', text:'...'}] 数组，转成字符串
+      type ToolCallInfo = { name: string; toolCallId?: string; args?: string; result?: string };
+      type HistoryMsg = { role: 'user' | 'assistant'; content: string; thinking?: string; ts?: string; toolCalls?: ToolCallInfo[] };
+
       const rawMessages = ((history?.messages || history?.history || []) as any[])
         .filter((m: any) => m.role === 'user' || m.role === 'assistant')
         .map((m: any) => {
           // map 内部可能返回 null（subagent 内部消息），后面 filter 掉
           let content: string;
+          let toolCalls: ToolCallInfo[] | undefined;
           if (Array.isArray(m.content)) {
-            content = m.content.map((c: any) => c.text || c.content || '').join('');
+            // 只提取 type=text 的内容块，跳过 tool_use 等非文本块（与引擎 WebUI extractRawText 一致）
+            content = m.content
+              .filter((c: any) => c.type === 'text' && typeof c.text === 'string')
+              .map((c: any) => c.text)
+              .join('\n');
+            // 提取工具调用块（引擎用 toolCall，标准 API 用 tool_use）
+            const toolUseBlocks = m.content.filter((c: any) => (c.type === 'toolCall' || c.type === 'tool_use') && c.name);
+            if (toolUseBlocks.length > 0) {
+              toolCalls = toolUseBlocks.map((c: any) => ({
+                name: c.name,
+                toolCallId: c.id || undefined,
+                args: c.args ? (typeof c.args === 'string' ? c.args : JSON.stringify(c.args)) :
+                      c.arguments ? (typeof c.arguments === 'string' ? c.arguments : JSON.stringify(c.arguments)) :
+                      c.input ? (typeof c.input === 'string' ? c.input : JSON.stringify(c.input)) : undefined,
+              }));
+            }
           } else if (typeof m.content === 'string') {
             content = m.content;
           } else {
@@ -313,19 +339,23 @@ export function createSessionsRouter(
             role: m.role as 'user' | 'assistant',
             content,
             ...(thinking ? { thinking } : {}),
+            ...(toolCalls ? { toolCalls } : {}),
             ts: m.timestamp ? new Date(m.timestamp).toISOString() : undefined,
           };
         })
-        .filter(Boolean) as Array<{ role: 'user' | 'assistant'; content: string; thinking?: string; ts?: string }>;
+        .filter(Boolean) as HistoryMsg[];
 
       // 合并相邻的 assistant 消息（工具调用会将助手回复拆成多段，刷新后应显示为一个气泡）
-      const messages: Array<{ role: 'user' | 'assistant'; content: string; thinking?: string; ts?: string }> = [];
+      const messages: HistoryMsg[] = [];
       for (const msg of rawMessages) {
         const last = messages[messages.length - 1];
         if (last && last.role === 'assistant' && msg.role === 'assistant') {
           last.content = (last.content + (last.content && msg.content ? '\n\n' : '') + msg.content).trim();
           if (msg.thinking) {
             last.thinking = (last.thinking ? last.thinking + '\n' : '') + msg.thinking;
+          }
+          if (msg.toolCalls) {
+            last.toolCalls = [...(last.toolCalls || []), ...msg.toolCalls];
           }
         } else {
           messages.push({ ...msg });

@@ -537,6 +537,71 @@ export default function enterpriseMcpPlugin(api: any) {
     };
   });
 
+  // ── send_im_file（IM 发送文件工具）──────────────────────────────────
+  api.registerTool((ctx: { agentId?: string }) => {
+    const agentId = ctx?.agentId;
+    if (!agentId) return null;
+
+    const userId = extractUserIdFromAgentId(agentId);
+    if (!userId) return null;
+
+    return {
+      name: 'send_im_file',
+      label: '发送文件到 IM',
+      description:
+        '向当前用户绑定的所有即时通讯渠道（微信、飞书等）发送 outputs/ 目录下的文件。' +
+        '只需传文件名，系统自动定位文件路径。',
+      parameters: Type.Object({
+        fileName: Type.String({ description: 'outputs/ 目录下的文件名（如 report.pdf）' }),
+      }),
+      async execute(_toolCallId: string, params: { fileName: string }) {
+        const { fileName } = params;
+        if (!fileName) {
+          return {
+            content: [{ type: 'text' as const, text: '参数不完整：需要 fileName' }],
+            details: { error: 'missing params' },
+          };
+        }
+
+        try {
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 30_000);
+          const resp = await fetch(`http://127.0.0.1:${_imGatewayPort}/api/_internal/im/send-file`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ..._imInternalToken ? { 'x-internal-token': _imInternalToken } : {},
+            },
+            body: JSON.stringify({ userId, fileName }),
+            signal: controller.signal,
+          });
+          clearTimeout(timeout);
+
+          if (!resp.ok) {
+            const body = await resp.json().catch(() => ({ error: resp.statusText }));
+            throw new Error((body as any).error || `HTTP ${resp.status}`);
+          }
+
+          const result = await resp.json() as { sent: number };
+          const text = result.sent > 0
+            ? `文件 ${fileName} 已发送到 ${result.sent} 个 IM 渠道`
+            : '未找到已绑定的 IM 渠道，文件未发送';
+
+          return {
+            content: [{ type: 'text' as const, text }],
+            details: { sent: result.sent, userId, fileName },
+          };
+        } catch (err: any) {
+          console.error(`[enterprise-mcp] send_im_file failed:`, err.message);
+          return {
+            content: [{ type: 'text' as const, text: `文件发送失败：${err.message}` }],
+            details: { error: err.message },
+          };
+        }
+      },
+    };
+  });
+
   // ── run_skill（企业/个人 Skill 执行工具）──────────────────────────────────
   // 通过 ToolFactory 注册：根据 agent 的 skillsFilter 控制可见性
   const _dataRoot = process.env['DATA_ROOT'] || './data';
@@ -767,6 +832,13 @@ export default function enterpriseMcpPlugin(api: any) {
           };
 
           if (result.stdout) {
+            // 尝试提取 team_process（clawteam skill），放到顶层避免 stdout 截断丢失
+            try {
+              const parsed = JSON.parse(result.stdout);
+              if (parsed?.team_process) {
+                response.team_process = parsed.team_process;
+              }
+            } catch { /* not JSON, ignore */ }
             response.stdout = result.stdout.length > 5000
               ? result.stdout.substring(0, 5000) + '\n... (输出已截断)'
               : result.stdout;

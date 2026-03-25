@@ -86,6 +86,13 @@ export class WeixinManager {
     return adapter.broadcastText(text);
   }
 
+  /** 向指定用户的微信推送文件 */
+  async sendFileToUser(userId: string, filePath: string, fileName: string): Promise<number> {
+    const adapter = this.adapters.get(userId);
+    if (!adapter) return 0;
+    return adapter.broadcastFile(filePath, fileName);
+  }
+
   /** 停止所有 adapter */
   async stopAll(): Promise<void> {
     for (const adapter of this.adapters.values()) {

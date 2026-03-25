@@ -105,7 +105,7 @@ model Agent {
   identity     Json?    /// { name?: string, emoji?: string, avatar?: string }
   skillsFilter Json?    @map("skills_filter") /// string[] | null (null=全部可用)
   mcpFilter    Json?    @map("mcp_filter")    /// string[] | null (null=全部可用)
-  toolsFilter  Json?    @map("tools_filter")  /// string[] | null (null=全部, "list_files","read_file","write_file")
+  toolsFilter  Json?    @map("tools_filter")  /// string[] | null (null=全部, "read","write","exec")
   allowedConnections Json? @map("allowed_connections") /// string[] | null (null=不限制, 数组=允许的数据库连接名白名单)
   enabled      Boolean  @default(true)
   isDefault    Boolean  @default(false) @map("is_default")
