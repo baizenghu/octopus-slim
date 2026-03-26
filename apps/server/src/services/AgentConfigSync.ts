@@ -156,7 +156,7 @@ export async function syncAgentToEngine(
         const currentDeny: string[] = entry.tools?.deny || [];
 
         // 1. toolsFilter deny（read/write/exec 组）
-        const tf = opts.toolsFilter !== undefined ? opts.toolsFilter : (entry.tools?._toolsFilter as string[] | null);
+        const tf = opts.toolsFilter !== undefined ? opts.toolsFilter : null;
         const toolsDeny = computeToolsDeny(tf ?? null);
 
         // 2. 专业 agent 限制
@@ -186,8 +186,6 @@ export async function syncAgentToEngine(
           profile: newProfile,
           alsoAllow: newAlsoAllow,
           deny: newDeny.length > 0 ? newDeny : undefined,
-          // 保存 toolsFilter 原值用于后续增量同步（引擎忽略未知字段）
-          _toolsFilter: tf,
         };
         // 清理 allow 字段（迁移到 profile 后不再需要）
         const newToolsStr = JSON.stringify({
