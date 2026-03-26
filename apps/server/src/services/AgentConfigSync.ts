@@ -160,7 +160,7 @@ export async function syncAgentToEngine(
         const toolsDeny = computeToolsDeny(tf ?? null);
 
         // 2. 专业 agent 限制
-        const specialistDeny = isDefault ? [] : ['sessions_spawn', 'subagents', 'agents_list'];
+        const specialistDeny = isDefault ? [] : ['sessions_spawn', 'subagents', 'agents_list', 'sessions_list', 'sessions_history', 'sessions_send'];
 
         // 3. MCP deny（保留已有非 MCP deny 项中的 run_skill 等）
         let mcpDeny: string[] = [];
