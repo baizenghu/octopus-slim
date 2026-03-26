@@ -929,6 +929,133 @@ export default function enterpriseMcpPlugin(api: any) {
     api.logger.info('all MCP connections closed');
   });
 
+  // ── 企业上下文注入（before_prompt_build hook）──
+  // 让所有 session（包括 cron isolated、subagent）都能拿到企业级上下文
+  const _enterpriseCtxCache = new Map<string, { text: string; ts: number }>();
+  const ENTERPRISE_CTX_TTL = 5 * 60 * 1000; // 5 分钟
+
+  api.on('before_prompt_build', async (_event: any, ctx: any) => {
+    const agentId = typeof ctx.agentId === 'string' ? ctx.agentId.trim() : '';
+    if (!agentId.startsWith('ent_')) return;
+
+    const userId = extractUserIdFromAgentId(agentId);
+    if (!userId || !_prisma) return;
+
+    // 缓存命中
+    const cached = _enterpriseCtxCache.get(agentId);
+    if (cached && Date.now() - cached.ts < ENTERPRISE_CTX_TTL) {
+      return { appendSystemContext: cached.text };
+    }
+
+    try {
+      const agentName = extractAgentNameFromAgentId(agentId);
+      const isDefault = agentName === 'default';
+
+      // 查用户信息
+      const user = await _prisma.user.findFirst({ where: { id: userId } });
+      const displayName = (user as any)?.displayName || (user as any)?.username || userId;
+      const username = (user as any)?.username || userId;
+
+      // 查 agent 信息
+      const agent = await _prisma.agent.findFirst({
+        where: { ownerId: userId, name: agentName || 'default' },
+      });
+
+      const sections: string[] = [];
+
+      // 身份
+      if (isDefault) {
+        sections.push(
+          `## 你的身份\n` +
+          `你是 Octopus AI 企业级超级智能助手，是用户 ${displayName} 的主助手。\n` +
+          `自我介绍时只说"我是 Octopus AI"，不要说"Octopus AI AI 助手"或其他重复 AI 的表述。`
+        );
+      }
+
+      // 用户信息
+      sections.push(`## 用户信息\n当前用户: ${username}${displayName !== username ? ` (${displayName})` : ''}`);
+
+      // 工作区
+      const dataRoot = (config as any).dataRoot || '/home/baizh/octopus/data';
+      const wsBase = path.join(dataRoot, 'users', userId, 'workspace');
+      sections.push(
+        `## 工作区\n` +
+        `工作空间根目录: ${wsBase}\n` +
+        `用户上传文件: ${path.join(wsBase, 'files')}\n` +
+        `用户可下载文件: ${path.join(wsBase, 'outputs')}\n` +
+        `临时工作目录: ${path.join(wsBase, 'temp')}\n\n` +
+        `**文件管理规范：**\n` +
+        `- files/：用户上传的文件，只读取不修改\n` +
+        `- outputs/：交付给用户的成果文件。系统会**自动**将 outputs/ 中的新文件发送给用户（包括 IM 渠道）\n` +
+        `- temp/：中间产物（脚本、临时数据、草稿）写入此目录\n` +
+        `- 不要在工作空间根目录直接创建文件`
+      );
+
+      // Agent 指令
+      if (agent && (agent as any).systemPrompt) {
+        sections.push(`## Agent 指令\n${(agent as any).systemPrompt}`);
+      }
+
+      // 专业 Agent 列表（仅 default agent）
+      if (isDefault) {
+        try {
+          const specialists = await _prisma.agent.findMany({
+            where: { ownerId: userId, enabled: true, isDefault: false },
+            orderBy: { createdAt: 'asc' },
+          });
+          if (specialists.length > 0) {
+            const list = specialists.map((a: any) => {
+              const identity = a.identity as { name?: string } | null;
+              const dn = identity?.name || a.name;
+              const desc = a.description ? ` — ${a.description}` : '';
+              return `- **${dn}**（agent 名称: ${a.name}）${desc}`;
+            }).join('\n');
+            sections.push(
+              `## 可委派的专业 Agent\n` +
+              `以下是用户创建的专业 Agent，可在需要时委派任务。\n${list}`
+            );
+          }
+        } catch { /* ignore */ }
+      }
+
+      // 数据库连接
+      const allowedConns = (agent as any)?.allowedConnections as string[] | null;
+      if (Array.isArray(allowedConns) && allowedConns.length > 0) {
+        try {
+          const dbConns = await _prisma.databaseConnection.findMany({
+            where: { userId, enabled: true },
+          });
+          const filtered = dbConns.filter((c: any) => allowedConns.includes(c.name));
+          if (filtered.length > 0) {
+            const lines = [
+              '## 数据库连接',
+              '调用 SQL 相关工具时需要传入 connection_name 参数：',
+              '',
+            ];
+            for (const c of filtered as any[]) {
+              lines.push(`- \`${c.name}\`：${c.dbType} \`${c.dbName}\`@${c.host}:${c.port} (user: ${c.dbUser})`);
+            }
+            sections.push(lines.join('\n'));
+          }
+        } catch { /* ignore */ }
+      }
+
+      // 定时提醒
+      sections.push(
+        `## 定时提醒\n` +
+        `设置提醒或定时任务请使用 cron 工具。\n` +
+        `示例：cron add，schedule.kind="at"，payload.kind="systemEvent"。`
+      );
+
+      const text = sections.join('\n\n');
+      _enterpriseCtxCache.set(agentId, { text, ts: Date.now() });
+      return { appendSystemContext: text };
+    } catch (err: any) {
+      api.logger.warn(`[enterprise-mcp] before_prompt_build failed for ${agentId}: ${err.message}`);
+      return;
+    }
+  });
+
   // ── 个人 MCP 动态刷新（文件信号 + 定时轮询）──
   const REFRESH_SIGNAL_PATH = path.join(
     process.env.OCTOPUS_STATE_DIR || path.join(__dirname, '..', '..', '..', '.octopus-state'),
