@@ -17,6 +17,7 @@ import { createAuthMiddleware, isAdmin, type AuthenticatedRequest } from '../mid
 import { getRuntimeConfig } from '../config';
 import { EngineAdapter } from '../services/EngineAdapter';
 import type { EngineAdapter as BridgeType } from '../services/EngineAdapter';
+import { TenantEngineAdapter } from '../services/TenantEngineAdapter';
 import { syncAgentToEngine } from '../services/AgentConfigSync';
 import { createLogger } from '../utils/logger';
 import type { AppPrismaClient } from '../types/prisma';
@@ -105,7 +106,7 @@ async function verifyTaskOwnership(
       return { ok: false, status: 404, error: 'Task not found' };
     }
     const agentId = job.agentId || job.agent || '';
-    if (!agentId.startsWith(`ent_${userId}_`) && !userIsAdmin) {
+    if (!agentId.startsWith(TenantEngineAdapter.forUser(bridge, userId).agentId('')) && !userIsAdmin) {
       return { ok: false, status: 403, error: 'Access denied' };
     }
     return { ok: true, status: 200 };
@@ -139,10 +140,9 @@ export function createSchedulerRouter(
         // 合并原生 cron 任务
         // NOTE: Native Gateway cron.list RPC 不支持 agentId 过滤，只能客户端过滤
         // 安全依赖：userPrefix 前缀匹配确保只返回当前用户的任务
-        const result = (await bridge.cronList(true)) as EngineCronListResponse;
-        const allJobs: EngineCronJob[] = result?.jobs ?? [];
-        const userPrefix = `ent_${user.id}_`;
-        const cronJobs = allJobs.filter((j) => (j.agentId || '').startsWith(userPrefix));
+        const tenant = TenantEngineAdapter.forUser(bridge, user.id);
+        const cronResult = await tenant.listMyCrons(true);
+        const cronJobs: EngineCronJob[] = cronResult?.jobs ?? [];
         // DB 任务优先，cron 任务补充（去重：DB 中已有的 heartbeat 不重复加）
         const dbIds = new Set(dbTasks.map(t => t.id));
         const mergedCron = cronJobs.filter((j) => !dbIds.has(j.id!));

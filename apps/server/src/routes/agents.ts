@@ -18,6 +18,7 @@ import type { AuthService } from '@octopus/auth';
 import type { WorkspaceManager } from '@octopus/workspace';
 import { createAuthMiddleware, type AuthenticatedRequest } from '../middleware/auth';
 import { EngineAdapter } from '../services/EngineAdapter';
+import { TenantEngineAdapter } from '../services/TenantEngineAdapter';
 import { syncAgentToEngine, ensureAndSyncNativeAgent } from '../services/AgentConfigSync';
 import { invalidatePromptCache } from '../services/SystemPromptBuilder';
 import { createAvatarUpload, mimeToExt } from '../utils/avatar';
@@ -87,7 +88,7 @@ export function createAgentsRouter(
    */
   async function syncToolsMd(userId: string, agentName: string, mcpFilter: string[], toolsFilter?: string[]) {
     if (!bridge?.isConnected) return;
-    const nativeAgentId = EngineAdapter.userAgentId(userId, agentName);
+    const nativeAgentId = TenantEngineAdapter.forUser(bridge!, userId).agentId(agentName);
 
     try {
       const lines = ['# 可用工具', '', '以下是你当前被授权使用的所有工具，请在需要时主动使用：', ''];

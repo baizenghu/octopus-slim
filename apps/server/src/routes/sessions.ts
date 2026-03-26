@@ -234,7 +234,7 @@ export function createSessionsRouter(
         agentPrefix = `agent:${nativeAgentId}:session:`;
       } else {
         // 无 DB 时退回到用户级别过滤
-        agentPrefix = `agent:ent_${user.id}_`;
+        agentPrefix = `agent:${req.tenantBridge!.agentId('')}`;
       }
 
       // 传入 agentId 让 Native Gateway 服务端过滤，减少全量数据暴露
