@@ -138,6 +138,7 @@ export interface HeartbeatTaskConfig {
   agentId?: string;
   every?: string;
   content?: string;
+  cronJobId?: string;
   lastResult?: string;
   lastResultAt?: string;
 }

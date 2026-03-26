@@ -1,7 +1,7 @@
 {
   "meta": {
     "lastTouchedVersion": "1.0.0",
-    "lastTouchedAt": "2026-03-23T10:42:11.820Z"
+    "lastTouchedAt": "2026-03-26T04:58:58.647Z"
   },
   "update": {
     "channel": "beta"
@@ -96,6 +96,9 @@
           "deepseek/deepseek-reasoner"
         ]
       },
+      "contextPruning": {
+        "mode": "off"
+      },
       "compaction": {
         "mode": "safeguard"
       },
@@ -104,11 +107,12 @@
         "workspaceAccess": "rw",
         "scope": "agent",
         "docker": {
-          "image": "octopus-sandbox:enterprise"
+          "image": "octopus-sandbox:enterprise",
+          "binds": [
+            "/home/baizh/octopus/data/skills:/home/baizh/octopus/data/skills:ro"
+          ],
+          "dangerouslyAllowExternalBindSources": true
         }
-      },
-      "contextPruning": {
-        "enabled": true
       }
     },
     "list": [
@@ -122,7 +126,47 @@
         "agentDir": "/home/baizh/octopus/.octopus-state/agents/ent_user-admin_default/agent",
         "skills": [],
         "tools": {
+          "profile": "coding",
+          "alsoAllow": [
+            "group:plugins",
+            "agents_list"
+          ],
           "deny": [
+            "read",
+            "edit",
+            "apply_patch",
+            "write",
+            "exec",
+            "process",
+            "mcp_mcp_1770876329419_bgrjr5_execute_sql",
+            "mcp_mcp_1770876329419_bgrjr5_list_tables",
+            "mcp_mcp_1770876329419_bgrjr5_describe_table",
+            "mcp_mcp_1770876329419_bgrjr5_list_connections",
+            "mcp_mcp_amap_maps_regeocode",
+            "mcp_mcp_amap_maps_geo",
+            "mcp_mcp_amap_maps_ip_location",
+            "mcp_mcp_amap_maps_weather",
+            "mcp_mcp_amap_maps_bicycling_by_address",
+            "mcp_mcp_amap_maps_bicycling_by_coordinates",
+            "mcp_mcp_amap_maps_direction_walking_by_address",
+            "mcp_mcp_amap_maps_direction_walking_by_coordinates",
+            "mcp_mcp_amap_maps_direction_driving_by_address",
+            "mcp_mcp_amap_maps_direction_driving_by_coordinates",
+            "mcp_mcp_amap_maps_direction_transit_integrated_by_address",
+            "mcp_mcp_amap_maps_direction_transit_integrated_by_coordinates",
+            "mcp_mcp_amap_maps_distance",
+            "mcp_mcp_amap_maps_text_search",
+            "mcp_mcp_amap_maps_around_search",
+            "mcp_mcp_amap_maps_search_detail",
+            "mcp_mcp_nocobase_oa_oa_query_leaves",
+            "mcp_mcp_nocobase_oa_oa_create_leave",
+            "mcp_mcp_nocobase_oa_oa_approve_leave",
+            "mcp_mcp_nocobase_oa_oa_query_expenses",
+            "mcp_mcp_nocobase_oa_oa_create_expense",
+            "mcp_mcp_nocobase_oa_oa_approve_expense",
+            "mcp_mcp_nocobase_oa_oa_query_trips",
+            "mcp_mcp_nocobase_oa_oa_create_trip",
+            "mcp_mcp_nocobase_oa_oa_approve_trip",
             "run_skill"
           ]
         }
@@ -133,26 +177,28 @@
         "workspace": "/home/baizh/octopus/data/users/user-test/workspace",
         "agentDir": "/home/baizh/octopus/.octopus-state/agents/ent_user-test_default/agent",
         "model": "openai-codex/gpt-5.2",
+        "skills": [
+          "echarts-visualization",
+          "ppt-generator"
+        ],
         "subagents": {
           "allowAgents": [
             "ent_user-test_shuju"
           ]
         },
         "tools": {
-          "allow": [
+          "profile": "coding",
+          "alsoAllow": [
+            "group:plugins",
+            "agents_list"
+          ],
+          "deny": [
             "read",
+            "edit",
+            "apply_patch",
             "write",
             "exec",
-            "memory_search",
-            "memory_get",
-            "sessions_list",
-            "sessions_history",
-            "sessions_send",
-            "sessions_spawn",
-            "agents_list",
-            "cron",
-            "image",
-            "group:plugins"
+            "process"
           ]
         }
       },
@@ -162,19 +208,31 @@
         "workspace": "/home/baizh/octopus/data/users/user-test/agents/shuju/workspace",
         "agentDir": "/home/baizh/octopus/.octopus-state/agents/ent_user-test_shuju/agent",
         "model": "deepseek/deepseek-chat",
+        "skills": [
+          "ppt-generator",
+          "echarts-visualization"
+        ],
         "subagents": {
           "allowAgents": []
         },
         "tools": {
-          "allow": [
+          "profile": "coding",
+          "alsoAllow": [
+            "group:plugins"
+          ],
+          "deny": [
             "read",
+            "edit",
+            "apply_patch",
             "write",
             "exec",
-            "group:plugins",
-            "memory_search",
-            "memory_get",
-            "cron",
-            "image"
+            "process",
+            "sessions_spawn",
+            "subagents",
+            "agents_list",
+            "sessions_list",
+            "sessions_history",
+            "sessions_send"
           ]
         }
       },
@@ -184,31 +242,23 @@
         "workspace": "/home/baizh/octopus/data/users/user-baizh/workspace",
         "agentDir": "/home/baizh/octopus/.octopus-state/agents/ent_user-baizh_default/agent",
         "model": "minimax-portal/MiniMax-M2.7",
-        "skills": [],
-        "heartbeat": {
-          "every": "30m",
-          "prompt": "HEARTBEAT.md"
-        },
+        "skills": [
+          "echarts-visualization",
+          "word-counter",
+          "系统信息报告",
+          "claude-code-dispatch",
+          "team-research"
+        ],
         "subagents": {
           "allowAgents": [
-            "ent_user-baizh_baozi"
+            "ent_user-baizh_xiaocai"
           ]
         },
         "tools": {
-          "allow": [
-            "read",
-            "write",
-            "exec",
-            "memory_search",
-            "memory_get",
-            "sessions_list",
-            "sessions_history",
-            "sessions_send",
-            "sessions_spawn",
-            "agents_list",
-            "cron",
-            "image",
-            "group:plugins"
+          "profile": "coding",
+          "alsoAllow": [
+            "group:plugins",
+            "agents_list"
           ]
         }
       },
@@ -223,14 +273,78 @@
           "allowAgents": []
         },
         "tools": {
-          "allow": [
-            "memory_search",
-            "memory_get",
-            "cron",
-            "image",
+          "profile": "coding",
+          "alsoAllow": [
             "group:plugins"
           ],
           "deny": [
+            "read",
+            "edit",
+            "apply_patch",
+            "write",
+            "exec",
+            "process",
+            "sessions_spawn",
+            "subagents",
+            "agents_list",
+            "sessions_list",
+            "sessions_history",
+            "sessions_send",
+            "run_skill"
+          ]
+        }
+      },
+      {
+        "id": "ent_user-baizh_xiaocai",
+        "name": "ent_user-baizh_xiaocai",
+        "workspace": "/home/baizh/octopus/data/users/user-baizh/agents/xiaocai/workspace",
+        "agentDir": "/home/baizh/octopus/.octopus-state/agents/ent_user-baizh_xiaocai/agent",
+        "model": "minimax-portal/MiniMax-M2.7",
+        "skills": [],
+        "subagents": {
+          "allowAgents": []
+        },
+        "tools": {
+          "profile": "coding",
+          "alsoAllow": [
+            "group:plugins"
+          ],
+          "deny": [
+            "sessions_spawn",
+            "subagents",
+            "agents_list",
+            "sessions_list",
+            "sessions_history",
+            "sessions_send",
+            "mcp_mcp_1770876329419_bgrjr5_execute_sql",
+            "mcp_mcp_1770876329419_bgrjr5_list_tables",
+            "mcp_mcp_1770876329419_bgrjr5_describe_table",
+            "mcp_mcp_1770876329419_bgrjr5_list_connections",
+            "mcp_mcp_amap_maps_regeocode",
+            "mcp_mcp_amap_maps_geo",
+            "mcp_mcp_amap_maps_ip_location",
+            "mcp_mcp_amap_maps_weather",
+            "mcp_mcp_amap_maps_bicycling_by_address",
+            "mcp_mcp_amap_maps_bicycling_by_coordinates",
+            "mcp_mcp_amap_maps_direction_walking_by_address",
+            "mcp_mcp_amap_maps_direction_walking_by_coordinates",
+            "mcp_mcp_amap_maps_direction_driving_by_address",
+            "mcp_mcp_amap_maps_direction_driving_by_coordinates",
+            "mcp_mcp_amap_maps_direction_transit_integrated_by_address",
+            "mcp_mcp_amap_maps_direction_transit_integrated_by_coordinates",
+            "mcp_mcp_amap_maps_distance",
+            "mcp_mcp_amap_maps_text_search",
+            "mcp_mcp_amap_maps_around_search",
+            "mcp_mcp_amap_maps_search_detail",
+            "mcp_mcp_nocobase_oa_oa_query_leaves",
+            "mcp_mcp_nocobase_oa_oa_create_leave",
+            "mcp_mcp_nocobase_oa_oa_approve_leave",
+            "mcp_mcp_nocobase_oa_oa_query_expenses",
+            "mcp_mcp_nocobase_oa_oa_create_expense",
+            "mcp_mcp_nocobase_oa_oa_approve_expense",
+            "mcp_mcp_nocobase_oa_oa_query_trips",
+            "mcp_mcp_nocobase_oa_oa_create_trip",
+            "mcp_mcp_nocobase_oa_oa_approve_trip",
             "run_skill"
           ]
         }
@@ -263,6 +377,14 @@
     "nativeSkills": "auto",
     "restart": true,
     "ownerDisplay": "raw"
+  },
+  "session": {
+    "dmScope": "per-channel-peer",
+    "maintenance": {
+      "mode": "enforce",
+      "pruneAfter": "30d",
+      "maxEntries": 500
+    }
   },
   "skills": {
     "load": {
@@ -333,10 +455,22 @@
               ],
               "ent_user-baizh_default": [
                 "ent_user-baizh_default",
-                "ent_user-baizh_baozi"
+                "ent_user-baizh_xiaocai"
               ],
               "ent_user-baizh_baozi": [
                 "ent_user-baizh_baozi",
+                "ent_user-baizh_default"
+              ],
+              "ent_user-test_default": [
+                "ent_user-test_default",
+                "ent_user-test_shuju"
+              ],
+              "ent_user-test_shuju": [
+                "ent_user-test_shuju",
+                "ent_user-test_default"
+              ],
+              "ent_user-baizh_xiaocai": [
+                "ent_user-baizh_xiaocai",
                 "ent_user-baizh_default"
               ]
             }
@@ -381,13 +515,5 @@
         }
       }
     }
-  },
-  "session": {
-    "maintenance": {
-      "mode": "enforce",
-      "pruneAfter": "30d",
-      "maxEntries": 500
-    },
-    "dmScope": "per-channel-peer"
   }
 }

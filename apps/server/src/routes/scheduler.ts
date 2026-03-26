@@ -1,5 +1,5 @@
 /**
- * 定时任务路由 — Native Bridge 版本
+ * 定时任务路由 — 引擎原生 cron 版本
  *
  * GET    /api/scheduler/tasks           — 列出我的定时任务（native cron）
  * POST   /api/scheduler/tasks           — 创建定时任务（native cron）
@@ -15,45 +15,21 @@ import { Router } from 'express';
 import type { AuthService } from '@octopus/auth';
 import { createAuthMiddleware, isAdmin, type AuthenticatedRequest } from '../middleware/auth';
 import { getRuntimeConfig } from '../config';
-import { EngineAdapter } from '../services/EngineAdapter';
 import type { EngineAdapter as BridgeType } from '../services/EngineAdapter';
 import { TenantEngineAdapter } from '../services/TenantEngineAdapter';
-import { syncAgentToEngine } from '../services/AgentConfigSync';
 import { createLogger } from '../utils/logger';
 import type { AppPrismaClient } from '../types/prisma';
 import type {
   EngineCronJob,
   EngineCronListResponse,
-  EngineChatHistoryResponse,
-  EngineMessage,
-  EngineContentBlock,
   HeartbeatTaskConfig,
 } from '../types/engine';
 
 const logger = createLogger('scheduler');
 
-function normalizeHeartbeatContent(content: string): string {
-  return content.trim();
-}
-
-export function renderHeartbeatFileContent(content: string): string {
-  const normalized = normalizeHeartbeatContent(content);
-  return [
-    '# Heartbeat Inspection',
-    '',
-    'This file is only for scheduled heartbeat inspection runs.',
-    'Do not treat it as the agent\'s permanent persona, memory, or default instruction set.',
-    'If the current run is a normal user conversation or a non-heartbeat task, ignore the inspection instructions below.',
-    'Only apply these instructions during the current heartbeat run.',
-    'If nothing requires attention, reply exactly HEARTBEAT_OK.',
-    '',
-    '## Inspection Tasks',
-    normalized,
-  ].join('\n');
-}
-
+/** 构建心跳巡检的 agent prompt */
 export function buildHeartbeatRunPrompt(content: string): string {
-  const normalized = normalizeHeartbeatContent(content);
+  const normalized = content.trim();
   if (!normalized) {
     return [
       'You are running a one-off heartbeat inspection.',
@@ -72,24 +48,24 @@ export function buildHeartbeatRunPrompt(content: string): string {
   ].join('\n');
 }
 
-// ---- Agent HEARTBEAT.md 写入（通过 RPC） ----
-
-/** 将 HEARTBEAT.md 通过 RPC 写入原生 agent 目录（.octopus-state/agents/{agentId}/agent/HEARTBEAT.md） */
-async function writeHeartbeatToAgent(bridge: BridgeType, nativeAgentId: string, content: string): Promise<void> {
-  await bridge.agentFilesSet(nativeAgentId, 'HEARTBEAT.md', content);
-}
-
-/** 清空 agent 目录中的 HEARTBEAT.md（写入仅含注释的内容让 preflight 跳过） */
-async function clearHeartbeatFromAgent(bridge: BridgeType, nativeAgentId: string): Promise<void> {
-  const emptyContent = '# HEARTBEAT.md\n# Keep this file empty (or with only comments) to skip heartbeat API calls.\n';
-  await bridge.agentFilesSet(nativeAgentId, 'HEARTBEAT.md', emptyContent);
+/** 解析 every 字符串为毫秒（如 "30m" → 1800000） */
+function parseEveryToMs(every: string): number {
+  const match = every.match(/^(\d+)(s|m|h|d)$/);
+  if (!match) return 30 * 60 * 1000; // 默认 30m
+  const num = parseInt(match[1], 10);
+  switch (match[2]) {
+    case 's': return num * 1000;
+    case 'm': return num * 60 * 1000;
+    case 'h': return num * 60 * 60 * 1000;
+    case 'd': return num * 24 * 60 * 60 * 1000;
+    default: return 30 * 60 * 1000;
+  }
 }
 
 // ---- 路由工厂 ----
 
 /**
  * 验证定时任务归属：确保任务属于当前用户
- * 通过 cronList 查询任务，检查 agentId 是否包含当前用户 ID
  */
 async function verifyTaskOwnership(
   bridge: BridgeType,
@@ -98,7 +74,6 @@ async function verifyTaskOwnership(
   userIsAdmin = false,
 ): Promise<{ ok: boolean; status: number; error?: string }> {
   try {
-    // NOTE: cron.list RPC 不支持 agentId 过滤，全量拉取后客户端校验归属
     const result = (await bridge.cronList(true)) as EngineCronListResponse;
     const allJobs: EngineCronJob[] = result?.jobs ?? [];
     const job = allJobs.find((j) => j.id === taskId);
@@ -130,22 +105,25 @@ export function createSchedulerRouter(
   router.get('/tasks', authMiddleware, async (req: AuthenticatedRequest, res, next) => {
     const user = req.user!;
     try {
-      // DB 中的任务（心跳等）
+      // DB 中的任务（心跳等，保留元数据如 name/content）
       const dbTasks = await prisma.scheduledTask.findMany({
         where: { userId: user.id },
         orderBy: { createdAt: 'desc' },
       });
 
       if (bridge?.isConnected) {
-        // 合并原生 cron 任务
-        // NOTE: Native Gateway cron.list RPC 不支持 agentId 过滤，只能客户端过滤
-        // 安全依赖：userPrefix 前缀匹配确保只返回当前用户的任务
         const tenant = TenantEngineAdapter.forUser(bridge, user.id);
         const cronResult = await tenant.listMyCrons(true);
         const cronJobs: EngineCronJob[] = cronResult?.jobs ?? [];
-        // DB 任务优先，cron 任务补充（去重：DB 中已有的 heartbeat 不重复加）
+        // DB 任务优先，cron 任务补充（去重）
         const dbIds = new Set(dbTasks.map(t => t.id));
-        const mergedCron = cronJobs.filter((j) => !dbIds.has(j.id!));
+        // 同时匹配 cronJobId（DB 心跳任务可能记录了对应的 cron job ID）
+        const dbCronIds = new Set(
+          dbTasks
+            .map(t => (t.taskConfig as HeartbeatTaskConfig)?.cronJobId)
+            .filter(Boolean),
+        );
+        const mergedCron = cronJobs.filter((j) => !dbIds.has(j.id!) && !dbCronIds.has(j.id!));
         res.json({ tasks: [...dbTasks, ...mergedCron] });
       } else {
         res.json({ tasks: dbTasks });
@@ -168,7 +146,7 @@ export function createSchedulerRouter(
     }
 
     try {
-      // ---- 心跳巡检任务：不走 cron，走 HEARTBEAT.md + configApply ----
+      // ---- 心跳巡检任务：通过引擎原生 cron every + agentTurn ----
       if (taskType === 'heartbeat') {
         if (!bridge?.isConnected) {
           res.status(503).json({ error: 'Native gateway not connected' });
@@ -203,7 +181,17 @@ export function createSchedulerRouter(
         }
         const nativeAgentId = req.tenantBridge!.agentId(agent.name);
 
-        // 写入 DB
+        // 通过引擎原生 cron 创建周期任务
+        const prompt = buildHeartbeatRunPrompt(content);
+        const cronJob = await bridge.cronAdd({
+          name: `heartbeat:${name.trim()}`,
+          agentId: nativeAgentId,
+          schedule: { kind: 'every' as const, everyMs: parseEveryToMs(every) },
+          sessionTarget: 'isolated',
+          payload: { kind: 'agentTurn', message: prompt },
+        }) as { id?: string };
+
+        // 写入 DB（记录元数据 + cronJobId 关联）
         const taskId = randomUUID().replace(/-/g, '').slice(0, 16);
         const task = await prisma.scheduledTask.create({
           data: {
@@ -212,23 +200,9 @@ export function createSchedulerRouter(
             userId: user.id,
             cron: every,
             taskType: 'heartbeat',
-            taskConfig: { agentId: dbAgentId, every, content },
+            taskConfig: { agentId: dbAgentId, every, content, cronJobId: cronJob?.id },
             enabled: true,
           },
-        });
-
-        // 通过 RPC 写 HEARTBEAT.md 到原生 agent 目录
-        try {
-          await writeHeartbeatToAgent(bridge, nativeAgentId, renderHeartbeatFileContent(content));
-          logger.info(`[scheduler] HEARTBEAT.md written for ${nativeAgentId}`);
-        } catch (e: unknown) {
-          logger.error(`[scheduler] writeHeartbeatToAgent failed for ${nativeAgentId}:`, { error: e instanceof Error ? e.message : String(e) });
-        }
-
-        // 通过 AgentConfigSync 更新 heartbeat 配置（复用 read-diff-write 逻辑，避免 configApplyFull）
-        await syncAgentToEngine(bridge, user.id, {
-          agentName: agent.name,
-          heartbeat: { every, prompt: 'HEARTBEAT.md' },
         });
 
         res.json({ task });
@@ -272,14 +246,13 @@ export function createSchedulerRouter(
   });
 
   /**
-   * 修改定时任务（native 不支持 patch，重新创建）
+   * 修改定时任务
    */
   router.put('/tasks/:id', authMiddleware, async (req: AuthenticatedRequest, res, next) => {
     try {
       const user = req.user!;
       const { id } = req.params;
 
-      // 先查 DB 看是否心跳任务
       const dbTask = await prisma.scheduledTask.findFirst({ where: { id, userId: user.id } });
 
       // ---- 心跳巡检任务更新 ----
@@ -291,6 +264,7 @@ export function createSchedulerRouter(
 
         const oldConfig = dbTask.taskConfig as HeartbeatTaskConfig;
         const oldDbAgentId = oldConfig?.agentId;
+        const oldCronJobId = oldConfig?.cronJobId;
         const { name, cron: newEvery, taskConfig: newTaskConfig, enabled } = req.body;
         const nextDbAgentId = newTaskConfig?.agentId || oldDbAgentId;
 
@@ -298,12 +272,11 @@ export function createSchedulerRouter(
           prisma.agent.findFirst({ where: { id: oldDbAgentId, ownerId: user.id } }),
           prisma.agent.findFirst({ where: { id: nextDbAgentId, ownerId: user.id } }),
         ]);
+
         if (!oldAgent || !nextAgent) {
           res.status(404).json({ error: 'Agent not found' });
           return;
         }
-        const oldNativeAgentId = req.tenantBridge!.agentId(oldAgent.name);
-        const nextNativeAgentId = req.tenantBridge!.agentId(nextAgent.name);
 
         if (nextDbAgentId !== oldDbAgentId) {
           const existing = await prisma.scheduledTask.findFirst({
@@ -320,71 +293,58 @@ export function createSchedulerRouter(
           }
         }
 
-        // 构造 DB 更新
-        const data: Record<string, any> = {};
-        if (name !== undefined) data.name = name.trim();
-
         const newContent = newTaskConfig?.content;
         const effectiveEvery = newEvery || newTaskConfig?.every || oldConfig.every;
         const effectiveContent = newContent || oldConfig.content;
-        const agentChanged = nextDbAgentId !== oldDbAgentId;
+        const nativeAgentId = req.tenantBridge!.agentId(nextAgent.name);
+        const isDisabled = enabled === false;
 
-        // 更新 taskConfig（保留 agentId）
-        data.taskConfig = { agentId: nextDbAgentId, every: effectiveEvery, content: effectiveContent };
+        // 删除旧 cron job，重新创建（引擎不支持 patch）
+        let newCronJobId = oldCronJobId;
+        if (oldCronJobId) {
+          await bridge.cronRemove(oldCronJobId).catch(err =>
+            logger.warn(`[scheduler] 删除旧 cron 心跳任务失败 ${oldCronJobId}`, { error: err?.message || String(err) }),
+          );
+        }
+
+        if (!isDisabled) {
+          const prompt = buildHeartbeatRunPrompt(effectiveContent);
+          const cronJob = await bridge.cronAdd({
+            name: `heartbeat:${(name || dbTask.name).trim()}`,
+            agentId: nativeAgentId,
+            schedule: { kind: 'every' as const, everyMs: parseEveryToMs(effectiveEvery) },
+            sessionTarget: 'isolated',
+            payload: { kind: 'agentTurn', message: prompt },
+          }) as { id?: string };
+          newCronJobId = cronJob?.id;
+        } else {
+          newCronJobId = undefined;
+        }
+
+        // 更新 DB
+        const data: Record<string, any> = {};
+        if (name !== undefined) data.name = name.trim();
         if (newEvery !== undefined) data.cron = newEvery;
         if (enabled !== undefined) data.enabled = Boolean(enabled);
+        data.taskConfig = {
+          agentId: nextDbAgentId,
+          every: effectiveEvery,
+          content: effectiveContent,
+          cronJobId: newCronJobId,
+        };
 
         const task = await prisma.scheduledTask.update({ where: { id }, data });
-
-        // content 变了 → 通过 RPC 重新写 HEARTBEAT.md 到原生 agent 目录
-        try {
-          if (agentChanged) {
-            // agent 变了：清空旧 agent 的 HEARTBEAT.md，写入新 agent 的
-            await clearHeartbeatFromAgent(bridge, oldNativeAgentId);
-            await writeHeartbeatToAgent(bridge, nextNativeAgentId, renderHeartbeatFileContent(effectiveContent));
-          } else if (newContent && newContent !== oldConfig.content) {
-            await writeHeartbeatToAgent(bridge, nextNativeAgentId, renderHeartbeatFileContent(newContent));
-          }
-        } catch (e: unknown) {
-          logger.error(`[scheduler] HEARTBEAT.md write failed during update:`, { error: e instanceof Error ? e.message : String(e) });
-        }
-
-        // every / enabled / 绑定 agent 变了 → configApply
-        const needConfigUpdate =
-          agentChanged ||
-          (newEvery && newEvery !== oldConfig.every) ||
-          (enabled !== undefined && Boolean(enabled) !== dbTask.enabled);
-
-        if (needConfigUpdate) {
-          const isDisabled = enabled === false;
-          // 通过 AgentConfigSync 更新 heartbeat 配置
-          // 禁用 = 删除心跳（null），启用/更新 = 设置心跳
-          if (agentChanged) {
-            // agent 切换：先删旧 agent 心跳，再设新 agent 心跳
-            await syncAgentToEngine(bridge, user.id, {
-              agentName: oldAgent.name,
-              heartbeat: null,
-            });
-          }
-          await syncAgentToEngine(bridge, user.id, {
-            agentName: nextAgent.name,
-            heartbeat: isDisabled ? null : { every: effectiveEvery, prompt: 'HEARTBEAT.md' },
-          });
-        }
-
         res.json({ task });
         return;
       }
 
       // ---- 普通定时任务更新 ----
       if (bridge?.isConnected) {
-        // 归属校验：确保任务属于当前用户
         const ownership = await verifyTaskOwnership(bridge, id, user.id, isAdmin(user));
         if (!ownership.ok) {
           res.status(ownership.status).json({ error: ownership.error });
           return;
         }
-        // native cron 不支持直接 patch，先删后建
         await bridge.cronRemove(id).catch(err => logger.warn(`[scheduler] 删除旧 cron 任务失败 ${id}`, { error: err?.message || String(err) }));
         const { name, cron: cronExpr, taskConfig } = req.body;
         const nativeAgentId = req.tenantBridge!.agentId('default');
@@ -421,7 +381,6 @@ export function createSchedulerRouter(
       const user = req.user!;
       const { id } = req.params;
 
-      // 先查 DB 看是否心跳任务
       const dbTask = await prisma.scheduledTask.findFirst({ where: { id, userId: user.id } });
 
       // ---- 心跳巡检任务删除 ----
@@ -432,24 +391,12 @@ export function createSchedulerRouter(
         }
 
         const taskCfg = dbTask.taskConfig as HeartbeatTaskConfig;
-        const dbAgentId = taskCfg?.agentId;
+        const cronJobId = taskCfg?.cronJobId;
 
-        // 查 agent 获取 nativeAgentId
-        const agent = await prisma.agent.findFirst({ where: { id: dbAgentId, ownerId: user.id } });
-        if (agent) {
-          const nativeAgentId = req.tenantBridge!.agentId(agent.name);
-
-          // 通过 RPC 清空原生 agent 目录中的 HEARTBEAT.md
-          try {
-            await clearHeartbeatFromAgent(bridge, nativeAgentId);
-          } catch (e: unknown) {
-            logger.error(`[scheduler] clearHeartbeatFromAgent failed for ${nativeAgentId}:`, { error: e instanceof Error ? e.message : String(e) });
-          }
-
-          // 通过 AgentConfigSync 删除 heartbeat 配置（避免 configApplyFull）
-          await syncAgentToEngine(bridge, user.id, {
-            agentName: agent.name,
-            heartbeat: null,
+        // 删除引擎 cron job
+        if (cronJobId) {
+          await bridge.cronRemove(cronJobId).catch((e: unknown) => {
+            logger.warn(`[scheduler] cronRemove failed for ${cronJobId}: ${e instanceof Error ? e.message : String(e)}`);
           });
         }
 
@@ -461,7 +408,6 @@ export function createSchedulerRouter(
 
       // ---- 普通定时任务删除 ----
       if (bridge?.isConnected) {
-        // 归属校验：确保任务属于当前用户
         const ownership = await verifyTaskOwnership(bridge, id, user.id, isAdmin(user));
         if (!ownership.ok) {
           res.status(ownership.status).json({ error: ownership.error });
@@ -488,94 +434,32 @@ export function createSchedulerRouter(
 
       const dbTask = await prisma.scheduledTask.findFirst({ where: { id: req.params.id, userId: user.id } });
 
-      // 心跳任务：通过 agent RPC 直接触发一次心跳
+      // 心跳任务：通过 cron.run 触发
       if (dbTask?.taskType === 'heartbeat') {
         if (!bridge?.isConnected) {
           res.status(503).json({ error: 'Native gateway not connected' });
           return;
         }
         const taskCfg = dbTask.taskConfig as HeartbeatTaskConfig;
-        const agent = await prisma.agent.findFirst({ where: { id: taskCfg?.agentId, ownerId: user.id } });
-        if (!agent) {
-          res.status(404).json({ error: 'Agent not found' });
+        const cronJobId = taskCfg?.cronJobId;
+
+        if (!cronJobId) {
+          res.status(400).json({ error: '该心跳任务未关联引擎 cron job，请删除后重新创建' });
           return;
         }
-        const nativeAgentId = req.tenantBridge!.agentId(agent.name);
-        const heartbeatSessionId = `heartbeat-${randomUUID().replace(/-/g, '').slice(0, 16)}`;
-        const sessionKey = req.tenantBridge!.sessionKey(agent.name, heartbeatSessionId);
-        const content = taskCfg?.content || '';
-        const prompt = buildHeartbeatRunPrompt(content);
-        let heartbeatReply = '';
-        await bridge.callAgent({
-          message: prompt,
-          agentId: nativeAgentId,
-          sessionKey,
-        }, (event) => {
-          // 收集 agent 回复文本（累积全量）
-          if (event.type === 'text_delta' && event.content) {
-            heartbeatReply = event.content;
-          }
-        });
 
-        // callAgent resolve 后，从 session history 获取完整回复（更可靠）
-        if (!heartbeatReply) {
-          try {
-            const history = await bridge.chatHistory(sessionKey) as EngineChatHistoryResponse;
-            const msgs: EngineMessage[] = history?.messages ?? history?.history ?? [];
-            const lastAssistant = [...msgs].reverse().find((m) => m.role === 'assistant');
-            if (lastAssistant) {
-              heartbeatReply = Array.isArray(lastAssistant.content)
-                ? lastAssistant.content.map((c: EngineContentBlock) => c.text || c.content || '').join('')
-                : String(lastAssistant.content || '');
-            }
-          } catch { /* history 读取失败不阻塞 */ }
-        }
+        await bridge.cronRun(cronJobId, 'force');
 
-        const isOk = heartbeatReply.includes('HEARTBEAT_OK');
-        const resultSummary = isOk ? 'HEARTBEAT_OK' : heartbeatReply.slice(0, getRuntimeConfig().chat.heartbeatSummaryMaxChars);
-
-        // 心跳结果推送到 IM（飞书走引擎原生 cron delivery，微信走企业网关 sendToUser）
-        if (imService) {
-          const alertText = isOk
-            ? `✅ 心跳巡检正常\nAgent: ${agent.name}\n时间: ${new Date().toLocaleString('zh-CN')}`
-            : `🚨 心跳巡检告警\nAgent: ${agent.name}\n时间: ${new Date().toLocaleString('zh-CN')}\n\n${resultSummary}`;
-          imService.sendToUser(user.id, alertText).then(sent => {
-            if (sent > 0) logger.info(`[scheduler] Heartbeat result sent to ${user.id} via IM (${sent} channel(s))`);
-          }).catch((e: unknown) => logger.warn(`[scheduler] IM send failed: ${e instanceof Error ? e.message : String(e)}`));
-        }
-
-        // 清理隔离 session
-        bridge.sessionsDelete(sessionKey).catch((e: unknown) => {
-          logger.warn(`[scheduler] Failed to cleanup heartbeat session ${sessionKey}: ${e instanceof Error ? e.message : String(e)}`);
-        });
         await prisma.scheduledTask.update({
           where: { id: dbTask.id },
-          data: {
-            lastRunAt: new Date(),
-            taskConfig: { ...taskCfg, lastResult: resultSummary, lastResultAt: new Date().toISOString() },
-          },
+          data: { lastRunAt: new Date() },
         }).catch(err => logger.warn('[scheduler] 更新心跳任务最后运行时间失败', { error: (err as Error)?.message || String(err) }));
 
-        // 审计日志：记录心跳执行结果
-        try {
-          await prisma.auditLog.create({
-            data: {
-              userId: user.id,
-              action: isOk ? 'scheduler:heartbeat:ok' : 'scheduler:heartbeat:alert',
-              resource: `scheduler:${dbTask.id}`,
-              details: { agentName: agent.name, result: resultSummary.slice(0, 500) },
-              success: true,
-              durationMs: 0,
-            },
-          });
-        } catch { /* 审计写入失败不阻塞 */ }
-
-        res.json({ ok: true, message: '心跳已手动触发', alert: !isOk, result: resultSummary });
+        res.json({ ok: true, message: '心跳已通过引擎 cron 触发' });
         return;
       }
 
       if (bridge?.isConnected) {
-        // 归属校验：确保任务属于当前用户
         const ownership = await verifyTaskOwnership(bridge, req.params.id, user.id, isAdmin(user));
         if (!ownership.ok) {
           res.status(ownership.status).json({ error: ownership.error });
@@ -592,7 +476,7 @@ export function createSchedulerRouter(
   });
 
   /**
-   * 查询到期提醒（从原生 cron 查询，重启不丢失）
+   * 查询到期提醒（从原生 cron 查询）
    */
   router.get('/reminders/due', authMiddleware, async (req: AuthenticatedRequest, res) => {
     const user = req.user!;
@@ -601,7 +485,6 @@ export function createSchedulerRouter(
         res.json({ reminders: [] });
         return;
       }
-      // NOTE: cron.list RPC 不支持 agentId 过滤，全量拉取后客户端过滤
       const result = (await bridge.cronList(true)) as EngineCronListResponse;
       const allJobs: EngineCronJob[] = result?.jobs ?? [];
       const prefix = `ent-reminder:${user.id}:`;
@@ -609,7 +492,6 @@ export function createSchedulerRouter(
       const dueReminders = allJobs
         .filter((j) => {
           if (!(j.name || '').startsWith(prefix)) return false;
-          // 检查 schedule.at 是否已到期
           const at = j.schedule?.at;
           return at && new Date(at).getTime() <= now;
         })
@@ -631,7 +513,6 @@ export function createSchedulerRouter(
   router.post('/reminders/:id/dismiss', authMiddleware, async (req: AuthenticatedRequest, res) => {
     try {
       if (bridge?.isConnected) {
-        // 归属校验：确保提醒属于当前用户
         const user = req.user!;
         const ownership = await verifyTaskOwnership(bridge, req.params.id, user.id, isAdmin(user));
         if (!ownership.ok) {
@@ -642,7 +523,6 @@ export function createSchedulerRouter(
       }
       res.json({ ok: true });
     } catch (err: unknown) {
-      // 可能已被自动删除，静默处理
       logger.warn('[scheduler] Dismiss error (ignored):', { error: err instanceof Error ? err.message : String(err) });
       res.json({ ok: true });
     }
