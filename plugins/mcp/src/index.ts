@@ -952,12 +952,12 @@ export default function enterpriseMcpPlugin(api: any) {
       const isDefault = agentName === 'default';
 
       // 插件 Prisma 没有 users/agents 表，用 raw SQL
-      const users: any[] = await _prisma.$queryRaw`SELECT username, display_name FROM users WHERE id = ${userId} LIMIT 1`;
+      const users: any[] = await _prisma.$queryRaw`SELECT username, display_name FROM users WHERE user_id = ${userId} LIMIT 1`;
       const user = users[0];
       const displayName = user?.display_name || user?.username || userId;
       const username = user?.username || userId;
 
-      const agents: any[] = await _prisma.$queryRaw`SELECT id, name, system_prompt, allowed_connections, identity, description, enabled, is_default FROM agents WHERE owner_id = ${userId} AND name = ${agentName || 'default'} LIMIT 1`;
+      const agents: any[] = await _prisma.$queryRaw`SELECT agent_id, name, system_prompt, allowed_connections, identity, description, enabled, is_default FROM agents WHERE owner_id = ${userId} AND name = ${agentName || 'default'} LIMIT 1`;
       const agent = agents[0];
 
       const sections: string[] = [];
@@ -1059,6 +1059,7 @@ export default function enterpriseMcpPlugin(api: any) {
 
       const text = sections.join('\n\n');
       _enterpriseCtxCache.set(agentId, { text, ts: Date.now() });
+      api.logger.info(`[enterprise-mcp] before_prompt_build OK for ${agentId} (${text.length} chars, sections: ${sections.length})`);
       return { appendSystemContext: text };
     } catch (err: any) {
       api.logger.warn(`[enterprise-mcp] before_prompt_build failed for ${agentId}: ${err.message || err.stack || String(err)}`);

@@ -15,6 +15,7 @@ import { EngineAdapter } from '../services/EngineAdapter';
 import { TenantEngineAdapter } from '../services/TenantEngineAdapter';
 import { syncAgentToEngine } from '../services/AgentConfigSync';
 import { ensureAgentTemplates } from '../services/SoulTemplate';
+import { buildHeartbeatRunPrompt, parseEveryToMs } from '../routes/scheduler';
 import { initRuntimeConfig } from '../config';
 import type { AppPrismaClient } from '../types/prisma';
 import type { loadConfig } from '../config';
@@ -218,6 +219,76 @@ export async function initServices(config: AppConfig): Promise<Services> {
           }
           if (agents.length > 0) {
             logger.info(`Native Gateway: synced ${syncOk}/${agents.length} agents`);
+          }
+
+          // 清理 octopus.json 中的孤儿 agent（DB 已删除但 config 残留）
+          try {
+            const validIds = new Set(agents.map(a => TenantEngineAdapter.forUser(bridge!, a.ownerId).agentId(a.name)));
+            const engineCfg = await bridge!.configGet();
+            const engineAgents: { name?: string; id?: string }[] = (engineCfg as any)?.agents?.list ?? [];
+            const orphans = engineAgents.filter(a => {
+              const id = a.name || a.id || '';
+              return id.startsWith('ent_') && !validIds.has(id);
+            });
+            if (orphans.length > 0) {
+              for (const orphan of orphans) {
+                const orphanId = orphan.name || orphan.id || '';
+                const nameMatch = orphanId.match(/^ent_(user-[^_]+)_(.+)$/);
+                if (nameMatch) {
+                  await syncAgentToEngine(bridge!, nameMatch[1], {
+                    deleteAgentName: nameMatch[2],
+                    enabledAgentNames: agents.filter(a => a.ownerId === nameMatch[1]).map(a => a.name),
+                  }).catch(() => {});
+                }
+              }
+              logger.info(`Orphan cleanup: removed ${orphans.length} stale agent(s) from octopus.json`);
+            }
+          } catch (cleanupErr: any) {
+            logger.warn('Orphan agent cleanup warning', { error: cleanupErr.message });
+          }
+
+          // 恢复心跳 cron job（重启后引擎 cron 是空的，需要从 DB 重新注册）
+          try {
+            const heartbeatTasks = await prismaClient.scheduledTask.findMany({
+              where: { taskType: 'heartbeat', enabled: true },
+            });
+            let restored = 0;
+            for (const task of heartbeatTasks) {
+              try {
+                const cfg = task.taskConfig as { agentId?: string; every?: string; content?: string; cronJobId?: string };
+                if (!cfg.agentId || !cfg.every || !cfg.content) continue;
+
+                // 查 agent 获取 nativeAgentId
+                const agent = agents.find(a => a.id === cfg.agentId);
+                if (!agent) continue;
+                const nativeAgentId = TenantEngineAdapter.forUser(bridge!, agent.ownerId).agentId(agent.name);
+
+                const prompt = buildHeartbeatRunPrompt(cfg.content);
+                const cronJob = await bridge!.cronAdd({
+                  name: `heartbeat:${task.name}`,
+                  agentId: nativeAgentId,
+                  schedule: { kind: 'every' as const, everyMs: parseEveryToMs(cfg.every) },
+                  sessionTarget: 'isolated',
+                  payload: { kind: 'agentTurn', message: prompt },
+                }) as { id?: string };
+
+                // 更新 DB 中的 cronJobId
+                if (cronJob?.id && cronJob.id !== cfg.cronJobId) {
+                  await prismaClient.scheduledTask.update({
+                    where: { id: task.id },
+                    data: { taskConfig: { ...cfg, cronJobId: cronJob.id } },
+                  });
+                }
+                restored++;
+              } catch (hbErr: unknown) {
+                logger.warn(`Heartbeat restore failed: ${task.name}`, { error: (hbErr as Error).message });
+              }
+            }
+            if (restored > 0) {
+              logger.info(`Heartbeat: restored ${restored}/${heartbeatTasks.length} cron job(s)`);
+            }
+          } catch (hbSyncErr: any) {
+            logger.warn('Heartbeat restore warning', { error: hbSyncErr.message });
           }
         } catch (syncErr: any) {
           logger.warn('Native Gateway agent sync warning', { error: syncErr.message });

@@ -49,7 +49,7 @@ export function buildHeartbeatRunPrompt(content: string): string {
 }
 
 /** 解析 every 字符串为毫秒（如 "30m" → 1800000） */
-function parseEveryToMs(every: string): number {
+export function parseEveryToMs(every: string): number {
   const match = every.match(/^(\d+)(s|m|h|d)$/);
   if (!match) return 30 * 60 * 1000; // 默认 30m
   const num = parseInt(match[1], 10);

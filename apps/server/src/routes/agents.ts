@@ -439,13 +439,18 @@ export function createAgentsRouter(
       }
       // 清理 octopus.json 中 agents.list 的残留 entry + 更新 allowAgents（单次 config read/write）
       if (bridge?.isConnected) {
-        const enabledAgents = await prisma.agent.findMany({ where: { ownerId: user.id, enabled: true }, select: { name: true } });
-        syncAgentToEngine(bridge!, user.id, {
-          deleteAgentName: existing.name,
-          enabledAgentNames: enabledAgents.map(a => a.name),
-        }).catch((e: unknown) =>
-          logger.error('[agents] syncAgentToEngine after delete failed:', { error: e instanceof Error ? e.message : String(e) }),
-        );
+        try {
+          const enabledAgents = await prisma.agent.findMany({ where: { ownerId: user.id, enabled: true }, select: { name: true } });
+          await syncAgentToEngine(bridge!, user.id, {
+            deleteAgentName: existing.name,
+            enabledAgentNames: enabledAgents.map(a => a.name),
+          });
+          logger.info(`[agents] Synced agent deletion to engine: ${existing.name}`);
+        } catch (e: unknown) {
+          logger.error('[agents] syncAgentToEngine after delete failed:', { error: e instanceof Error ? e.message : String(e) });
+        }
+      } else {
+        logger.warn(`[agents] Engine not connected, agent '${existing.name}' may remain in octopus.json until next restart`);
       }
 
       res.json({ ok: true });
