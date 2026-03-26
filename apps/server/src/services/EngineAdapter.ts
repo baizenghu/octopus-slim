@@ -511,6 +511,40 @@ export class EngineAdapter extends EventEmitter {
     });
   }
 
+  /**
+   * 在 configMutex 内执行原子 read-modify-write。
+   * 回调接收当前引擎配置，返回 patch（deepMerge 后写入）或 null（跳过写入）。
+   */
+  async configTransaction(
+    fn: (config: Record<string, unknown>) => Promise<Record<string, unknown> | null> | Record<string, unknown> | null,
+  ): Promise<void> {
+    return this.configMutex.runExclusive(async () => {
+      const maxRetries = getRuntimeConfig().engine.maxConfigRetries;
+      for (let attempt = 0; attempt < maxRetries; attempt++) {
+        const { config, hash: baseHash } = await this.configGetParsed();
+        if (!baseHash) throw new Error('config.get did not return hash');
+        const patch = await fn(config);
+        if (!patch) return;
+        const merged = deepMerge(config, patch);
+        try {
+          await this.call('config.set', { raw: JSON.stringify(merged), baseHash });
+          return;
+        } catch (e: unknown) {
+          const msg = e instanceof Error ? e.message : String(e);
+          if (attempt < maxRetries - 1 && (msg.includes('config changed since last load') || msg.includes('rate limit'))) {
+            const delay = msg.includes('rate limit')
+              ? (parseInt(msg.match(/retry after (\d+)s/)?.[1] || '10', 10) * 1000 + 1000)
+              : (500 * (attempt + 1));
+            logger.warn(`configTransaction attempt ${attempt + 1} failed: ${msg}, retrying in ${delay}ms`);
+            await new Promise(r => setTimeout(r, delay));
+            continue;
+          }
+          throw e;
+        }
+      }
+    });
+  }
+
   async configApply(patch: Record<string, unknown>): Promise<void> {
     return this.configMutex.runExclusive(async () => {
       const maxRetries = getRuntimeConfig().engine.maxConfigRetries;

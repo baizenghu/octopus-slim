@@ -13,6 +13,7 @@ import { AuditLogger } from '@octopus/audit';
 import { MCPRegistry, MCPExecutor } from '@octopus/mcp';
 import { EngineAdapter } from '../services/EngineAdapter';
 import { TenantEngineAdapter } from '../services/TenantEngineAdapter';
+import { syncAgentToEngine } from '../services/AgentConfigSync';
 import { ensureAgentTemplates } from '../services/SoulTemplate';
 import { initRuntimeConfig } from '../config';
 import type { AppPrismaClient } from '../types/prisma';
@@ -179,26 +180,44 @@ export async function initServices(config: AppConfig): Promise<Services> {
       if (prismaClient) {
         try {
           const agents = await prismaClient.agent.findMany({ where: { enabled: true } });
-          const createResults = await Promise.allSettled(
+          // 按 ownerId 分组，计算每个用户的 enabledAgentNames
+          const enabledByOwner = new Map<string, string[]>();
+          for (const agent of agents) {
+            const list = enabledByOwner.get(agent.ownerId) ?? [];
+            list.push(agent.name);
+            enabledByOwner.set(agent.ownerId, list);
+          }
+
+          // 并发创建 native agents
+          await Promise.allSettled(
             agents.map(async (agent) => {
               const nativeId = TenantEngineAdapter.forUser(bridge!, agent.ownerId).agentId(agent.name);
               const workspacePath = workspaceManager.getAgentWorkspacePath(agent.ownerId, agent.name);
               try {
                 await bridge!.agentsCreate({ name: nativeId, workspace: workspacePath });
               } catch { /* 已存在则忽略 */ }
-              return { agent, nativeId };
             })
           );
-          let failCount = 0;
-          for (const r of createResults) {
-            if (r.status === 'rejected') {
-              failCount++;
-              logger.error('Agent create failed', { reason: r.reason });
+
+          // 串行同步配置（使用 configTransaction 保证原子性）
+          let syncOk = 0;
+          for (const agent of agents) {
+            try {
+              await syncAgentToEngine(bridge!, agent.ownerId, {
+                agentName: agent.name,
+                model: agent.model as string | null,
+                toolsFilter: agent.toolsFilter as string[] | null,
+                skillsFilter: agent.skillsFilter as string[] ?? [],
+                mcpFilter: agent.mcpFilter as string[] | null,
+                enabledAgentNames: enabledByOwner.get(agent.ownerId) ?? [],
+              });
+              syncOk++;
+            } catch (configErr: unknown) {
+              logger.warn('Agent config sync warning', { agent: agent.name, error: (configErr as Error).message });
             }
           }
           if (agents.length > 0) {
-            const successCount = agents.length - failCount;
-            logger.info(`Native Gateway: synced ${successCount}/${agents.length} agents (concurrent)`);
+            logger.info(`Native Gateway: synced ${syncOk}/${agents.length} agents`);
           }
         } catch (syncErr: any) {
           logger.warn('Native Gateway agent sync warning', { error: syncErr.message });

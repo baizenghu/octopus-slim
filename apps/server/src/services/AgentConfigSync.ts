@@ -101,7 +101,8 @@ export async function syncAgentToEngine(
   if (!bridge.isConnected) return;
 
   const tenant = TenantEngineAdapter.forUser(bridge, userId);
-  const { config } = await bridge.configGetParsed();
+
+  await bridge.configTransaction((config) => {
   const engineCfg = config as EngineConfig;
   const agentsList: EngineAgentListEntry[] = engineCfg.agents?.list ?? [];
   let changed = false;
@@ -326,36 +327,38 @@ export async function syncAgentToEngine(
     }
   }
 
-  if (changed) {
-    // 增量 patch：只传变更的部分，避免全量覆盖
-    const patch: Record<string, unknown> = {};
+  if (!changed) {
+    logger.info(`no changes needed for user ${userId}`);
+    return null; // configTransaction: 无变更，跳过写入
+  }
 
-    // agents.list 是数组，deep merge 会整体替换，所以传完整 list
-    patch.agents = { list: engineCfg.agents?.list ?? [] };
+  // 增量 patch：只传变更的部分
+  const patch: Record<string, unknown> = {};
 
-    // 如果涉及 memory-lancedb-pro plugin 变更，只传 plugin patch
-    if (opts.enabledAgentNames || opts.deleteAgentName) {
-      const memoryPlugin = engineCfg.plugins?.entries?.['memory-lancedb-pro'];
-      if (memoryPlugin) {
-        patch.plugins = {
-          entries: {
-            'memory-lancedb-pro': {
-              config: {
-                scopes: {
-                  agentAccess: memoryPlugin.config?.scopes?.agentAccess || {},
-                },
+  // agents.list 是数组，deep merge 会整体替换，所以传完整 list
+  patch.agents = { list: engineCfg.agents?.list ?? [] };
+
+  // 如果涉及 memory-lancedb-pro plugin 变更，只传 plugin patch
+  if (opts.enabledAgentNames || opts.deleteAgentName) {
+    const memoryPlugin = engineCfg.plugins?.entries?.['memory-lancedb-pro'];
+    if (memoryPlugin) {
+      patch.plugins = {
+        entries: {
+          'memory-lancedb-pro': {
+            config: {
+              scopes: {
+                agentAccess: memoryPlugin.config?.scopes?.agentAccess || {},
               },
             },
           },
-        };
-      }
+        },
+      };
     }
-
-    await bridge.configApply(patch);
-    logger.info(`config applied (incremental) for user ${userId}`);
-  } else {
-    logger.info(`no changes needed for user ${userId}`);
   }
+
+  logger.info(`config applied (transaction) for user ${userId}`);
+  return patch; // configTransaction: 返回 patch 进行写入
+  }); // end configTransaction
 }
 
 // ─── ensureAndSyncNativeAgent ───────────────────────────────────────────────
