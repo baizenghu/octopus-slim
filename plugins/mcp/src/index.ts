@@ -951,15 +951,14 @@ export default function enterpriseMcpPlugin(api: any) {
       const agentName = extractAgentNameFromAgentId(agentId);
       const isDefault = agentName === 'default';
 
-      // 查用户信息
-      const user = await _prisma.user.findFirst({ where: { id: userId } });
-      const displayName = (user as any)?.displayName || (user as any)?.username || userId;
-      const username = (user as any)?.username || userId;
+      // 插件 Prisma 没有 users/agents 表，用 raw SQL
+      const users: any[] = await _prisma.$queryRaw`SELECT username, display_name FROM users WHERE id = ${userId} LIMIT 1`;
+      const user = users[0];
+      const displayName = user?.display_name || user?.username || userId;
+      const username = user?.username || userId;
 
-      // 查 agent 信息
-      const agent = await _prisma.agent.findFirst({
-        where: { ownerId: userId, name: agentName || 'default' },
-      });
+      const agents: any[] = await _prisma.$queryRaw`SELECT id, name, system_prompt, allowed_connections, identity, description, enabled, is_default FROM agents WHERE owner_id = ${userId} AND name = ${agentName || 'default'} LIMIT 1`;
+      const agent = agents[0];
 
       const sections: string[] = [];
 
@@ -992,20 +991,18 @@ export default function enterpriseMcpPlugin(api: any) {
       );
 
       // Agent 指令
-      if (agent && (agent as any).systemPrompt) {
-        sections.push(`## Agent 指令\n${(agent as any).systemPrompt}`);
+      if (agent?.system_prompt) {
+        sections.push(`## Agent 指令\n${agent.system_prompt}`);
       }
 
       // 专业 Agent 列表（仅 default agent）
       if (isDefault) {
         try {
-          const specialists = await _prisma.agent.findMany({
-            where: { ownerId: userId, enabled: true, isDefault: false },
-            orderBy: { createdAt: 'asc' },
-          });
+          const specialists: any[] = await _prisma.$queryRaw`SELECT name, description, identity FROM agents WHERE owner_id = ${userId} AND enabled = true AND is_default = false ORDER BY created_at ASC`;
           if (specialists.length > 0) {
             const list = specialists.map((a: any) => {
-              const identity = a.identity as { name?: string } | null;
+              let identity: { name?: string } | null = null;
+              try { identity = typeof a.identity === 'string' ? JSON.parse(a.identity) : a.identity; } catch { /* ignore */ }
               const dn = identity?.name || a.name;
               const desc = a.description ? ` — ${a.description}` : '';
               return `- **${dn}**（agent 名称: ${a.name}）${desc}`;
@@ -1019,21 +1016,24 @@ export default function enterpriseMcpPlugin(api: any) {
       }
 
       // 数据库连接
-      const allowedConns = (agent as any)?.allowedConnections as string[] | null;
+      let allowedConns: string[] | null = null;
+      try {
+        allowedConns = typeof agent?.allowed_connections === 'string'
+          ? JSON.parse(agent.allowed_connections)
+          : agent?.allowed_connections;
+      } catch { /* ignore */ }
       if (Array.isArray(allowedConns) && allowedConns.length > 0) {
         try {
-          const dbConns = await _prisma.databaseConnection.findMany({
-            where: { userId, enabled: true },
-          });
-          const filtered = dbConns.filter((c: any) => allowedConns.includes(c.name));
+          const dbConns: any[] = await _prisma.$queryRaw`SELECT name, db_type, db_name, host, port, db_user FROM database_connections WHERE user_id = ${userId} AND enabled = true`;
+          const filtered = dbConns.filter((c: any) => allowedConns!.includes(c.name));
           if (filtered.length > 0) {
             const lines = [
               '## 数据库连接',
               '调用 SQL 相关工具时需要传入 connection_name 参数：',
               '',
             ];
-            for (const c of filtered as any[]) {
-              lines.push(`- \`${c.name}\`：${c.dbType} \`${c.dbName}\`@${c.host}:${c.port} (user: ${c.dbUser})`);
+            for (const c of filtered) {
+              lines.push(`- \`${c.name}\`：${c.db_type} \`${c.db_name}\`@${c.host}:${c.port} (user: ${c.db_user})`);
             }
             sections.push(lines.join('\n'));
           }
@@ -1051,7 +1051,7 @@ export default function enterpriseMcpPlugin(api: any) {
       _enterpriseCtxCache.set(agentId, { text, ts: Date.now() });
       return { appendSystemContext: text };
     } catch (err: any) {
-      api.logger.warn(`[enterprise-mcp] before_prompt_build failed for ${agentId}: ${err.message}`);
+      api.logger.warn(`[enterprise-mcp] before_prompt_build failed for ${agentId}: ${err.message || err.stack || String(err)}`);
       return;
     }
   });
