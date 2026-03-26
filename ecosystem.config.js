@@ -32,7 +32,7 @@ module.exports = {
     {
       name: 'native-gateway',
       script: '/home/baizh/octopus-main/octopus.mjs',
-      args: `--profile enterprise gateway run --force --port ${NATIVE_PORT} --token ${GW_TOKEN}`,
+      args: `--profile enterprise gateway run --force --port ${NATIVE_PORT}`,
       cwd: ROOT_DIR,
       interpreter: 'node',
 
