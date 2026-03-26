@@ -210,8 +210,9 @@ export async function syncAgentToEngine(
 
         // 设置引擎原生 skills 白名单（引擎自动注入 <available_skills>）
         const newSkills = hasSkills ? [...opts.skillsFilter] : [];
-        const currentSkills: string[] = entry.skills ?? [];
-        if (JSON.stringify(newSkills) !== JSON.stringify(currentSkills)) {
+        const currentSkills: string[] | undefined = entry.skills;
+        // Compare carefully: undefined (no filter = allow all) vs [] (empty = deny all)
+        if (currentSkills === undefined || JSON.stringify(newSkills) !== JSON.stringify(currentSkills)) {
           entry.skills = newSkills;
           changed = true;
           logger.info(`skills: ${targetId} → [${newSkills.join(', ')}]`);
