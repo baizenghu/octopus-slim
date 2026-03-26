@@ -269,7 +269,7 @@ export async function loadImageFromRef(
  * @returns True if the model supports image input
  */
 export function modelSupportsImages(model: { input?: string[] }): boolean {
-  return model.input?.includes("image") ?? false;
+  return model?.input?.includes("image") ?? false;
 }
 
 /**

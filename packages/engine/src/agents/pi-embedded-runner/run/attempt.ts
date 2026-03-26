@@ -842,7 +842,7 @@ export async function runEmbeddedAttempt(
       sessionAgentId,
     });
     // Check if the model supports native image input
-    const modelHasVision = params.model.input?.includes("image") ?? false;
+    const modelHasVision = params.model?.input?.includes("image") ?? false;
     const toolsRaw = params.disableTools
       ? []
       : createOctopusCodingTools({

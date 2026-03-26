@@ -172,6 +172,11 @@ export function buildMinimaxProvider(): ProviderConfig {
         name: "MiniMax M2.5 Highspeed",
         reasoning: true,
       }),
+      buildMinimaxTextModel({
+        id: "MiniMax-M2.7",
+        name: "MiniMax M2.7",
+        reasoning: true,
+      }),
     ],
   };
 }
@@ -196,6 +201,11 @@ export function buildMinimaxPortalProvider(): ProviderConfig {
       buildMinimaxTextModel({
         id: "MiniMax-M2.5-highspeed",
         name: "MiniMax M2.5 Highspeed",
+        reasoning: true,
+      }),
+      buildMinimaxTextModel({
+        id: "MiniMax-M2.7",
+        name: "MiniMax M2.7",
         reasoning: true,
       }),
     ],
