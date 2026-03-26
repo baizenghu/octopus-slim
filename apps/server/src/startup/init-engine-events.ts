@@ -38,10 +38,10 @@ export function initEngineEvents(params: {
     // 推送条件：有内容且不含 HEARTBEAT_OK
     if (isAlert) {
       // 从 agentId 提取 userId（ent_{userId}_{agentName}）
-      const match = evt.agentId?.match(/^ent_(.+?)_[^_]+$/);
+      const match = evt.agentId?.match(/^ent_(user-[^_]+)_(.+)$/);
       let userIds: string[] = [];
       if (match?.[1]) {
-        userIds = [`user-${match[1]}`];
+        userIds = [match[1]];
       } else {
         // agentId 为 default 或无法解析 — 查 DB 找有心跳任务的所有用户
         prismaClient.scheduledTask.findMany({
