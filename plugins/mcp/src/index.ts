@@ -701,10 +701,15 @@ export default function enterpriseMcpPlugin(api: any) {
             } catch { /* DB 查询失败不阻塞，降级放行 */ }
           }
 
-          // 3. 解析技能目录路径
+          // 3. 解析技能目录路径（优先用 name 目录名，fallback 到 id）
+          const resolveSkillPath = (base: string) => {
+            const byName = path.resolve(base, skill.name);
+            if (fs.existsSync(byName)) return byName;
+            return path.resolve(base, skill.id);
+          };
           const skillPath = skill.scope === 'enterprise'
-            ? path.resolve(_dataRoot, 'skills', skill.id)
-            : path.resolve(_dataRoot, 'users', skill.ownerId || userId, 'workspace', 'skills', skill.id);
+            ? resolveSkillPath(path.resolve(_dataRoot, 'skills'))
+            : resolveSkillPath(path.resolve(_dataRoot, 'users', skill.ownerId || userId, 'workspace', 'skills'));
 
           if (!fs.existsSync(skillPath)) {
             return {
