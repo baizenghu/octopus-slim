@@ -68,7 +68,7 @@ module.exports = {
     {
       name: 'gateway',
       script: 'src/index.ts',
-      cwd: path.join(ROOT_DIR, 'apps', 'gateway'),
+      cwd: path.join(ROOT_DIR, 'apps', 'server'),
       interpreter: path.join(ROOT_DIR, 'node_modules', '.bin', 'tsx'),
 
       env: {
