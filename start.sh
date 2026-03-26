@@ -26,6 +26,14 @@ YELLOW='\033[1;33m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
+# .env 权限检查（应为 600，防止密钥泄露）
+if [ -f "$ROOT_DIR/.env" ]; then
+  ENV_PERMS=$(stat -c '%a' "$ROOT_DIR/.env" 2>/dev/null)
+  if [ "$ENV_PERMS" != "600" ]; then
+    echo -e "${YELLOW}⚠ .env 文件权限为 $ENV_PERMS，建议设为 600: chmod 600 .env${NC}"
+  fi
+fi
+
 # 从 .env 读取端口
 set -a
 source "$ROOT_DIR/.env" 2>/dev/null || true
