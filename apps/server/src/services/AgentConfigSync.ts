@@ -13,7 +13,7 @@ import * as path from 'path';
 import type { EngineAdapter } from './EngineAdapter';
 import { TenantEngineAdapter } from './TenantEngineAdapter';
 import type { WorkspaceManager } from '@octopus/workspace';
-import { getSoulTemplate, getMemoryTemplate } from './SoulTemplate';
+import { getSoulTemplate } from './SoulTemplate';
 import { createLogger } from '../utils/logger';
 import type { EngineConfig, EngineAgentListEntry, EngineAgentFileResponse } from '../types/engine';
 
@@ -495,12 +495,9 @@ export async function ensureAndSyncNativeAgent(
   if (!agentReady) return;
 
   if (useCache && isNewAgent) {
-    // chat.ts 模式：新建时无条件写 SOUL.md + MEMORY.md（不写 IDENTITY.md）
+    // chat.ts 模式：新建时无条件写 SOUL.md（不写 IDENTITY.md，不写 MEMORY.md — 由 lancedb-pro 管理记忆）
     await setFileWithRetry(bridge, nativeAgentId, 'SOUL.md', getSoulTemplate(dataRoot, agentName), logPrefix).catch((e: unknown) => {
       logger.error(`${logPrefix} agentFilesSet SOUL.md failed for ${nativeAgentId}:`, { message: (e as Error).message });
-    });
-    await setFileWithRetry(bridge, nativeAgentId, 'MEMORY.md', getMemoryTemplate(dataRoot, agentName), logPrefix).catch((e: unknown) => {
-      logger.error(`${logPrefix} agentFilesSet MEMORY.md failed for ${nativeAgentId}:`, { message: (e as Error).message });
     });
   } else if (!useCache) {
     // agents.ts 模式：条件写 IDENTITY.md + SOUL.md + MEMORY.md
@@ -543,23 +540,7 @@ export async function ensureAndSyncNativeAgent(
       }
     }
 
-    // MEMORY.md：仅在文件不存在时写入（保护已有记忆）
-    if (!isUpdate) {
-      try {
-        const existing = await bridge.agentFilesGet(nativeAgentId, 'MEMORY.md') as EngineAgentFileResponse;
-        if (!existing?.content) {
-          const memDisplayName = identity?.name || agentName;
-          await setFileWithRetry(bridge, nativeAgentId, 'MEMORY.md', getMemoryTemplate(dataRoot, memDisplayName), logPrefix).catch((e: unknown) => {
-            logger.error(`${logPrefix} agentFilesSet MEMORY.md ultimately failed for ${nativeAgentId}:`, { message: (e as Error).message });
-          });
-        }
-      } catch {
-        const memDisplayName = identity?.name || agentName;
-        await setFileWithRetry(bridge, nativeAgentId, 'MEMORY.md', getMemoryTemplate(dataRoot, memDisplayName), logPrefix).catch((e: unknown) => {
-          logger.error(`${logPrefix} agentFilesSet MEMORY.md ultimately failed for ${nativeAgentId}:`, { message: (e as Error).message });
-        });
-      }
-    }
+    // MEMORY.md：不再创建（企业 agent 使用 lancedb-pro 向量记忆，不依赖本地文件记忆）
   }
   // memory-lancedb-pro 默认行为已提供 scope 隔离，无需显式注册
 }

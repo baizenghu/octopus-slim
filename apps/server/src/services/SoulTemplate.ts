@@ -155,6 +155,9 @@ export function getSoulTemplate(
 /**
  * 获取 MEMORY.md 初始内容（纯数据文件，铁律已迁移到 AGENTS.md）
  *
+ * @deprecated 企业 agent 已改用 lancedb-pro 向量记忆，不再创建 MEMORY.md 文件。
+ *             AgentConfigSync 不再调用此函数，保留仅供历史兼容。
+ *
  * @param dataRoot     数据根目录
  * @param displayName  Agent 显示名称（用于标题）
  */
