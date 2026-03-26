@@ -34,6 +34,14 @@ import { createLogger } from './utils/logger';
 
 const logger = createLogger('gateway');
 
+// 全局异常兜底 — 记录日志但不退出，让 PM2 管理重启
+process.on('uncaughtException', (err) => {
+  logger.error('Uncaught exception', { error: err.message, stack: err.stack });
+});
+process.on('unhandledRejection', (reason) => {
+  logger.error('Unhandled rejection', { reason: String(reason) });
+});
+
 async function main() {
   logger.info('🚀 Starting Octopus AI Gateway...');
 
