@@ -1044,16 +1044,17 @@ export default function enterpriseMcpPlugin(api: any) {
       sections.push(
         `## 定时提醒\n` +
         `设置提醒或定时任务请使用 cron 工具。\n` +
-        `**必须使用** sessionTarget="isolated"，payload.kind="agentTurn"。\n` +
-        `示例（1分钟后提醒）：\n` +
+        `**必须使用** sessionTarget="isolated"，payload.kind="agentTurn"，delivery.mode="none"。\n` +
+        `提醒的送达方式：在 payload.message 中指示 agent 用 send_im_message 工具发送通知。\n` +
+        `示例（2分钟后提醒开会）：\n` +
         `cron add，action="add"，job={\n` +
         `  "name": "提醒开会",\n` +
         `  "schedule": { "kind": "at", "at": "<ISO-8601时间>" },\n` +
         `  "sessionTarget": "isolated",\n` +
-        `  "payload": { "kind": "agentTurn", "message": "提醒用户：该开会了。请通过 send_im_message 发送提醒。" },\n` +
-        `  "delivery": { "mode": "announce" }\n` +
+        `  "payload": { "kind": "agentTurn", "message": "你是一个提醒助手。请立即用 send_im_message 工具向用户发送以下提醒：该开会了！" },\n` +
+        `  "delivery": { "mode": "none" }\n` +
         `}\n` +
-        `**禁止使用** sessionTarget="main" 或 payload.kind="systemEvent"，否则会报错。`
+        `**禁止** sessionTarget="main"、payload.kind="systemEvent"、delivery.mode="announce"，均会报错。`
       );
 
       const text = sections.join('\n\n');

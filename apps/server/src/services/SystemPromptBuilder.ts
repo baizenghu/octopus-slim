@@ -155,9 +155,10 @@ export async function buildEnterpriseSystemPrompt(
   sections.push(
     `## 定时提醒\n` +
     `设置提醒或定时任务请使用 cron 工具。\n` +
-    `**必须使用** sessionTarget="isolated"，payload.kind="agentTurn"。\n` +
-    `示例：cron add，job={ "schedule": { "kind": "at", "at": "<ISO时间>" }, "sessionTarget": "isolated", "payload": { "kind": "agentTurn", "message": "提醒用户：xxx。请通过 send_im_message 发送提醒。" }, "delivery": { "mode": "announce" } }\n` +
-    `**禁止使用** sessionTarget="main" 或 payload.kind="systemEvent"，否则会报错。`
+    `**必须使用** sessionTarget="isolated"，payload.kind="agentTurn"，delivery.mode="none"。\n` +
+    `提醒送达：在 payload.message 中指示 agent 用 send_im_message 发送通知。\n` +
+    `示例：cron add，job={ "schedule": { "kind": "at", "at": "<ISO时间>" }, "sessionTarget": "isolated", "payload": { "kind": "agentTurn", "message": "你是提醒助手。请立即用 send_im_message 向用户发送提醒：xxx" }, "delivery": { "mode": "none" } }\n` +
+    `**禁止** sessionTarget="main"、payload.kind="systemEvent"、delivery.mode="announce"，均会报错。`
   );
 
   const result = sections.join('\n\n');
