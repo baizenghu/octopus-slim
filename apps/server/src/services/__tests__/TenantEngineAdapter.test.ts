@@ -47,7 +47,7 @@ describe('TenantEngineAdapter', () => {
         { id: 'ent_bob_default' },
         { id: 'ent_alice_helper' },
       ];
-      const engine = { agentsList: vi.fn().mockResolvedValue(agents) } as unknown as EngineAdapter;
+      const engine = { agentsList: vi.fn().mockResolvedValue({ agents }) } as unknown as EngineAdapter;
       const tb = new TenantEngineAdapter(engine, 'alice', false);
       const result = await tb.listMyAgents();
       expect(result).toHaveLength(2);
@@ -59,7 +59,7 @@ describe('TenantEngineAdapter', () => {
         { id: 'ent_alice_default' },
         { id: 'ent_bob_default' },
       ];
-      const engine = { agentsList: vi.fn().mockResolvedValue(agents) } as unknown as EngineAdapter;
+      const engine = { agentsList: vi.fn().mockResolvedValue({ agents }) } as unknown as EngineAdapter;
       const tb = new TenantEngineAdapter(engine, 'alice', true);
       const result = await tb.listMyAgents();
       expect(result).toHaveLength(2);
