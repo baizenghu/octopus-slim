@@ -1134,8 +1134,8 @@ async function initMCPServers(api: any, executor: MCPExecutor, prisma: PrismaCli
 
   let servers: any[];
   try {
-    servers = await prisma.mCPServer.findMany({
-      where: { scope: 'enterprise', enabled: true },
+    servers = await (prisma as any).toolSource.findMany({
+      where: { type: 'mcp', scope: 'enterprise', enabled: true },
     });
   } catch (err: any) {
     api.logger.error(`failed to query MCP servers: ${err.message}`);
@@ -1194,8 +1194,8 @@ async function initMCPServers(api: any, executor: MCPExecutor, prisma: PrismaCli
   // ── 加载个人 MCP Server ──
   let personalServers: any[];
   try {
-    personalServers = await prisma.mCPServer.findMany({
-      where: { scope: 'personal', enabled: true },
+    personalServers = await (prisma as any).toolSource.findMany({
+      where: { type: 'mcp', scope: 'personal', enabled: true },
     });
   } catch (err: any) {
     api.logger.warn(`failed to query personal MCP servers: ${err.message}`);
@@ -1382,8 +1382,8 @@ function registerPersonalMCPToolFromCache(api: any, cached: CachedMCPTool) {
 /** 重新加载个人 MCP（CRUD 变更后调用） */
 async function refreshPersonalMCPServers(api: any, executor: MCPExecutor, prisma: PrismaClient) {
   try {
-    const personalServers = await prisma.mCPServer.findMany({
-      where: { scope: 'personal', enabled: true },
+    const personalServers = await (prisma as any).toolSource.findMany({
+      where: { type: 'mcp', scope: 'personal', enabled: true },
     });
 
     let changed = false;
