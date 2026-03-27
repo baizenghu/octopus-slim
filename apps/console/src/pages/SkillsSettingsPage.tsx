@@ -80,7 +80,12 @@ export default function SkillsSettingsPage() {
       toast.success(result.message);
       setEnterpriseUploadOpen(false);
       enterpriseFileRef.current = null;
-      loadData();
+      await loadData();
+      // 上传成功后自动弹出扫描报告
+      if (result.skill && result.scanReport) {
+        setReportSkill({ ...result.skill, scanReport: result.scanReport });
+        setReportModalOpen(true);
+      }
     } catch (err: any) {
       toast.error(err.message);
     }
@@ -157,7 +162,12 @@ export default function SkillsSettingsPage() {
       toast.success(result.message);
       setPersonalUploadOpen(false);
       personalFileRef.current = null;
-      loadData();
+      await loadData();
+      // 上传成功后自动弹出扫描报告
+      if (result.skill && result.scanReport) {
+        setReportSkill({ ...result.skill, scanReport: result.scanReport });
+        setReportModalOpen(true);
+      }
     } catch (err: any) {
       toast.error(err.message);
     }
@@ -428,13 +438,26 @@ export default function SkillsSettingsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* 扫描报告 Dialog */}
+      {/* 上传结果 + 扫描报告 Dialog */}
       <Dialog open={reportModalOpen} onOpenChange={setReportModalOpen}>
         <DialogContent className="max-w-[800px] max-h-[80vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>扫描报告: {reportSkill?.name || ''}</DialogTitle>
-            <DialogDescription>安全扫描详细结果</DialogDescription>
+            <DialogTitle>{reportSkill?.name || ''} — 上传结果</DialogTitle>
+            <DialogDescription>技能信息与安全扫描详情</DialogDescription>
           </DialogHeader>
+
+          {reportSkill && (
+            <div className="space-y-4">
+              {/* 技能基本信息 */}
+              <div className="p-3 bg-muted/50 rounded-md space-y-1.5 text-sm">
+                <div className="flex gap-2"><span className="text-muted-foreground w-16">名称</span><span className="font-medium">{reportSkill.name}</span></div>
+                {reportSkill.description && <div className="flex gap-2"><span className="text-muted-foreground w-16">描述</span><span>{reportSkill.description}</span></div>}
+                <div className="flex gap-2"><span className="text-muted-foreground w-16">范围</span><Badge variant="outline" className="text-xs">{reportSkill.scope === 'enterprise' ? '企业' : '个人'}</Badge></div>
+                <div className="flex gap-2"><span className="text-muted-foreground w-16">状态</span><Badge variant={reportSkill.status === 'approved' || reportSkill.status === 'active' ? 'default' : 'secondary'} className="text-xs">{reportSkill.status}</Badge></div>
+                {(reportSkill.scanReport as any)?.depsType && <div className="flex gap-2"><span className="text-muted-foreground w-16">依赖</span><span>{(reportSkill.scanReport as any).depsInfo || (reportSkill.scanReport as any).depsType}</span></div>}
+              </div>
+            </div>
+          )}
 
           {reportSkill?.scanReport ? (
             <div className="space-y-4">
