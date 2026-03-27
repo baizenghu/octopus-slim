@@ -654,13 +654,14 @@ export default function enterpriseMcpPlugin(api: any) {
         try {
           // 1. 从数据库查找技能
           // 支持 scoped name（如 "hello-test:user-b"）：先按原名查，再按去掉 :suffix 的基础名查
-          let skill = await prisma.skill.findFirst({
+          let skill = await (prisma as any).toolSource.findFirst({
             where: {
+              type: 'skill',
               name: skillName,
               enabled: true,
               OR: [
-                { scope: 'enterprise', status: 'approved' },
-                { scope: 'personal', ownerId: userId, status: 'active' },
+                { scope: 'enterprise' },
+                { scope: 'personal', ownerId: userId },
               ],
             },
           });
@@ -669,13 +670,14 @@ export default function enterpriseMcpPlugin(api: any) {
             const colonIdx = skillName.lastIndexOf(':');
             if (colonIdx > 0 && skillName.length - colonIdx <= 7) {
               const baseName = skillName.slice(0, colonIdx);
-              skill = await prisma.skill.findFirst({
+              skill = await (prisma as any).toolSource.findFirst({
                 where: {
+                  type: 'skill',
                   name: baseName,
                   enabled: true,
                   OR: [
-                    { scope: 'enterprise', status: 'approved' },
-                    { scope: 'personal', ownerId: userId, status: 'active' },
+                    { scope: 'enterprise' },
+                    { scope: 'personal', ownerId: userId },
                   ],
                 },
               });

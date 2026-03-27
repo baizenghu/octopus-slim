@@ -23,6 +23,7 @@ import { syncAgentToEngine, ensureAndSyncNativeAgent } from '../services/AgentCo
 import { invalidatePromptCache } from '../services/SystemPromptBuilder';
 import { createAvatarUpload, mimeToExt } from '../utils/avatar';
 import { createLogger } from '../utils/logger';
+import { readToolsCacheAsync } from '../utils/tools-cache';
 import { skillMdName } from '../utils/skill-naming';
 
 import type { AppPrismaClient } from '../types/prisma';
@@ -41,14 +42,10 @@ async function filterEnabledSkills(prisma: AppPrismaClient, skillsFilter: string
     skillMdName(s.scope, s.name, s.ownerId),
   );
 }
-import { resolve as pathResolve } from 'path';
-import { readFile, rm } from 'fs/promises';
+import { rm } from 'fs/promises';
 
 /** Agent workspace 中允许读写的配置文件白名单 */
 const AGENT_CONFIG_FILES = ['IDENTITY.md', 'SOUL.md', 'AGENTS.md', 'BOOTSTRAP.md', 'HEARTBEAT.md', 'TOOLS.md', 'USER.md'];
-
-/** tools-cache.json 路径 */
-const TOOLS_CACHE_PATH = pathResolve(__dirname, '..', '..', '..', '..', 'plugins', 'enterprise-mcp', 'tools-cache.json');
 
 export function createAgentsRouter(
   authService: AuthService,
@@ -107,13 +104,7 @@ export function createAgentsRouter(
       }
 
       // 2. 从 tools-cache.json 读取企业级 MCP 工具
-      let cachedTools: Array<{ serverId: string; serverName: string; toolName: string; description: string }> = [];
-      try {
-        const raw = await readFile(TOOLS_CACHE_PATH, 'utf8');
-        cachedTools = JSON.parse(raw);
-      } catch {
-        logger.warn('[agents] tools-cache.json not found, skipping cached tools');
-      }
+      const cachedTools = await readToolsCacheAsync();
 
       // 3. 从 DB 获取该用户的 personal MCP 工具名
       const personalServers = await prisma.toolSource.findMany({

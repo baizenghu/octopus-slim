@@ -8,13 +8,12 @@
  * 合并 chat.ts ensureNativeAgent 与 agents.ts syncToNative 的共享逻辑。
  */
 
-import * as fs from 'fs';
-import * as path from 'path';
 import type { EngineAdapter } from './EngineAdapter';
 import { TenantEngineAdapter } from './TenantEngineAdapter';
 import type { WorkspaceManager } from '@octopus/workspace';
 import { getSoulTemplate } from './SoulTemplate';
 import { createLogger } from '../utils/logger';
+import { readToolsCache } from '../utils/tools-cache';
 import type { EngineConfig, EngineAgentFileResponse } from '../types/engine';
 
 const logger = createLogger('AgentConfigSync');
@@ -33,18 +32,7 @@ function computeToolsDeny(toolsFilter: string[] | null): string[] {
 
 /** 从 tools-cache.json 读取所有 MCP 工具，返回 { serverId, nativeToolName }[] */
 function readMcpToolsCache(): Array<{ serverId: string; nativeToolName: string }> {
-  const projectRoot = path.resolve(__dirname, '..', '..', '..', '..');
-  const candidates = [
-    path.join(projectRoot, '.octopus-state/tools-cache.json'),
-    path.join(projectRoot, 'plugins/mcp/tools-cache.json'),
-  ];
-  const cachePath = candidates.find(p => fs.existsSync(p));
-  if (!cachePath) return [];
-  try {
-    return JSON.parse(fs.readFileSync(cachePath, 'utf8'));
-  } catch {
-    return [];
-  }
+  return readToolsCache();
 }
 
 /** 根据 mcpFilter 白名单计算需要 deny 的 MCP 工具名列表 */
