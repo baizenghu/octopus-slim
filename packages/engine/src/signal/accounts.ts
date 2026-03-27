@@ -1,8 +1,8 @@
+// STUB: removed from Octopus slim build
+
 import { createAccountListHelpers } from "../channels/plugins/account-helpers.js";
 import type { OctopusConfig } from "../config/config.js";
 import type { SignalAccountConfig } from "../config/types.js";
-import { resolveAccountEntry } from "../routing/account-lookup.js";
-import { normalizeAccountId } from "../routing/session-key.js";
 
 export type ResolvedSignalAccount = {
   accountId: string;
@@ -17,53 +17,13 @@ const { listAccountIds, resolveDefaultAccountId } = createAccountListHelpers("si
 export const listSignalAccountIds = listAccountIds;
 export const resolveDefaultSignalAccountId = resolveDefaultAccountId;
 
-function resolveAccountConfig(
-  cfg: OctopusConfig,
-  accountId: string,
-): SignalAccountConfig | undefined {
-  return resolveAccountEntry(cfg.channels?.signal?.accounts, accountId);
-}
-
-function mergeSignalAccountConfig(cfg: OctopusConfig, accountId: string): SignalAccountConfig {
-  const { accounts: _ignored, ...base } = (cfg.channels?.signal ?? {}) as SignalAccountConfig & {
-    accounts?: unknown;
-  };
-  const account = resolveAccountConfig(cfg, accountId) ?? {};
-  return { ...base, ...account };
-}
-
-export function resolveSignalAccount(params: {
+export function resolveSignalAccount(_params: {
   cfg: OctopusConfig;
   accountId?: string | null;
 }): ResolvedSignalAccount {
-  const accountId = normalizeAccountId(params.accountId);
-  const baseEnabled = params.cfg.channels?.signal?.enabled !== false;
-  const merged = mergeSignalAccountConfig(params.cfg, accountId);
-  const accountEnabled = merged.enabled !== false;
-  const enabled = baseEnabled && accountEnabled;
-  const host = merged.httpHost?.trim() || "127.0.0.1";
-  const port = merged.httpPort ?? 8080;
-  const baseUrl = merged.httpUrl?.trim() || `http://${host}:${port}`;
-  const configured = Boolean(
-    merged.account?.trim() ||
-    merged.httpUrl?.trim() ||
-    merged.cliPath?.trim() ||
-    merged.httpHost?.trim() ||
-    typeof merged.httpPort === "number" ||
-    typeof merged.autoStart === "boolean",
-  );
-  return {
-    accountId,
-    enabled,
-    name: merged.name?.trim() || undefined,
-    baseUrl,
-    configured,
-    config: merged,
-  };
+  throw new Error('Channel not available in Octopus slim build');
 }
 
-export function listEnabledSignalAccounts(cfg: OctopusConfig): ResolvedSignalAccount[] {
-  return listSignalAccountIds(cfg)
-    .map((accountId) => resolveSignalAccount({ cfg, accountId }))
-    .filter((account) => account.enabled);
+export function listEnabledSignalAccounts(_cfg: OctopusConfig): ResolvedSignalAccount[] {
+  throw new Error('Channel not available in Octopus slim build');
 }

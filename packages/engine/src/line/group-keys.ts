@@ -1,72 +1,37 @@
-import type { OctopusConfig } from "../config/config.js";
-import { normalizeAccountId } from "../routing/account-id.js";
-import { resolveAccountEntry } from "../routing/account-lookup.js";
-import type { LineConfig, LineGroupConfig } from "./types.js";
+// STUB: removed from Octopus slim build
 
-export function resolveLineGroupLookupIds(groupId?: string | null): string[] {
-  const normalized = groupId?.trim();
-  if (!normalized) {
-    return [];
-  }
-  if (normalized.startsWith("group:") || normalized.startsWith("room:")) {
-    const rawId = normalized.split(":").slice(1).join(":");
-    return rawId ? [rawId, normalized] : [normalized];
-  }
-  return [normalized, `group:${normalized}`, `room:${normalized}`];
+import type { OctopusConfig } from "../config/config.js";
+import type { LineGroupConfig } from "./types.js";
+
+export function resolveLineGroupLookupIds(_groupId?: string | null): string[] {
+  throw new Error('Channel not available in Octopus slim build');
 }
 
 export function resolveLineGroupConfigEntry<T>(
-  groups: Record<string, T | undefined> | undefined,
-  params: { groupId?: string | null; roomId?: string | null },
+  _groups: Record<string, T | undefined> | undefined,
+  _params: { groupId?: string | null; roomId?: string | null },
 ): T | undefined {
-  if (!groups) {
-    return undefined;
-  }
-  for (const candidate of resolveLineGroupLookupIds(params.groupId)) {
-    const hit = groups[candidate];
-    if (hit) {
-      return hit;
-    }
-  }
-  for (const candidate of resolveLineGroupLookupIds(params.roomId)) {
-    const hit = groups[candidate];
-    if (hit) {
-      return hit;
-    }
-  }
-  return groups["*"];
+  throw new Error('Channel not available in Octopus slim build');
 }
 
 export function resolveLineGroupsConfig(
-  cfg: OctopusConfig,
-  accountId?: string | null,
+  _cfg: OctopusConfig,
+  _accountId?: string | null,
 ): Record<string, LineGroupConfig | undefined> | undefined {
-  const lineConfig = cfg.channels?.line as LineConfig | undefined;
-  if (!lineConfig) {
-    return undefined;
-  }
-  const normalizedAccountId = normalizeAccountId(accountId);
-  const accountGroups = resolveAccountEntry(lineConfig.accounts, normalizedAccountId)?.groups;
-  return accountGroups ?? lineConfig.groups;
+  throw new Error('Channel not available in Octopus slim build');
 }
 
-export function resolveExactLineGroupConfigKey(params: {
+export function resolveExactLineGroupConfigKey(_params: {
   cfg: OctopusConfig;
   accountId?: string | null;
   groupId?: string | null;
 }): string | undefined {
-  const groups = resolveLineGroupsConfig(params.cfg, params.accountId);
-  if (!groups) {
-    return undefined;
-  }
-  return resolveLineGroupLookupIds(params.groupId).find((candidate) =>
-    Object.hasOwn(groups, candidate),
-  );
+  throw new Error('Channel not available in Octopus slim build');
 }
 
-export function resolveLineGroupHistoryKey(params: {
+export function resolveLineGroupHistoryKey(_params: {
   groupId?: string | null;
   roomId?: string | null;
 }): string | undefined {
-  return params.groupId?.trim() || params.roomId?.trim() || undefined;
+  throw new Error('Channel not available in Octopus slim build');
 }

@@ -1,12 +1,6 @@
-import { normalizeE164 } from "../utils.js";
-import {
-  createAllowedChatSenderMatcher,
-  type ChatSenderAllowParams,
-  type ParsedChatTarget,
-  parseChatTargetPrefixesOrThrow,
-  resolveServicePrefixedChatTarget,
-  resolveServicePrefixedOrChatAllowTarget,
-} from "./target-parsing-helpers.js";
+// STUB: removed from Octopus slim build
+
+import type { ParsedChatTarget, ChatSenderAllowParams } from "./target-parsing-helpers.js";
 
 export type IMessageService = "imessage" | "sms" | "auto";
 
@@ -18,130 +12,22 @@ export type IMessageTarget =
 
 export type IMessageAllowTarget = ParsedChatTarget | { kind: "handle"; handle: string };
 
-const CHAT_ID_PREFIXES = ["chat_id:", "chatid:", "chat:"];
-const CHAT_GUID_PREFIXES = ["chat_guid:", "chatguid:", "guid:"];
-const CHAT_IDENTIFIER_PREFIXES = ["chat_identifier:", "chatidentifier:", "chatident:"];
-const SERVICE_PREFIXES: Array<{ prefix: string; service: IMessageService }> = [
-  { prefix: "imessage:", service: "imessage" },
-  { prefix: "sms:", service: "sms" },
-  { prefix: "auto:", service: "auto" },
-];
-
-export function normalizeIMessageHandle(raw: string): string {
-  const trimmed = raw.trim();
-  if (!trimmed) {
-    return "";
-  }
-  const lowered = trimmed.toLowerCase();
-  if (lowered.startsWith("imessage:")) {
-    return normalizeIMessageHandle(trimmed.slice(9));
-  }
-  if (lowered.startsWith("sms:")) {
-    return normalizeIMessageHandle(trimmed.slice(4));
-  }
-  if (lowered.startsWith("auto:")) {
-    return normalizeIMessageHandle(trimmed.slice(5));
-  }
-
-  // Normalize chat_id/chat_guid/chat_identifier prefixes case-insensitively
-  for (const prefix of CHAT_ID_PREFIXES) {
-    if (lowered.startsWith(prefix)) {
-      const value = trimmed.slice(prefix.length).trim();
-      return `chat_id:${value}`;
-    }
-  }
-  for (const prefix of CHAT_GUID_PREFIXES) {
-    if (lowered.startsWith(prefix)) {
-      const value = trimmed.slice(prefix.length).trim();
-      return `chat_guid:${value}`;
-    }
-  }
-  for (const prefix of CHAT_IDENTIFIER_PREFIXES) {
-    if (lowered.startsWith(prefix)) {
-      const value = trimmed.slice(prefix.length).trim();
-      return `chat_identifier:${value}`;
-    }
-  }
-
-  if (trimmed.includes("@")) {
-    return trimmed.toLowerCase();
-  }
-  const normalized = normalizeE164(trimmed);
-  if (normalized) {
-    return normalized;
-  }
-  return trimmed.replace(/\s+/g, "");
+export function normalizeIMessageHandle(_raw: string): string {
+  throw new Error('Channel not available in Octopus slim build');
 }
 
-export function parseIMessageTarget(raw: string): IMessageTarget {
-  const trimmed = raw.trim();
-  if (!trimmed) {
-    throw new Error("iMessage target is required");
-  }
-  const lower = trimmed.toLowerCase();
-
-  const servicePrefixed = resolveServicePrefixedChatTarget({
-    trimmed,
-    lower,
-    servicePrefixes: SERVICE_PREFIXES,
-    chatIdPrefixes: CHAT_ID_PREFIXES,
-    chatGuidPrefixes: CHAT_GUID_PREFIXES,
-    chatIdentifierPrefixes: CHAT_IDENTIFIER_PREFIXES,
-    parseTarget: parseIMessageTarget,
-  });
-  if (servicePrefixed) {
-    return servicePrefixed;
-  }
-
-  const chatTarget = parseChatTargetPrefixesOrThrow({
-    trimmed,
-    lower,
-    chatIdPrefixes: CHAT_ID_PREFIXES,
-    chatGuidPrefixes: CHAT_GUID_PREFIXES,
-    chatIdentifierPrefixes: CHAT_IDENTIFIER_PREFIXES,
-  });
-  if (chatTarget) {
-    return chatTarget;
-  }
-
-  return { kind: "handle", to: trimmed, service: "auto" };
+export function parseIMessageTarget(_raw: string): IMessageTarget {
+  throw new Error('Channel not available in Octopus slim build');
 }
 
-export function parseIMessageAllowTarget(raw: string): IMessageAllowTarget {
-  const trimmed = raw.trim();
-  if (!trimmed) {
-    return { kind: "handle", handle: "" };
-  }
-  const lower = trimmed.toLowerCase();
-
-  const servicePrefixed = resolveServicePrefixedOrChatAllowTarget({
-    trimmed,
-    lower,
-    servicePrefixes: SERVICE_PREFIXES,
-    parseAllowTarget: parseIMessageAllowTarget,
-    chatIdPrefixes: CHAT_ID_PREFIXES,
-    chatGuidPrefixes: CHAT_GUID_PREFIXES,
-    chatIdentifierPrefixes: CHAT_IDENTIFIER_PREFIXES,
-  });
-  if (servicePrefixed) {
-    return servicePrefixed;
-  }
-
-  return { kind: "handle", handle: normalizeIMessageHandle(trimmed) };
+export function parseIMessageAllowTarget(_raw: string): IMessageAllowTarget {
+  throw new Error('Channel not available in Octopus slim build');
 }
 
-const isAllowedIMessageSenderMatcher = createAllowedChatSenderMatcher({
-  normalizeSender: normalizeIMessageHandle,
-  parseAllowTarget: parseIMessageAllowTarget,
-});
-
-export function isAllowedIMessageSender(params: ChatSenderAllowParams): boolean {
-  return isAllowedIMessageSenderMatcher(params);
+export function isAllowedIMessageSender(_params: ChatSenderAllowParams): boolean {
+  throw new Error('Channel not available in Octopus slim build');
 }
 
-export function formatIMessageChatTarget(chatId?: number | null): string {
-  if (!chatId || !Number.isFinite(chatId)) {
-    return "";
-  }
-  return `chat_id:${chatId}`;
+export function formatIMessageChatTarget(_chatId?: number | null): string {
+  throw new Error('Channel not available in Octopus slim build');
 }

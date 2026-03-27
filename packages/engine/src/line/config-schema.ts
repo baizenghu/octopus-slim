@@ -1,3 +1,5 @@
+// STUB: removed from Octopus slim build
+
 import { z } from "zod";
 
 const DmPolicySchema = z.enum(["open", "allowlist", "pairing", "disabled"]);

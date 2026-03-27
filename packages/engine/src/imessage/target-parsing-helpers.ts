@@ -1,4 +1,4 @@
-import { isAllowedParsedChatSender } from "../plugin-sdk/allow-from.js";
+// STUB: removed from Octopus slim build
 
 export type ServicePrefix<TService extends string> = { prefix: string; service: TService };
 
@@ -25,39 +25,17 @@ export type ChatSenderAllowParams = {
   chatIdentifier?: string | null;
 };
 
-function stripPrefix(value: string, prefix: string): string {
-  return value.slice(prefix.length).trim();
-}
-
-function startsWithAnyPrefix(value: string, prefixes: readonly string[]): boolean {
-  return prefixes.some((prefix) => value.startsWith(prefix));
-}
-
-export function resolveServicePrefixedTarget<TService extends string, TTarget>(params: {
+export function resolveServicePrefixedTarget<TService extends string, TTarget>(_params: {
   trimmed: string;
   lower: string;
   servicePrefixes: Array<ServicePrefix<TService>>;
   isChatTarget: (remainderLower: string) => boolean;
   parseTarget: (remainder: string) => TTarget;
 }): ({ kind: "handle"; to: string; service: TService } | TTarget) | null {
-  for (const { prefix, service } of params.servicePrefixes) {
-    if (!params.lower.startsWith(prefix)) {
-      continue;
-    }
-    const remainder = stripPrefix(params.trimmed, prefix);
-    if (!remainder) {
-      throw new Error(`${prefix} target is required`);
-    }
-    const remainderLower = remainder.toLowerCase();
-    if (params.isChatTarget(remainderLower)) {
-      return params.parseTarget(remainder);
-    }
-    return { kind: "handle", to: remainder, service };
-  }
-  return null;
+  throw new Error('Channel not available in Octopus slim build');
 }
 
-export function resolveServicePrefixedChatTarget<TService extends string, TTarget>(params: {
+export function resolveServicePrefixedChatTarget<TService extends string, TTarget>(_params: {
   trimmed: string;
   lower: string;
   servicePrefixes: Array<ServicePrefix<TService>>;
@@ -67,80 +45,27 @@ export function resolveServicePrefixedChatTarget<TService extends string, TTarge
   extraChatPrefixes?: string[];
   parseTarget: (remainder: string) => TTarget;
 }): ({ kind: "handle"; to: string; service: TService } | TTarget) | null {
-  const chatPrefixes = [
-    ...params.chatIdPrefixes,
-    ...params.chatGuidPrefixes,
-    ...params.chatIdentifierPrefixes,
-    ...(params.extraChatPrefixes ?? []),
-  ];
-  return resolveServicePrefixedTarget({
-    trimmed: params.trimmed,
-    lower: params.lower,
-    servicePrefixes: params.servicePrefixes,
-    isChatTarget: (remainderLower) => startsWithAnyPrefix(remainderLower, chatPrefixes),
-    parseTarget: params.parseTarget,
-  });
+  throw new Error('Channel not available in Octopus slim build');
 }
 
 export function parseChatTargetPrefixesOrThrow(
-  params: ChatTargetPrefixesParams,
+  _params: ChatTargetPrefixesParams,
 ): ParsedChatTarget | null {
-  for (const prefix of params.chatIdPrefixes) {
-    if (params.lower.startsWith(prefix)) {
-      const value = stripPrefix(params.trimmed, prefix);
-      const chatId = Number.parseInt(value, 10);
-      if (!Number.isFinite(chatId)) {
-        throw new Error(`Invalid chat_id: ${value}`);
-      }
-      return { kind: "chat_id", chatId };
-    }
-  }
-
-  for (const prefix of params.chatGuidPrefixes) {
-    if (params.lower.startsWith(prefix)) {
-      const value = stripPrefix(params.trimmed, prefix);
-      if (!value) {
-        throw new Error("chat_guid is required");
-      }
-      return { kind: "chat_guid", chatGuid: value };
-    }
-  }
-
-  for (const prefix of params.chatIdentifierPrefixes) {
-    if (params.lower.startsWith(prefix)) {
-      const value = stripPrefix(params.trimmed, prefix);
-      if (!value) {
-        throw new Error("chat_identifier is required");
-      }
-      return { kind: "chat_identifier", chatIdentifier: value };
-    }
-  }
-
-  return null;
+  throw new Error('Channel not available in Octopus slim build');
 }
 
-export function resolveServicePrefixedAllowTarget<TAllowTarget>(params: {
+export function resolveServicePrefixedAllowTarget<TAllowTarget>(_params: {
   trimmed: string;
   lower: string;
   servicePrefixes: Array<{ prefix: string }>;
   parseAllowTarget: (remainder: string) => TAllowTarget;
 }): (TAllowTarget | { kind: "handle"; handle: string }) | null {
-  for (const { prefix } of params.servicePrefixes) {
-    if (!params.lower.startsWith(prefix)) {
-      continue;
-    }
-    const remainder = stripPrefix(params.trimmed, prefix);
-    if (!remainder) {
-      return { kind: "handle", handle: "" };
-    }
-    return params.parseAllowTarget(remainder);
-  }
-  return null;
+  throw new Error('Channel not available in Octopus slim build');
 }
 
 export function resolveServicePrefixedOrChatAllowTarget<
   TAllowTarget extends ParsedChatAllowTarget,
->(params: {
+>(_params: {
   trimmed: string;
   lower: string;
   servicePrefixes: Array<{ prefix: string }>;
@@ -149,75 +74,18 @@ export function resolveServicePrefixedOrChatAllowTarget<
   chatGuidPrefixes: string[];
   chatIdentifierPrefixes: string[];
 }): TAllowTarget | null {
-  const servicePrefixed = resolveServicePrefixedAllowTarget({
-    trimmed: params.trimmed,
-    lower: params.lower,
-    servicePrefixes: params.servicePrefixes,
-    parseAllowTarget: params.parseAllowTarget,
-  });
-  if (servicePrefixed) {
-    return servicePrefixed as TAllowTarget;
-  }
-
-  const chatTarget = parseChatAllowTargetPrefixes({
-    trimmed: params.trimmed,
-    lower: params.lower,
-    chatIdPrefixes: params.chatIdPrefixes,
-    chatGuidPrefixes: params.chatGuidPrefixes,
-    chatIdentifierPrefixes: params.chatIdentifierPrefixes,
-  });
-  if (chatTarget) {
-    return chatTarget as TAllowTarget;
-  }
-  return null;
+  throw new Error('Channel not available in Octopus slim build');
 }
 
-export function createAllowedChatSenderMatcher<TParsed extends ParsedChatAllowTarget>(params: {
+export function createAllowedChatSenderMatcher<TParsed extends ParsedChatAllowTarget>(_params: {
   normalizeSender: (sender: string) => string;
   parseAllowTarget: (entry: string) => TParsed;
 }): (input: ChatSenderAllowParams) => boolean {
-  return (input) =>
-    isAllowedParsedChatSender({
-      allowFrom: input.allowFrom,
-      sender: input.sender,
-      chatId: input.chatId,
-      chatGuid: input.chatGuid,
-      chatIdentifier: input.chatIdentifier,
-      normalizeSender: params.normalizeSender,
-      parseAllowTarget: params.parseAllowTarget,
-    });
+  throw new Error('Channel not available in Octopus slim build');
 }
 
 export function parseChatAllowTargetPrefixes(
-  params: ChatTargetPrefixesParams,
+  _params: ChatTargetPrefixesParams,
 ): ParsedChatTarget | null {
-  for (const prefix of params.chatIdPrefixes) {
-    if (params.lower.startsWith(prefix)) {
-      const value = stripPrefix(params.trimmed, prefix);
-      const chatId = Number.parseInt(value, 10);
-      if (Number.isFinite(chatId)) {
-        return { kind: "chat_id", chatId };
-      }
-    }
-  }
-
-  for (const prefix of params.chatGuidPrefixes) {
-    if (params.lower.startsWith(prefix)) {
-      const value = stripPrefix(params.trimmed, prefix);
-      if (value) {
-        return { kind: "chat_guid", chatGuid: value };
-      }
-    }
-  }
-
-  for (const prefix of params.chatIdentifierPrefixes) {
-    if (params.lower.startsWith(prefix)) {
-      const value = stripPrefix(params.trimmed, prefix);
-      if (value) {
-        return { kind: "chat_identifier", chatIdentifier: value };
-      }
-    }
-  }
-
-  return null;
+  throw new Error('Channel not available in Octopus slim build');
 }
