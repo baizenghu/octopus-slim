@@ -1,13 +1,7 @@
-import { readStringParam } from "./common.js";
+// STUB: Discord channel removed from Octopus slim build
 
 export function readDiscordParentIdParam(
-  params: Record<string, unknown>,
+  _params: Record<string, unknown>,
 ): string | null | undefined {
-  if (params.clearParent === true) {
-    return null;
-  }
-  if (params.parentId === null) {
-    return null;
-  }
-  return readStringParam(params, "parentId");
+  return undefined;
 }

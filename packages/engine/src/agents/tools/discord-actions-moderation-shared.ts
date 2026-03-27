@@ -1,5 +1,4 @@
-import { PermissionFlagsBits } from "discord-api-types/v10";
-import { readNumberParam, readStringParam } from "./common.js";
+// STUB: Discord channel removed from Octopus slim build
 
 export type DiscordModerationAction = "timeout" | "kick" | "ban";
 
@@ -13,36 +12,22 @@ export type DiscordModerationCommand = {
   deleteMessageDays?: number;
 };
 
-const moderationPermissions: Record<DiscordModerationAction, bigint> = {
-  timeout: PermissionFlagsBits.ModerateMembers,
-  kick: PermissionFlagsBits.KickMembers,
-  ban: PermissionFlagsBits.BanMembers,
-};
-
 export function isDiscordModerationAction(action: string): action is DiscordModerationAction {
   return action === "timeout" || action === "kick" || action === "ban";
 }
 
 export function requiredGuildPermissionForModerationAction(
-  action: DiscordModerationAction,
+  _action: DiscordModerationAction,
 ): bigint {
-  return moderationPermissions[action];
+  return 0n;
 }
 
 export function readDiscordModerationCommand(
   action: string,
-  params: Record<string, unknown>,
+  _params: Record<string, unknown>,
 ): DiscordModerationCommand {
   if (!isDiscordModerationAction(action)) {
     throw new Error(`Unsupported Discord moderation action: ${action}`);
   }
-  return {
-    action,
-    guildId: readStringParam(params, "guildId", { required: true }),
-    userId: readStringParam(params, "userId", { required: true }),
-    durationMinutes: readNumberParam(params, "durationMinutes", { integer: true }),
-    until: readStringParam(params, "until"),
-    reason: readStringParam(params, "reason"),
-    deleteMessageDays: readNumberParam(params, "deleteMessageDays", { integer: true }),
-  };
+  return { action, guildId: "", userId: "" };
 }
