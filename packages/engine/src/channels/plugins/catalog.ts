@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
-import { MANIFEST_KEY } from "../../compat/legacy-names.js";
+// SLIM: inlined from compat/legacy-names (removed)
+const MANIFEST_KEY = "octopus" as const;
 import { discoverOctopusPlugins } from "../../plugins/discovery.js";
 import type { OctopusPackageManifest } from "../../plugins/manifest.js";
 import type { PluginOrigin } from "../../plugins/types.js";

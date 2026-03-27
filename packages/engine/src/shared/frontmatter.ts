@@ -1,5 +1,7 @@
 import JSON5 from "json5";
-import { LEGACY_MANIFEST_KEYS, MANIFEST_KEY } from "../compat/legacy-names.js";
+// SLIM: inlined from compat/legacy-names (removed)
+const MANIFEST_KEY = "octopus" as const;
+const LEGACY_MANIFEST_KEYS = [] as const;
 import { parseBooleanValue } from "../utils/boolean.js";
 
 export function normalizeStringList(input: unknown): string[] {

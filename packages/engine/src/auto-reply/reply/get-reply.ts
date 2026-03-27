@@ -9,7 +9,7 @@ import { resolveAgentTimeoutMs } from "../../agents/timeout.js";
 import { DEFAULT_AGENT_WORKSPACE_DIR, ensureAgentWorkspace } from "../../agents/workspace.js";
 import { resolveChannelModelOverride } from "../../channels/model-overrides.js";
 import { type OctopusConfig, loadConfig } from "../../config/config.js";
-import { applyLinkUnderstanding } from "../../link-understanding/apply.js";
+// SLIM: link-understanding/ removed — import { applyLinkUnderstanding } from "../../link-understanding/apply.js";
 import { applyMediaUnderstanding } from "../../media-understanding/apply.js";
 import { defaultRuntime } from "../../runtime.js";
 import { normalizeStringEntries } from "../../shared/string-normalization.js";
@@ -132,10 +132,7 @@ export async function getReplyFromConfig(
       agentDir,
       activeModel: { provider, model },
     });
-    await applyLinkUnderstanding({
-      ctx: finalized,
-      cfg,
-    });
+    // SLIM: link-understanding/ removed — applyLinkUnderstanding skipped
   }
   emitPreAgentMessageHooks({
     ctx: finalized,

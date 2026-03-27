@@ -18,7 +18,8 @@ import { loadWorkspaceSkillEntries } from "../agents/skills.js";
 import { resolveToolProfilePolicy } from "../agents/tool-policy.js";
 import { listAgentWorkspaceDirs } from "../agents/workspace-dirs.js";
 import { formatCliCommand } from "../cli/command-format.js";
-import { MANIFEST_KEY } from "../compat/legacy-names.js";
+// SLIM: inlined from compat/legacy-names (removed)
+const MANIFEST_KEY = "octopus" as const;
 import { resolveNativeSkillsEnabled } from "../config/commands.js";
 import type { OctopusConfig, ConfigFileSnapshot } from "../config/config.js";
 import { createConfigIO } from "../config/config.js";

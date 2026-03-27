@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
-import { MANIFEST_KEY } from "../compat/legacy-names.js";
+// SLIM: inlined from compat/legacy-names (removed)
+const MANIFEST_KEY = "octopus" as const;
 import type { OctopusConfig } from "../config/config.js";
 import { openBoundaryFileSync } from "../infra/boundary-file-read.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
