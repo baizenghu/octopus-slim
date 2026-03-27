@@ -1,3 +1,5 @@
+// SLIM STUB: native memory module removed.
+
 export type Tone = "ok" | "warn" | "muted";
 
 export function resolveMemoryVectorState(vector: { enabled: boolean; available?: boolean }): {

@@ -1,3 +1,5 @@
+// SLIM STUB: native memory module removed; enterprise uses memory-lancedb-pro plugin.
+
 export type MemorySource = "memory" | "sessions";
 
 export type MemorySearchResult = {
