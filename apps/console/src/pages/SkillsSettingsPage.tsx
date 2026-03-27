@@ -88,6 +88,11 @@ export default function SkillsSettingsPage() {
       }
     } catch (err: any) {
       toast.error(err.message);
+      // 扫描未通过时展示扫描报告
+      if (err.scanReport) {
+        setReportSkill({ id: '', name: '上传失败', scope: 'enterprise', status: 'rejected', enabled: false, createdAt: '', scanReport: err.scanReport } as any);
+        setReportModalOpen(true);
+      }
     }
     setEnterpriseUploading(false);
   };
@@ -170,6 +175,11 @@ export default function SkillsSettingsPage() {
       }
     } catch (err: any) {
       toast.error(err.message);
+      // 扫描未通过时展示扫描报告
+      if (err.scanReport) {
+        setReportSkill({ id: '', name: '上传失败', scope: 'personal', status: 'rejected', enabled: false, createdAt: '', scanReport: err.scanReport } as any);
+        setReportModalOpen(true);
+      }
     }
     setPersonalUploading(false);
   };

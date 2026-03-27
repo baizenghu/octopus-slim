@@ -329,6 +329,17 @@ export function createSkillsRouter(
         depsInfo: deps.depsInfo,
       };
 
+      // 扫描有严重问题时拒绝上传
+      if (scanReport && scanReport.summary.critical > 0) {
+        rmDir(skillDir);
+        cleanupTmp(tmpFile);
+        res.status(422).json({
+          error: `安全扫描未通过：发现 ${scanReport.summary.critical} 个严重问题，请修复后重新上传`,
+          scanReport: reportWithDeps,
+        });
+        return;
+      }
+
       // 写入数据库
       const skill = await prisma.skill.create({
         data: {
@@ -717,6 +728,17 @@ export function createSkillsRouter(
         depsType: deps.depsType,
         depsInfo: deps.depsInfo,
       };
+
+      // 扫描有严重问题时拒绝上传
+      if (scanReport && scanReport.summary.critical > 0) {
+        rmDir(skillDir);
+        cleanupTmp(tmpFile);
+        res.status(422).json({
+          error: `安全扫描未通过：发现 ${scanReport.summary.critical} 个严重问题，请修复后重新上传`,
+          scanReport: reportWithDeps,
+        });
+        return;
+      }
 
       // 个人 Skill: 扫描通过直接 active，不通过 rejected
       const status = scanReport?.passed !== false ? 'active' : 'rejected';

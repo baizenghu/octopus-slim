@@ -568,8 +568,10 @@ class AdminApi {
       body: formData,
     });
     if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: res.statusText }));
-      throw new Error(err.error || 'Upload failed');
+      const body = await res.json().catch(() => ({ error: res.statusText }));
+      const err = new Error(body.error || 'Upload failed');
+      (err as any).scanReport = body.scanReport;
+      throw err;
     }
     return res.json() as Promise<{ message: string; skill: SkillInfo; scanReport: any }>;
   }
@@ -626,8 +628,10 @@ class AdminApi {
       body: formData,
     });
     if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: res.statusText }));
-      throw new Error(err.error || 'Upload failed');
+      const body = await res.json().catch(() => ({ error: res.statusText }));
+      const err = new Error(body.error || 'Upload failed');
+      (err as any).scanReport = body.scanReport;
+      throw err;
     }
     return res.json() as Promise<{ message: string; skill: SkillInfo; scanReport: any }>;
   }
