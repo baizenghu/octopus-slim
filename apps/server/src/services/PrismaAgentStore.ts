@@ -122,7 +122,7 @@ export class PrismaAgentStore implements AgentStore {
       hasTools = true;
     }
     if (record.toolsAllow) {
-      tools.allow = record.toolsAllow as string[];
+      tools.alsoAllow = record.toolsAllow as string[];
       hasTools = true;
     }
     if (record.toolsDeny) {

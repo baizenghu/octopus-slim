@@ -191,7 +191,7 @@ export function createAgentsRouter(
     const defaultTools = computeToolsUpdate('default', defaultToolsFilter, defaultMcpFilter, defaultSkillsFilter, []);
     await prisma.agent.create({
       data: {
-        id: randomUUID().replace(/-/g, '').slice(0, 16),
+        id: TenantEngineAdapter.forUser(bridge!, userId).agentId('default'),
         name: 'default',
         description: '主助手，处理各种通用任务',
         ownerId: userId,
@@ -248,9 +248,12 @@ export function createAgentsRouter(
       // 计算 tools deny/profile/alsoAllow 写入 DB（引擎通过 AgentStore 从 DB 读取）
       const computedTools = computeToolsUpdate(name.trim(), toolsFilter ?? [], mcpFilter ?? [], skillsFilter ?? [], []);
 
+      // 使用引擎格式的 agentId（ent_{userId}_{agentName}），
+      // 确保 DB 中的 id 与引擎运行时查询的 id 一致
+      const nativeAgentId = TenantEngineAdapter.forUser(bridge!, user.id).agentId(name.trim());
       const agent = await prisma.agent.create({
         data: {
-          id: randomUUID().replace(/-/g, '').slice(0, 16),
+          id: nativeAgentId,
           name: name.trim(),
           description: description?.trim() || null,
           ownerId: user.id,
