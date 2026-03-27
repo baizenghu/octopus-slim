@@ -15,7 +15,7 @@ async function normalizeUploadPaths(paths: string[]): Promise<string[]> {
   if (!result.ok) {
     throw new Error(result.error);
   }
-  return result.paths;
+  return result.paths ?? [];
 }
 
 async function runBrowserPostAction<T>(params: {

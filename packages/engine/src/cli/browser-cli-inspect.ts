@@ -100,7 +100,7 @@ export function registerBrowserInspectCommands(
         if (opts.out) {
           const fs = await import("node:fs/promises");
           if (result.format === "ai") {
-            await fs.writeFile(opts.out, result.snapshot, "utf8");
+            await fs.writeFile(opts.out, result.snapshot ?? "", "utf8");
           } else {
             const payload = JSON.stringify(result, null, 2);
             await fs.writeFile(opts.out, payload, "utf8");
@@ -141,10 +141,10 @@ export function registerBrowserInspectCommands(
           return;
         }
 
-        const nodes = "nodes" in result ? result.nodes : [];
+        const nodes = "nodes" in result ? result.nodes as any[] : [];
         defaultRuntime.log(
           nodes
-            .map((n) => {
+            .map((n: any) => {
               const indent = "  ".repeat(Math.min(20, n.depth));
               const name = n.name ? ` "${n.name}"` : "";
               const value = n.value ? ` = "${n.value}"` : "";
