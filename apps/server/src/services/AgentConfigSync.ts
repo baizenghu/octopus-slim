@@ -51,15 +51,14 @@ function readMcpToolsCache(): Array<{ serverId: string; nativeToolName: string }
   }
 }
 
-/** 根据 mcpFilter 白名单计算需要 deny 的 MCP 工具名列表 */
-function computeMcpDenyTools(mcpFilter: string[] | null): string[] {
-  if (!Array.isArray(mcpFilter)) return [];
+/** 根据 mcpFilter 白名单计算允许的 MCP 工具名列表（白名单模式） */
+function computeMcpAllowTools(mcpFilter: string[] | null): string[] {
+  if (!Array.isArray(mcpFilter) || mcpFilter.length === 0) return [];
   const allTools = readMcpToolsCache();
   if (allTools.length === 0) return [];
   const allowSet = new Set(mcpFilter);
-  // mcpFilter 为空数组 = 全部禁用
   return allTools
-    .filter(t => !allowSet.has(t.serverId))
+    .filter(t => allowSet.has(t.serverId))
     .map(t => t.nativeToolName);
 }
 
@@ -147,12 +146,17 @@ export async function syncAgentToEngine(
 
         // profile: coding 已包含 read/write/exec/memory/sessions/cron/image
         const newProfile = 'coding';
-        // alsoAllow: group:plugins（MCP 工具）+ agents_list（仅 default）
-        const newAlsoAllow = isDefault
-          ? ['group:plugins', 'agents_list']
-          : ['group:plugins'];
 
-        // deny 合并三个来源：toolsFilter 关闭的工具组 + 专业 agent 限制 + MCP deny + skill deny
+        // alsoAllow 白名单：MCP 工具按 server 白名单 + agents_list（仅 default）
+        const mcpAllow = opts.mcpFilter !== undefined
+          ? computeMcpAllowTools(opts.mcpFilter)
+          : (entry.tools?.alsoAllow ?? []).filter((t: string) => t.startsWith('mcp_'));
+        const newAlsoAllow = [
+          ...mcpAllow,
+          ...(isDefault ? ['agents_list'] : []),
+        ];
+
+        // deny 只剩：toolsFilter 关闭的工具组 + 专业 agent 限制 + run_skill（无 MCP deny）
         const currentDeny: string[] = entry.tools?.deny || [];
 
         // 1. toolsFilter deny（read/write/exec 组）
@@ -162,18 +166,10 @@ export async function syncAgentToEngine(
         // 2. 专业 agent 限制
         const specialistDeny = isDefault ? [] : ['sessions_spawn', 'subagents', 'agents_list', 'sessions_list', 'sessions_history', 'sessions_send'];
 
-        // 3. MCP deny（保留已有非 MCP deny 项中的 run_skill 等）
-        let mcpDeny: string[] = [];
-        if (opts.mcpFilter !== undefined) {
-          mcpDeny = computeMcpDenyTools(opts.mcpFilter);
-        } else {
-          mcpDeny = currentDeny.filter((t: string) => t.startsWith('mcp_'));
-        }
-
-        // 4. 保留 run_skill deny（由 skillsFilter 逻辑管理）
+        // 3. 保留 run_skill deny（由 skillsFilter 逻辑管理）
         const runSkillDeny = currentDeny.includes('run_skill') ? ['run_skill'] : [];
 
-        const newDeny = [...new Set([...toolsDeny, ...specialistDeny, ...mcpDeny, ...runSkillDeny])];
+        const newDeny = [...new Set([...toolsDeny, ...specialistDeny, ...runSkillDeny])];
 
         // 比较并更新
         const oldTools = JSON.stringify({
@@ -184,7 +180,7 @@ export async function syncAgentToEngine(
         });
         const newTools: Record<string, unknown> = {
           profile: newProfile,
-          alsoAllow: newAlsoAllow,
+          alsoAllow: newAlsoAllow.length > 0 ? newAlsoAllow : undefined,
           deny: newDeny.length > 0 ? newDeny : undefined,
         };
         // 清理 allow 字段（迁移到 profile 后不再需要）
