@@ -145,7 +145,7 @@ export function startGatewayMaintenanceTimers(params: {
       recursive: true,
       pruneEmptyDirs: true,
     })
-      .catch((err) => {
+      .catch((err: any) => {
         params.logHealth.error(`media cleanup failed: ${formatError(err)}`);
       })
       .finally(() => {

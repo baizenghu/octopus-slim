@@ -83,7 +83,7 @@ export async function resolveSenderCommandAuthorization(
     allowFrom: params.configuredAllowFrom,
     groupAllowFrom: params.configuredGroupAllowFrom ?? [],
     storeAllowFrom,
-    isSenderAllowed: (allowFrom) => params.isSenderAllowed(params.senderId, allowFrom),
+    isSenderAllowed: (allowFrom: any) => params.isSenderAllowed(params.senderId, allowFrom),
   });
   const effectiveAllowFrom = access.effectiveAllowFrom;
   const effectiveGroupAllowFrom = access.effectiveGroupAllowFrom;

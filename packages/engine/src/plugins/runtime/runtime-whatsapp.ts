@@ -10,14 +10,14 @@ import {
 import type { PluginRuntime } from "./types.js";
 
 const sendMessageWhatsAppLazy: PluginRuntime["channel"]["whatsapp"]["sendMessageWhatsApp"] = async (
-  ...args
+  ...args: any[]
 ) => {
   const { sendMessageWhatsApp } = await loadWebOutbound();
   return sendMessageWhatsApp(...args);
 };
 
 const sendPollWhatsAppLazy: PluginRuntime["channel"]["whatsapp"]["sendPollWhatsApp"] = async (
-  ...args
+  ...args: any[]
 ) => {
   const { sendPollWhatsApp } = await loadWebOutbound();
   return sendPollWhatsApp(...args);
@@ -43,7 +43,7 @@ const waitForWebLoginLazy: PluginRuntime["channel"]["whatsapp"]["waitForWebLogin
 };
 
 const monitorWebChannelLazy: PluginRuntime["channel"]["whatsapp"]["monitorWebChannel"] = async (
-  ...args
+  ...args: any[]
 ) => {
   const { monitorWebChannel } = await loadWebChannel();
   return monitorWebChannel(...args);

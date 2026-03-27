@@ -1,5 +1,2 @@
-// STUB: removed from Octopus slim build
-
-export async function movePathToTrash(targetPath: string): Promise<string> {
-  return targetPath;
-}
+// SLIM: removed
+export const movePathToTrash: any = undefined;

@@ -49,7 +49,7 @@ export function registerSecurityCli(program: Command) {
     .option("--fix", "Apply safe fixes (tighten defaults + chmod state/config)", false)
     .option("--json", "Print JSON", false)
     .action(async (opts: SecurityAuditOptions) => {
-      const fixResult = opts.fix ? await fixSecurityFootguns().catch((_err) => null) : null;
+      const fixResult = opts.fix ? await fixSecurityFootguns().catch((_err: any) => null) : null;
 
       const cfg = loadConfig();
       const report = await runSecurityAudit({
@@ -82,7 +82,7 @@ export function registerSecurityCli(program: Command) {
         } else if (
           fixResult.errors.length === 0 &&
           fixResult.changes.length === 0 &&
-          fixResult.actions.every((a) => !a.ok)
+          fixResult.actions.every((a: any) => !a.ok)
         ) {
           lines.push(muted("Fixes: no changes applied"));
         } else {
@@ -125,7 +125,7 @@ export function registerSecurityCli(program: Command) {
       }
 
       const bySeverity = (sev: "critical" | "warn" | "info") =>
-        report.findings.filter((f) => f.severity === sev);
+        report.findings.filter((f: any) => f.severity === sev);
 
       const render = (sev: "critical" | "warn" | "info") => {
         const list = bySeverity(sev);

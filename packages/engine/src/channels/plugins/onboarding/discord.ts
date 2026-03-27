@@ -149,7 +149,7 @@ const dmPolicy: ChannelOnboardingDmPolicy = {
 export const discordOnboardingAdapter: ChannelOnboardingAdapter = {
   channel,
   getStatus: async ({ cfg }) => {
-    const configured = listDiscordAccountIds(cfg).some((accountId) => {
+    const configured = listDiscordAccountIds(cfg).some((accountId: any) => {
       const account = inspectDiscordAccount({ cfg, accountId });
       return account.configured;
     });
@@ -228,7 +228,7 @@ export const discordOnboardingAdapter: ChannelOnboardingAdapter = {
 
     const currentEntries = Object.entries(resolvedAccount.config.guilds ?? {}).flatMap(
       ([guildKey, value]) => {
-        const channels = value?.channels ?? {};
+        const channels = (value as any)?.channels ?? {};
         const channelKeys = Object.keys(channels);
         if (channelKeys.length === 0) {
           const input = /^\d+$/.test(guildKey) ? `guild:${guildKey}` : guildKey;

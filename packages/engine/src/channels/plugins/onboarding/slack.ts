@@ -200,7 +200,7 @@ const dmPolicy: ChannelOnboardingDmPolicy = {
 export const slackOnboardingAdapter: ChannelOnboardingAdapter = {
   channel,
   getStatus: async ({ cfg }) => {
-    const configured = listSlackAccountIds(cfg).some((accountId) => {
+    const configured = listSlackAccountIds(cfg).some((accountId: any) => {
       const account = inspectSlackAccount({ cfg, accountId });
       return account.configured;
     });
@@ -312,7 +312,7 @@ export const slackOnboardingAdapter: ChannelOnboardingAdapter = {
       label: "Slack channels",
       currentPolicy: resolvedAccount.config.groupPolicy ?? "allowlist",
       currentEntries: Object.entries(resolvedAccount.config.channels ?? {})
-        .filter(([, value]) => value?.allow !== false && value?.enabled !== false)
+        .filter(([, value]) => (value as any)?.allow !== false && (value as any)?.enabled !== false)
         .map(([key]) => key),
       placeholder: "#general, #private, C123",
       updatePrompt: Boolean(resolvedAccount.config.channels),
@@ -337,12 +337,12 @@ export const slackOnboardingAdapter: ChannelOnboardingAdapter = {
               entries,
             });
             const resolvedKeys = resolved
-              .filter((entry) => entry.resolved && entry.id)
-              .map((entry) => entry.id as string);
+              .filter((entry: any) => entry.resolved && entry.id)
+              .map((entry: any) => entry.id as string);
             const unresolved = resolved
-              .filter((entry) => !entry.resolved)
-              .map((entry) => entry.input);
-            keys = [...resolvedKeys, ...unresolved.map((entry) => entry.trim()).filter(Boolean)];
+              .filter((entry: any) => !entry.resolved)
+              .map((entry: any) => entry.input);
+            keys = [...resolvedKeys, ...unresolved.map((entry: any) => entry.trim()).filter(Boolean)];
             await noteChannelLookupSummary({
               prompter,
               label: "Slack channels",

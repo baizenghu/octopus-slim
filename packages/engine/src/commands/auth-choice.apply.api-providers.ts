@@ -489,14 +489,14 @@ export async function applyAuthChoiceApiProviders(
       if (!accountId) {
         const value = await params.prompter.text({
           message: "Enter Cloudflare Account ID",
-          validate: (val) => (String(val ?? "").trim() ? undefined : "Account ID is required"),
+          validate: (val: any) => (String(val ?? "").trim() ? undefined : "Account ID is required"),
         });
         accountId = String(value ?? "").trim();
       }
       if (!gatewayId) {
         const value = await params.prompter.text({
           message: "Enter Cloudflare AI Gateway ID",
-          validate: (val) => (String(val ?? "").trim() ? undefined : "Gateway ID is required"),
+          validate: (val: any) => (String(val ?? "").trim() ? undefined : "Gateway ID is required"),
         });
         gatewayId = String(value ?? "").trim();
       }

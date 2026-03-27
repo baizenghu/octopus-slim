@@ -165,7 +165,7 @@ async function promptManualModel(params: {
     message: params.allowBlank ? "Default model (blank to keep)" : "Default model",
     initialValue: params.initialValue,
     placeholder: "provider/model",
-    validate: params.allowBlank ? undefined : (value) => (value?.trim() ? undefined : "Required"),
+    validate: params.allowBlank ? undefined : (value: any) => (value?.trim() ? undefined : "Required"),
   });
   const model = String(modelInput ?? "").trim();
   if (!model) {
@@ -442,7 +442,7 @@ export async function promptModelAllowlist(params: {
     initialValues: initialKeys.length > 0 ? initialKeys : undefined,
     searchable: true,
   });
-  const selected = normalizeModelKeys(selection.map((value) => String(value)));
+  const selected = normalizeModelKeys(selection.map((value: any) => String(value)));
   if (selected.length > 0) {
     return { models: selected };
   }

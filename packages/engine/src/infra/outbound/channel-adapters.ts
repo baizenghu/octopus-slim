@@ -43,9 +43,9 @@ const DEFAULT_ADAPTER: ChannelMessageAdapter = {
 
 const DISCORD_ADAPTER: ChannelMessageAdapter = {
   supportsComponentsV2: true,
-  buildCrossContextComponents: ({ originLabel, message, cfg, accountId }) => [
+  buildCrossContextComponents: (({ originLabel, message, cfg, accountId }) => [
     new CrossContextContainer({ originLabel, message, cfg, accountId }),
-  ],
+  ]) as CrossContextComponentsFactory,
 };
 
 export function getChannelMessageAdapter(channel: ChannelId): ChannelMessageAdapter {

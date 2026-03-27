@@ -391,7 +391,7 @@ async function promptBaseUrlAndKey(params: {
     message: "API Base URL",
     initialValue: params.initialBaseUrl ?? DEFAULT_OLLAMA_BASE_URL,
     placeholder: "https://api.example.com/v1",
-    validate: (val) => {
+    validate: (val: any) => {
       try {
         new URL(val);
         return undefined;
@@ -441,7 +441,7 @@ async function promptCustomApiModelId(prompter: WizardPrompter): Promise<string>
     await prompter.text({
       message: "Model ID",
       placeholder: "e.g. llama3, claude-3-7-sonnet",
-      validate: (val) => (val.trim() ? undefined : "Model ID is required"),
+      validate: (val: any) => (val.trim() ? undefined : "Model ID is required"),
     })
   ).trim();
 }
@@ -779,7 +779,7 @@ export async function promptCustomApiConfig(params: {
     message: "Endpoint ID",
     initialValue: suggestedId,
     placeholder: "custom",
-    validate: (value) => {
+    validate: (value: any) => {
       const normalized = normalizeEndpointId(value);
       if (!normalized) {
         return "Endpoint ID is required.";
@@ -791,7 +791,7 @@ export async function promptCustomApiConfig(params: {
     message: "Model alias (optional)",
     placeholder: "e.g. local, ollama",
     initialValue: "",
-    validate: (value) => {
+    validate: (value: any) => {
       const requestedId = normalizeEndpointId(providerIdInput) || "custom";
       const providerIdResult = resolveUniqueEndpointId({
         requestedId,

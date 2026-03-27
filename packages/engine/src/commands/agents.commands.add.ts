@@ -183,7 +183,7 @@ export async function agentsAddCommand(
       nameInput ??
       (await prompter.text({
         message: "Agent name",
-        validate: (value) => {
+        validate: (value: any) => {
           if (!value?.trim()) {
             return "Required";
           }
@@ -219,7 +219,7 @@ export async function agentsAddCommand(
     const workspaceInput = await prompter.text({
       message: "Workspace directory",
       initialValue: workspaceDefault,
-      validate: (value) => (value?.trim() ? undefined : "Required"),
+      validate: (value: any) => (value?.trim() ? undefined : "Required"),
     });
     const workspaceDir = resolveUserPath(String(workspaceInput ?? "").trim() || workspaceDefault);
     const agentDir = resolveAgentDir(cfg, agentId);

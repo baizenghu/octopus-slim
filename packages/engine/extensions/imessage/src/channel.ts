@@ -52,7 +52,7 @@ type IMessageSendFn = ReturnType<
 >["channel"]["imessage"]["sendMessageIMessage"];
 
 async function sendIMessageOutbound(params: {
-  cfg: Parameters<typeof resolveIMessageAccount>[0]["cfg"];
+  cfg: any;
   to: string;
   text: string;
   mediaUrl?: string;

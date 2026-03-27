@@ -103,7 +103,7 @@ async function promptBlueBubblesAllowFrom(params: {
     message: "BlueBubbles allowFrom (handle or chat_id)",
     placeholder: "+15555550123, user@example.com, chat_id:123",
     initialValue: existing[0] ? String(existing[0]) : undefined,
-    validate: (value) => {
+    validate: (value: any) => {
       const raw = String(value ?? "").trim();
       if (!raw) {
         return "Required";
@@ -225,7 +225,7 @@ export const blueBubblesOnboardingAdapter: ChannelOnboardingAdapter = {
       );
       const entered = await prompter.text({
         message: "BlueBubbles password",
-        validate: (value) => (String(value ?? "").trim() ? undefined : "Required"),
+        validate: (value: any) => (String(value ?? "").trim() ? undefined : "Required"),
       });
       password = String(entered).trim();
     } else {
@@ -236,7 +236,7 @@ export const blueBubblesOnboardingAdapter: ChannelOnboardingAdapter = {
       if (!keepPassword) {
         const entered = await prompter.text({
           message: "BlueBubbles password",
-          validate: (value) => (String(value ?? "").trim() ? undefined : "Required"),
+          validate: (value: any) => (String(value ?? "").trim() ? undefined : "Required"),
         });
         password = String(entered).trim();
       } else if (!existingPasswordText) {
@@ -256,7 +256,7 @@ export const blueBubblesOnboardingAdapter: ChannelOnboardingAdapter = {
         message: "Webhook path",
         placeholder: "/bluebubbles-webhook",
         initialValue: existingWebhookPath || "/bluebubbles-webhook",
-        validate: (value) => {
+        validate: (value: any) => {
           const trimmed = String(value ?? "").trim();
           if (!trimmed) {
             return "Required";

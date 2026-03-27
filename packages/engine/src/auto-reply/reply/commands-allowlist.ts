@@ -430,13 +430,13 @@ export const handleAllowlistCommand: CommandHandler = async (params, allowTextCo
       ({ dmAllowFrom, groupAllowFrom, dmPolicy, groupPolicy } = extractConfigAllowlist(account));
       const groups = account.config.groups ?? {};
       for (const [groupId, groupCfg] of Object.entries(groups)) {
-        const entries = (groupCfg?.allowFrom ?? []).map(String).filter(Boolean);
+        const entries = ((groupCfg as any)?.allowFrom ?? []).map(String).filter(Boolean);
         if (entries.length > 0) {
           groupOverrides.push({ label: groupId, entries });
         }
-        const topics = groupCfg?.topics ?? {};
+        const topics = (groupCfg as any)?.topics ?? {};
         for (const [topicId, topicCfg] of Object.entries(topics)) {
-          const topicEntries = (topicCfg?.allowFrom ?? []).map(String).filter(Boolean);
+          const topicEntries = ((topicCfg as any)?.allowFrom ?? []).map(String).filter(Boolean);
           if (topicEntries.length > 0) {
             groupOverrides.push({ label: `${groupId} topic ${topicId}`, entries: topicEntries });
           }
@@ -461,7 +461,7 @@ export const handleAllowlistCommand: CommandHandler = async (params, allowTextCo
       const channels = account.channels ?? {};
       groupOverrides = Object.entries(channels)
         .map(([key, value]) => {
-          const entries = (value?.users ?? []).map(String).filter(Boolean);
+          const entries = ((value as any)?.users ?? []).map(String).filter(Boolean);
           return entries.length > 0 ? { label: key, entries } : null;
         })
         .filter(Boolean) as Array<{ label: string; entries: string[] }>;
@@ -471,13 +471,13 @@ export const handleAllowlistCommand: CommandHandler = async (params, allowTextCo
       groupPolicy = account.config.groupPolicy;
       const guilds = account.config.guilds ?? {};
       for (const [guildKey, guildCfg] of Object.entries(guilds)) {
-        const entries = (guildCfg?.users ?? []).map(String).filter(Boolean);
+        const entries = ((guildCfg as any)?.users ?? []).map(String).filter(Boolean);
         if (entries.length > 0) {
           groupOverrides.push({ label: `guild ${guildKey}`, entries });
         }
-        const channels = guildCfg?.channels ?? {};
+        const channels = (guildCfg as any)?.channels ?? {};
         for (const [channelKey, channelCfg] of Object.entries(channels)) {
-          const channelEntries = (channelCfg?.users ?? []).map(String).filter(Boolean);
+          const channelEntries = ((channelCfg as any)?.users ?? []).map(String).filter(Boolean);
           if (channelEntries.length > 0) {
             groupOverrides.push({
               label: `guild ${guildKey} / channel ${channelKey}`,

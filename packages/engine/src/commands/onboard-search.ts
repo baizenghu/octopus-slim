@@ -226,7 +226,7 @@ export async function setupSearch(
   })();
 
   type PickerValue = SearchProvider | "__skip__";
-  const choice = await prompter.select<PickerValue>({
+  const choice = await (prompter.select as any)({
     message: "Search provider",
     options: [
       ...options,

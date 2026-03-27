@@ -102,15 +102,15 @@ export async function setupSkills(
       ],
     });
 
-    const selected = toInstall.filter((name) => name !== "__skip__");
+    const selected = toInstall.filter((name: any) => name !== "__skip__");
 
     const selectedSkills = selected
-      .map((name) => installable.find((s) => s.name === name))
-      .filter((item): item is (typeof installable)[number] => Boolean(item));
+      .map((name: any) => installable.find((s) => s.name === name))
+      .filter((item: any): item is (typeof installable)[number] => Boolean(item));
 
     const needsBrewPrompt =
       process.platform !== "win32" &&
-      selectedSkills.some((skill) => skill.install.some((option) => option.kind === "brew")) &&
+      selectedSkills.some((skill: any) => skill.install.some((option: any) => option.kind === "brew")) &&
       !(await detectBinary("brew"));
 
     if (needsBrewPrompt) {
@@ -136,8 +136,8 @@ export async function setupSkills(
       }
     }
 
-    const needsNodeManagerPrompt = selectedSkills.some((skill) =>
-      skill.install.some((option) => option.kind === "node"),
+    const needsNodeManagerPrompt = selectedSkills.some((skill: any) =>
+      skill.install.some((option: any) => option.kind === "node"),
     );
     if (needsNodeManagerPrompt) {
       const nodeManager = (await prompter.select({
@@ -212,7 +212,7 @@ export async function setupSkills(
     const apiKey = String(
       await prompter.text({
         message: `Enter ${skill.primaryEnv}`,
-        validate: (value) => (value?.trim() ? undefined : "Required"),
+        validate: (value: any) => (value?.trim() ? undefined : "Required"),
       }),
     );
     next = upsertSkillEntry(next, skill.skillKey, { apiKey: normalizeSecretInput(apiKey) });

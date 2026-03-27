@@ -63,7 +63,7 @@ export async function resetCommand(runtime: RuntimeEnv, opts: ResetOptions) {
       runtime.exit(1);
       return;
     }
-    const selection = await selectStyled<ResetScope>({
+    const selection = await (selectStyled as any)({
       message: "Reset scope",
       options: [
         {
@@ -92,7 +92,7 @@ export async function resetCommand(runtime: RuntimeEnv, opts: ResetOptions) {
     scope = selection;
   }
 
-  if (!["config", "config+creds+sessions", "full"].includes(scope)) {
+  if (!scope || !["config", "config+creds+sessions", "full"].includes(scope)) {
     runtime.error('Invalid --scope. Expected "config", "config+creds+sessions", or "full".');
     runtime.exit(1);
     return;

@@ -108,7 +108,7 @@ async function runInitialValueForChannel(channel: "dev" | "beta") {
   });
 
   const call = select.mock.calls[0];
-  return call?.[0]?.initialValue;
+  return (call as any)?.[0]?.initialValue;
 }
 
 function expectPluginLoadedFromLocalPath(

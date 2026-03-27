@@ -124,7 +124,7 @@ export function registerDiscordSubagentHooks(api: OctopusPluginApi) {
 
     let binding: (typeof bindings)[number] | undefined;
     if (requesterThreadId) {
-      binding = bindings.find((entry) => {
+      binding = bindings.find((entry: any) => {
         if (entry.threadId !== requesterThreadId) {
           return false;
         }

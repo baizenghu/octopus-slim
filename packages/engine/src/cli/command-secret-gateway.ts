@@ -101,7 +101,7 @@ function classifyConfiguredTargetRefs(params: {
     context,
   });
 
-  const activePaths = new Set(context.assignments.map((assignment) => assignment.path));
+  const activePaths = new Set(context.assignments.map((assignment: any) => assignment.path));
   const inactiveWarningsByPath = new Map<string, string>();
   for (const warning of context.warnings) {
     if (warning.code !== "SECRETS_REF_IGNORED_INACTIVE_SURFACE") {
@@ -197,12 +197,12 @@ async function resolveCommandSecretRefsLocally(params: {
     config: structuredClone(params.config),
     context,
   });
-  const inactiveRefPaths = new Set(
+  const inactiveRefPaths = new Set<string>(
     context.warnings
-      .filter((warning) => warning.code === "SECRETS_REF_IGNORED_INACTIVE_SURFACE")
-      .map((warning) => warning.path),
+      .filter((warning: any) => warning.code === "SECRETS_REF_IGNORED_INACTIVE_SURFACE")
+      .map((warning: any) => warning.path as string),
   );
-  const activePaths = new Set(context.assignments.map((assignment) => assignment.path));
+  const activePaths = new Set<string>(context.assignments.map((assignment: any) => assignment.path as string));
   const localResolutionDiagnostics: string[] = [];
   for (const target of discoverConfigSecretTargetsByIds(sourceConfig, params.targetIds)) {
     if (params.allowedPaths && !params.allowedPaths.has(target.path)) {
@@ -487,7 +487,7 @@ export async function resolveCommandSecretRefsViaGateway(params: {
         targetIds: params.targetIds,
         preflightDiagnostics: [],
         mode,
-        allowedPaths: new Set(analyzed.unresolved.map((entry) => entry.path)),
+        allowedPaths: new Set(analyzed.unresolved.map((entry: any) => entry.path)),
       });
       for (const unresolved of analyzed.unresolved) {
         if (localFallback.targetStatesByPath[unresolved.path] !== "resolved_local") {
@@ -506,7 +506,7 @@ export async function resolveCommandSecretRefsViaGateway(params: {
           .map(([path]) => path),
       );
       const stillUnresolved = analyzed.unresolved.filter(
-        (entry) => !recoveredPaths.has(entry.path),
+        (entry: any) => !recoveredPaths.has(entry.path),
       );
       if (stillUnresolved.length > 0) {
         if (mode === "strict") {

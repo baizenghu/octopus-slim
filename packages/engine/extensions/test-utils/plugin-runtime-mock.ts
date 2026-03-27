@@ -83,7 +83,7 @@ export function createPluginRuntimeMock(overrides: DeepPartial<PluginRuntime> = 
         resolveMarkdownTableMode: vi.fn(
           () => "code",
         ) as unknown as PluginRuntime["channel"]["text"]["resolveMarkdownTableMode"],
-        convertMarkdownTables: vi.fn((text: string) => text),
+        convertMarkdownTables: vi.fn((text: string) => text) as any,
       },
       reply: {
         dispatchReplyWithBufferedBlockDispatcher: vi.fn(

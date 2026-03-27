@@ -482,7 +482,7 @@ export async function statusCommand(
   };
   runtime.log(theme.muted(`Summary: ${fmtSummary(securityAudit.summary)}`));
   const importantFindings = securityAudit.findings.filter(
-    (f) => f.severity === "critical" || f.severity === "warn",
+    (f: any) => f.severity === "critical" || f.severity === "warn",
   );
   if (importantFindings.length === 0) {
     runtime.log(theme.muted("No critical or warn findings detected."));

@@ -447,7 +447,7 @@ export const whatsappPlugin: ChannelPlugin<ResolvedWhatsAppAccount> = {
         ctx.runtime,
         ctx.abortSignal,
         {
-          statusSink: (next) => ctx.setStatus({ accountId: ctx.accountId, ...next }),
+          statusSink: (next: any) => ctx.setStatus({ accountId: ctx.accountId, ...next }),
           accountId: account.accountId,
         },
       );

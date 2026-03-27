@@ -154,7 +154,7 @@ const dmPolicy: ChannelOnboardingDmPolicy = {
 export const telegramOnboardingAdapter: ChannelOnboardingAdapter = {
   channel,
   getStatus: async ({ cfg }) => {
-    const configured = listTelegramAccountIds(cfg).some((accountId) => {
+    const configured = listTelegramAccountIds(cfg).some((accountId: any) => {
       const account = inspectTelegramAccount({ cfg, accountId });
       return account.configured;
     });

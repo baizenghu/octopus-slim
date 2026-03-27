@@ -21,17 +21,17 @@ export async function promptAndConfigureVllm(params: {
     message: "vLLM base URL",
     initialValue: VLLM_DEFAULT_BASE_URL,
     placeholder: VLLM_DEFAULT_BASE_URL,
-    validate: (value) => (value?.trim() ? undefined : "Required"),
+    validate: (value: any) => (value?.trim() ? undefined : "Required"),
   });
   const apiKeyRaw = await params.prompter.text({
     message: "vLLM API key",
     placeholder: "sk-... (or any non-empty string)",
-    validate: (value) => (value?.trim() ? undefined : "Required"),
+    validate: (value: any) => (value?.trim() ? undefined : "Required"),
   });
   const modelIdRaw = await params.prompter.text({
     message: "vLLM model",
     placeholder: "meta-llama/Meta-Llama-3-8B-Instruct",
-    validate: (value) => (value?.trim() ? undefined : "Required"),
+    validate: (value: any) => (value?.trim() ? undefined : "Required"),
   });
 
   const baseUrl = String(baseUrlRaw ?? "")

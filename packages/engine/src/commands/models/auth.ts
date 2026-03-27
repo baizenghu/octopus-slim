@@ -384,7 +384,7 @@ export async function modelsAuthLoginCommand(opts: LoginOptions, runtime: Runtim
           hint: provider.docsPath ? `Docs: ${provider.docsPath}` : undefined,
         })),
       })
-      .then((id) => resolveProviderMatch(providers, String(id))));
+      .then((id: any) => resolveProviderMatch(providers, String(id))));
 
   if (!selectedProvider) {
     throw new Error("Unknown provider. Use --provider <id> to pick a provider plugin.");
@@ -397,13 +397,13 @@ export async function modelsAuthLoginCommand(opts: LoginOptions, runtime: Runtim
       : await prompter
           .select({
             message: `Auth method for ${selectedProvider.label}`,
-            options: selectedProvider.auth.map((method) => ({
+            options: selectedProvider.auth.map((method: any) => ({
               value: method.id,
               label: method.label,
               hint: method.hint,
             })),
           })
-          .then((id) => selectedProvider.auth.find((method) => method.id === String(id))));
+          .then((id: any) => selectedProvider.auth.find((method: any) => method.id === String(id))));
 
   if (!chosenMethod) {
     throw new Error("Unknown auth method. Use --method <id> to select one.");
@@ -417,11 +417,11 @@ export async function modelsAuthLoginCommand(opts: LoginOptions, runtime: Runtim
     prompter,
     runtime,
     isRemote,
-    openUrl: async (url) => {
+    openUrl: async (url: any) => {
       await openUrl(url);
     },
     oauth: {
-      createVpsAwareHandlers: (params) => createVpsAwareOAuthHandlers(params),
+      createVpsAwareHandlers: (params: any) => createVpsAwareOAuthHandlers(params),
     },
   });
 

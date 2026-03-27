@@ -78,7 +78,7 @@ function buildSignalSetupPatch(input: {
 type SignalSendFn = ReturnType<typeof getSignalRuntime>["channel"]["signal"]["sendMessageSignal"];
 
 async function sendSignalOutbound(params: {
-  cfg: Parameters<typeof resolveSignalAccount>[0]["cfg"];
+  cfg: any;
   to: string;
   text: string;
   mediaUrl?: string;

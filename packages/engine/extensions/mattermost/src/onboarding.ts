@@ -38,7 +38,7 @@ async function promptMattermostBaseUrl(params: {
     await params.prompter.text({
       message: "Enter Mattermost base URL",
       initialValue: params.initialValue,
-      validate: (value) => (value?.trim() ? undefined : "Required"),
+      validate: (value: any) => (value?.trim() ? undefined : "Required"),
     }),
   ).trim();
   return baseUrl;

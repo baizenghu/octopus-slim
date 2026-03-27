@@ -73,7 +73,7 @@ function isSlackAccountConfigured(account: ResolvedSlackAccount): boolean {
 type SlackSendFn = ReturnType<typeof getSlackRuntime>["channel"]["slack"]["sendMessageSlack"];
 
 function resolveSlackSendContext(params: {
-  cfg: Parameters<typeof resolveSlackAccount>[0]["cfg"];
+  cfg: any;
   accountId?: string;
   deps?: { sendSlack?: SlackSendFn };
   replyToId?: string | number | null;
@@ -246,7 +246,7 @@ export const slackPlugin: ChannelPlugin<ResolvedSlackAccount> = {
           token,
           entries: inputs,
         });
-        return resolved.map((entry) => ({
+        return resolved.map((entry: any) => ({
           input: entry.input,
           resolved: entry.resolved,
           id: entry.id,
@@ -258,7 +258,7 @@ export const slackPlugin: ChannelPlugin<ResolvedSlackAccount> = {
         token,
         entries: inputs,
       });
-      return resolved.map((entry) => ({
+      return resolved.map((entry: any) => ({
         input: entry.input,
         resolved: entry.resolved,
         id: entry.id,

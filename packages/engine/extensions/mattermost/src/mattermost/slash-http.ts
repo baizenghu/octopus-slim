@@ -161,7 +161,7 @@ async function authorizeSlashInvocation(params: {
 
   if (!decision.ok) {
     if (decision.denyReason === "dm-pairing") {
-      const { code } = await core.channel.pairing.upsertPairingRequest({
+      const { code } = await (core.channel.pairing.upsertPairingRequest as any)({
         channel: "mattermost",
         accountId: account.accountId,
         id: senderId,

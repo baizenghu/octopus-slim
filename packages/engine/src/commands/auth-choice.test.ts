@@ -747,11 +747,11 @@ describe("applyAuthChoice", () => {
     const selectValues: Array<"provider" | "env" | "filemain"> = ["provider", "filemain", "env"];
     const select = vi.fn(async (params: Parameters<WizardPrompter["select"]>[0]) => {
       const next = selectValues[0];
-      if (next && params.options.some((option) => option.value === next)) {
+      if (next && (params as any).options.some((option: any) => option.value === next)) {
         selectValues.shift();
         return next as never;
       }
-      return (params.options[0]?.value ?? "env") as never;
+      return ((params as any).options[0]?.value ?? "env") as never;
     });
     const text = vi
       .fn<WizardPrompter["text"]>()

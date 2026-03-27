@@ -49,8 +49,8 @@ function setupSessionState(cfg: OctopusConfig, env: NodeJS.ProcessEnv, homeDir: 
 function stateIntegrityText(): string {
   return vi
     .mocked(note)
-    .mock.calls.filter((call) => call[1] === "State integrity")
-    .map((call) => String(call[0]))
+    .mock.calls.filter((call: any) => call[1] === "State integrity")
+    .map((call: any) => String(call[0]))
     .join("\n");
 }
 

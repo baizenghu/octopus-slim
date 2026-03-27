@@ -207,7 +207,7 @@ export function registerQrCli(program: Command) {
         const resolved = await resolvePairingSetupFromConfig(cfg, {
           publicUrl,
           preferRemoteUrl: wantsRemote,
-          runCommandWithTimeout: async (argv, runOpts) =>
+          runCommandWithTimeout: async (argv: any, runOpts: any) =>
             await runCommandWithTimeout(argv, {
               timeoutMs: runOpts.timeoutMs,
             }),

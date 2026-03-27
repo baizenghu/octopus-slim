@@ -291,7 +291,7 @@ export async function handleToolsInvokeHttpRequest(
   // Gateway HTTP-specific deny list — applies to ALL sessions via HTTP.
   const gatewayToolsCfg = cfg.gateway?.tools;
   const defaultGatewayDeny: string[] = DEFAULT_GATEWAY_HTTP_TOOL_DENY.filter(
-    (name) => !gatewayToolsCfg?.allow?.includes(name),
+    (name: any) => !gatewayToolsCfg?.allow?.includes(name),
   );
   const gatewayDenyNames = defaultGatewayDeny.concat(
     Array.isArray(gatewayToolsCfg?.deny) ? gatewayToolsCfg.deny : [],

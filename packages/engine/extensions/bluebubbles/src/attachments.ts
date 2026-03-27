@@ -109,7 +109,7 @@ export async function downloadBlueBubblesAttachment(
         : trustedHostname
           ? { allowedHostnames: [trustedHostname] }
           : undefined,
-      fetchImpl: async (input, init) =>
+      fetchImpl: async (input: any, init: any) =>
         await blueBubblesFetchWithTimeout(
           resolveRequestUrl(input),
           { ...init, method: init?.method ?? "GET" },

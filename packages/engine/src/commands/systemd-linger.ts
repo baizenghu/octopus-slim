@@ -53,8 +53,8 @@ export async function ensureSystemdUserLingerInteractive(params: {
     : "Enabling lingering now (may require sudo; writes /var/lib/systemd/linger).";
   await prompter.note(`${reason}\n${actionNote}`, title);
 
-  if (params.requireConfirm && prompter.confirm) {
-    const ok = await prompter.confirm({
+  if (params.requireConfirm && (prompter as any).confirm) {
+    const ok = await (prompter as any).confirm({
       message: `Enable systemd lingering for ${status.user}?`,
       initialValue: true,
     });

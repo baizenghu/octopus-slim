@@ -651,9 +651,9 @@ export async function detectLegacyStateMigrations(params: {
   const legacyTelegramAllowFromPath = resolveChannelAllowFromPath("telegram", env);
   const telegramPairingAllowFromPlans = fileExists(legacyTelegramAllowFromPath)
     ? Array.from(
-        new Set(
-          listTelegramAccountIds(params.cfg).map((accountId) =>
-            resolveChannelAllowFromPath("telegram", env, accountId),
+        new Set<string>(
+          listTelegramAccountIds(params.cfg).map((accountId: any) =>
+            resolveChannelAllowFromPath("telegram", env, accountId) as string,
           ),
         ),
       )

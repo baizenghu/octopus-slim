@@ -288,8 +288,8 @@ async function installPluginFromPackageDir(
     });
     if (scanSummary.critical > 0) {
       const criticalDetails = scanSummary.findings
-        .filter((f) => f.severity === "critical")
-        .map((f) => `${f.message} (${f.file}:${f.line})`)
+        .filter((f: any) => f.severity === "critical")
+        .map((f: any) => `${f.message} (${f.file}:${f.line})`)
         .join("; ");
       logger.warn?.(
         `WARNING: Plugin "${pluginId}" contains dangerous code patterns: ${criticalDetails}`,

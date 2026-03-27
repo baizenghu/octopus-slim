@@ -2,6 +2,7 @@ type OptionalDefaultGate<TKey extends string> = (key: TKey, defaultValue?: boole
 
 type TokenSourcedAccount = {
   tokenSource?: string | null;
+  accountId?: string;
 };
 
 export function listTokenSourcedAccounts<TAccount extends TokenSourcedAccount>(

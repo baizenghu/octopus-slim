@@ -445,7 +445,7 @@ describe("deliverOutboundPayloads", () => {
     });
 
     expect(sendSignal).toHaveBeenCalledTimes(expectedChunks.length);
-    expectedChunks.forEach((chunk, index) => {
+    expectedChunks.forEach((chunk: any, index: any) => {
       expect(sendSignal).toHaveBeenNthCalledWith(
         index + 1,
         "+1555",

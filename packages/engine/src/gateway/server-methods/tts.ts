@@ -28,7 +28,7 @@ export const ttsHandlers: GatewayRequestHandlers = {
       const autoMode = resolveTtsAutoMode({ config, prefsPath });
       const fallbackProviders = resolveTtsProviderOrder(provider)
         .slice(1)
-        .filter((candidate) => isTtsProviderConfigured(config, candidate));
+        .filter((candidate: any) => isTtsProviderConfigured(config, candidate));
       respond(true, {
         enabled: isTtsEnabled(config, prefsPath),
         auto: autoMode,

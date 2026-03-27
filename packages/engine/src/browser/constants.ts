@@ -1,9 +1,5 @@
-// STUB: removed from Octopus slim build
-export const DEFAULT_OCTOPUS_BROWSER_ENABLED = true;
-export const DEFAULT_BROWSER_EVALUATE_ENABLED = true;
-export const DEFAULT_OCTOPUS_BROWSER_COLOR = "#FF4500";
-export const DEFAULT_OCTOPUS_BROWSER_PROFILE_NAME = "octopus";
-export const DEFAULT_BROWSER_DEFAULT_PROFILE_NAME = "octopus";
-export const DEFAULT_AI_SNAPSHOT_MAX_CHARS = 80_000;
-export const DEFAULT_AI_SNAPSHOT_EFFICIENT_MAX_CHARS = 10_000;
-export const DEFAULT_AI_SNAPSHOT_EFFICIENT_DEPTH = 6;
+// SLIM: removed
+export const DEFAULT_AI_SNAPSHOT_MAX_CHARS: any = undefined;
+export const DEFAULT_BROWSER_EVALUATE_ENABLED: any = undefined;
+export const DEFAULT_OCTOPUS_BROWSER_COLOR: any = undefined;
+export const DEFAULT_OCTOPUS_BROWSER_PROFILE_NAME: any = undefined;

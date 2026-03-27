@@ -47,7 +47,7 @@ export async function setupInternalHooks(
     ],
   });
 
-  const selected = toEnable.filter((name) => name !== "__skip__");
+  const selected = toEnable.filter((name: any) => name !== "__skip__");
   if (selected.length === 0) {
     return cfg;
   }

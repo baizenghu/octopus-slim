@@ -91,6 +91,11 @@ export async function channelsRemoveCommand(
     }
   }
 
+  if (!channel) {
+    runtime.error("No channel specified.");
+    runtime.exit(1);
+    return;
+  }
   const plugin = getChannelPlugin(channel);
   if (!plugin) {
     runtime.error(`Unknown channel: ${channel}`);

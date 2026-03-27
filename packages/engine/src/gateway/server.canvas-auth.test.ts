@@ -103,7 +103,7 @@ function scopedCanvasPath(capability: string, path: string): string {
   return `${CANVAS_CAPABILITY_PATH_PREFIX}/${encodeURIComponent(capability)}${path}`;
 }
 
-const allowCanvasHostHttp: CanvasHostHandler["handleHttpRequest"] = async (req, res) => {
+const allowCanvasHostHttp: CanvasHostHandler["handleHttpRequest"] = async (req: any, res: any) => {
   const url = new URL(req.url ?? "/", "http://localhost");
   if (url.pathname !== CANVAS_HOST_PATH && !url.pathname.startsWith(`${CANVAS_HOST_PATH}/`)) {
     return false;
@@ -129,7 +129,7 @@ async function withCanvasGatewayHarness(params: {
     rootDir: "test",
     basePath: "/canvas",
     close: async () => {},
-    handleUpgrade: (req, socket, head) => {
+    handleUpgrade: (req: any, socket: any, head: any) => {
       const url = new URL(req.url ?? "/", "http://localhost");
       if (url.pathname !== CANVAS_WS_PATH) {
         return false;

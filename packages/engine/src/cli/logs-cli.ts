@@ -134,7 +134,7 @@ function formatLogLine(
 function createLogWriters() {
   const writer = createSafeStreamWriter({
     beforeWrite: () => clearActiveProgressLine(),
-    onBrokenPipe: (err, stream) => {
+    onBrokenPipe: (err: any, stream: any) => {
       const code = err.code ?? "EPIPE";
       const target = stream === process.stdout ? "stdout" : "stderr";
       const message = `octopus logs: output ${target} closed (${code}). Stopping tail.`;

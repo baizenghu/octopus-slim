@@ -151,15 +151,9 @@ export function createRuntimeChannel(): PluginRuntime["channel"] {
       buildPairingReply,
       readAllowFromStore: ({ channel, accountId, env }) =>
         readChannelAllowFromStore(channel, env, accountId),
-      upsertPairingRequest: ({ channel, id, accountId, meta, env, pairingAdapter }) =>
-        upsertChannelPairingRequest({
-          channel,
-          id,
-          accountId,
-          meta,
-          env,
-          pairingAdapter,
-        }),
+      // SLIM: upsertChannelPairingRequest is stubbed (any), cast params to avoid TS errors
+      upsertPairingRequest: (params: any) =>
+        upsertChannelPairingRequest(params),
     },
     media: {
       fetchRemoteMedia,

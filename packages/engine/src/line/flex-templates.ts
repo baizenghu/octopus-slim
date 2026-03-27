@@ -1,72 +1,22 @@
-// STUB: removed from Octopus slim build
-
-export type {
-  Action,
-  CardAction,
-  FlexBox,
-  FlexBubble,
-  FlexButton,
-  FlexCarousel,
-  FlexComponent,
-  FlexContainer,
-  FlexImage,
-  FlexText,
-  ListItem,
-} from "./flex-templates/types.js";
-
-import type { FlexBubble, FlexCarousel } from "./flex-templates/types.js";
-import type { messagingApi } from "@line/bot-sdk";
-
-type FlexMessage = messagingApi.FlexMessage;
-
-export function createActionCard(..._args: unknown[]): FlexBubble {
-  throw new Error('Channel not available in Octopus slim build');
-}
-
-export function createCarousel(..._args: unknown[]): FlexCarousel {
-  throw new Error('Channel not available in Octopus slim build');
-}
-
-export function createImageCard(..._args: unknown[]): FlexBubble {
-  throw new Error('Channel not available in Octopus slim build');
-}
-
-export function createInfoCard(..._args: unknown[]): FlexBubble {
-  throw new Error('Channel not available in Octopus slim build');
-}
-
-export function createListCard(..._args: unknown[]): FlexBubble {
-  throw new Error('Channel not available in Octopus slim build');
-}
-
-export function createNotificationBubble(..._args: unknown[]): FlexBubble {
-  throw new Error('Channel not available in Octopus slim build');
-}
-
-export function createAgendaCard(..._args: unknown[]): FlexBubble {
-  throw new Error('Channel not available in Octopus slim build');
-}
-
-export function createEventCard(..._args: unknown[]): FlexBubble {
-  throw new Error('Channel not available in Octopus slim build');
-}
-
-export function createReceiptCard(..._args: unknown[]): FlexBubble {
-  throw new Error('Channel not available in Octopus slim build');
-}
-
-export function createAppleTvRemoteCard(..._args: unknown[]): FlexBubble {
-  throw new Error('Channel not available in Octopus slim build');
-}
-
-export function createDeviceControlCard(..._args: unknown[]): FlexBubble {
-  throw new Error('Channel not available in Octopus slim build');
-}
-
-export function createMediaPlayerCard(..._args: unknown[]): FlexBubble {
-  throw new Error('Channel not available in Octopus slim build');
-}
-
-export function toFlexMessage(..._args: unknown[]): FlexMessage {
-  throw new Error('Channel not available in Octopus slim build');
-}
+// SLIM: removed
+export type CardAction = any;
+export const CardAction: any = undefined;
+export type ListItem = any;
+export const ListItem: any = undefined;
+export type createActionCard = any;
+export const createActionCard: any = undefined;
+export type createAgendaCard = any;
+export const createAgendaCard: any = undefined;
+export type createEventCard = any;
+export const createEventCard: any = undefined;
+export type createImageCard = any;
+export const createImageCard: any = undefined;
+export type createInfoCard = any;
+export const createInfoCard: any = undefined;
+export type createListCard = any;
+export const createListCard: any = undefined;
+export type createReceiptCard = any;
+export const createReceiptCard: any = undefined;
+export const createMediaPlayerCard: any = undefined;
+export const createDeviceControlCard: any = undefined;
+export const createAppleTvRemoteCard: any = undefined;

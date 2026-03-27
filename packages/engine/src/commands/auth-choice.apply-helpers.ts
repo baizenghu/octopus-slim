@@ -55,7 +55,7 @@ function extractEnvVarFromSourceLabel(source: string): string | undefined {
 
 function resolveDefaultProviderEnvVar(provider: string): string | undefined {
   const envVars = PROVIDER_ENV_VARS[provider];
-  return envVars?.find((candidate) => candidate.trim().length > 0);
+  return envVars?.find((candidate: any) => candidate.trim().length > 0);
 }
 
 function resolveDefaultFilePointerId(provider: string): string {
@@ -104,7 +104,7 @@ export async function promptSecretRefForOnboarding(params: {
   let sourceChoice: SecretRefChoice = "env"; // pragma: allowlist secret
 
   while (true) {
-    const sourceRaw: SecretRefChoice = await params.prompter.select<SecretRefChoice>({
+    const sourceRaw: SecretRefChoice = await (params.prompter.select as any)({
       message: params.copy?.sourceMessage ?? "Where is this API key stored?",
       initialValue: sourceChoice,
       options: [
@@ -128,7 +128,7 @@ export async function promptSecretRefForOnboarding(params: {
         message: params.copy?.envVarMessage ?? "Environment variable name",
         initialValue: defaultEnvVar || undefined,
         placeholder: params.copy?.envVarPlaceholder ?? "OPENAI_API_KEY",
-        validate: (value) => {
+        validate: (value: any) => {
           const candidate = value.trim();
           if (!isValidEnvSecretRefId(candidate)) {
             return (
@@ -186,7 +186,7 @@ export async function promptSecretRefForOnboarding(params: {
     const defaultProvider = resolveDefaultSecretProviderAlias(params.config, "file", {
       preferFirstProviderForSource: true,
     });
-    const selectedProvider = await params.prompter.select<string>({
+    const selectedProvider = await (params.prompter.select as any)({
       message: "Select secret provider",
       initialValue:
         externalProviders.find(([providerName]) => providerName === defaultProvider)?.[0] ??
@@ -219,7 +219,7 @@ export async function promptSecretRefForOnboarding(params: {
       message: idPrompt,
       initialValue: idDefault,
       placeholder: providerEntry.source === "file" ? "/providers/openai/apiKey" : "openai/api-key",
-      validate: (value) => {
+      validate: (value: any) => {
         const candidate = value.trim();
         if (!candidate) {
           return "Secret id cannot be empty.";
@@ -388,7 +388,7 @@ export async function resolveSecretInputModeForEnvSelection(params: {
   if (typeof params.prompter.select !== "function") {
     return "plaintext";
   }
-  const selected = await params.prompter.select<SecretInputMode>({
+  const selected = await (params.prompter.select as any)({
     message: params.copy?.modeMessage ?? "How do you want to provide this API key?",
     initialValue: "plaintext",
     options: [

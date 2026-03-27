@@ -102,7 +102,7 @@ async function promptInstallChoice(params: {
   ];
   const initialValue: InstallChoice =
     defaultChoice === "local" && !localPath ? "npm" : defaultChoice;
-  return await prompter.select<InstallChoice>({
+  return await (prompter.select as any)({
     message: `Install ${entry.meta.label} plugin?`,
     options,
     initialValue,

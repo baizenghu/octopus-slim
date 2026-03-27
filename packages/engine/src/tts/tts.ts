@@ -1,0 +1,25 @@
+// SLIM: removed
+export type textToSpeechTelephony = any;
+export const textToSpeechTelephony: any = undefined;
+export const buildTtsSystemPromptHint: any = undefined;
+export const resolveTtsConfig: any = undefined;
+export const resolveTtsPrefsPath: any = undefined;
+export const setLastTtsAttempt: any = undefined;
+export const setSummarizationEnabled: any = undefined;
+export const setTtsEnabled: any = undefined;
+export const setTtsMaxLength: any = undefined;
+export const setTtsProvider: any = undefined;
+export const textToSpeech: any = undefined;
+export const getLastTtsAttempt: any = undefined;
+export const getTtsMaxLength: any = undefined;
+export const getTtsProvider: any = undefined;
+export const isSummarizationEnabled: any = undefined;
+export const isTtsEnabled: any = undefined;
+export const isTtsProviderConfigured: any = undefined;
+export const resolveTtsApiKey: any = undefined;
+export const maybeApplyTtsToPayload: any = undefined;
+export const normalizeTtsAutoMode: any = undefined;
+export const resolveTtsAutoMode: any = undefined;
+export const OPENAI_TTS_MODELS: any = undefined;
+export const OPENAI_TTS_VOICES: any = undefined;
+export const resolveTtsProviderOrder: any = undefined;

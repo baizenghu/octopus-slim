@@ -328,16 +328,16 @@ async function maybeRepairTelegramAllowFromUsernames(cfg: OctopusConfig): Promis
     targetIds: getChannelsCommandSecretTargetIds(),
     mode: "summary",
   });
-  const hasConfiguredUnavailableToken = listTelegramAccountIds(cfg).some((accountId) => {
+  const hasConfiguredUnavailableToken = listTelegramAccountIds(cfg).some((accountId: any) => {
     const inspected = inspectTelegramAccount({ cfg, accountId });
     return inspected.enabled && inspected.tokenStatus === "configured_unavailable";
   });
   const tokens = Array.from(
-    new Set(
+    new Set<string>(
       listTelegramAccountIds(resolvedConfig)
-        .map((accountId) => resolveTelegramAccount({ cfg: resolvedConfig, accountId }))
-        .map((account) => (account.tokenSource === "none" ? "" : account.token))
-        .map((token) => token.trim())
+        .map((accountId: any) => resolveTelegramAccount({ cfg: resolvedConfig, accountId }))
+        .map((account: any) => (account.tokenSource === "none" ? "" : account.token))
+        .map((token: any) => token.trim())
         .filter(Boolean),
     ),
   );
@@ -379,7 +379,7 @@ async function maybeRepairTelegramAllowFromUsernames(cfg: OctopusConfig): Promis
           signal: controller.signal,
         });
         if (id) {
-          return id;
+          return id as string;
         }
       } catch {
         // ignore and try next token
@@ -1127,9 +1127,9 @@ async function maybeRepairAllowlistPolicyAllowFrom(cfg: OctopusConfig): Promise<
       process.env,
       normalizedAccountId,
     ).catch(() => []);
-    const recovered = Array.from(new Set(fromStore.map((entry) => String(entry).trim()))).filter(
+    const recovered = Array.from(new Set(fromStore.map((entry: any) => String(entry).trim()))).filter(
       Boolean,
-    );
+    ) as string[];
     if (recovered.length === 0) {
       return;
     }

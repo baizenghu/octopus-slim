@@ -64,8 +64,8 @@ async function collectSkillInstallScanWarnings(entry: SkillEntry): Promise<strin
     const summary = await scanDirectoryWithSummary(skillDir);
     if (summary.critical > 0) {
       const criticalDetails = summary.findings
-        .filter((finding) => finding.severity === "critical")
-        .map((finding) => formatScanFindingDetail(skillDir, finding))
+        .filter((finding: any) => finding.severity === "critical")
+        .map((finding: any) => formatScanFindingDetail(skillDir, finding))
         .join("; ");
       warnings.push(
         `WARNING: Skill "${skillName}" contains dangerous code patterns: ${criticalDetails}`,

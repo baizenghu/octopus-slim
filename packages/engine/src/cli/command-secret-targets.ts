@@ -2,8 +2,8 @@ import { listSecretTargetRegistryEntries } from "../secrets/target-registry.js";
 
 function idsByPrefix(prefixes: readonly string[]): string[] {
   return listSecretTargetRegistryEntries()
-    .map((entry) => entry.id)
-    .filter((id) => prefixes.some((prefix) => id.startsWith(prefix)))
+    .map((entry: any) => entry.id)
+    .filter((id: any) => prefixes.some((prefix) => id.startsWith(prefix)))
     .toSorted();
 }
 

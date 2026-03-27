@@ -1,9 +1,8 @@
-// STUB: removed from Octopus slim build
-export * from "./client-actions-core.js";
-
-const _err = (): never => { throw new Error("Browser not available in Octopus slim build"); };
-
-export async function browserAct(..._args: unknown[]): Promise<unknown> { return _err(); }
-export async function browserConsoleMessages(..._args: unknown[]): Promise<unknown[]> { return _err(); }
-export async function browserScreenshotAction(..._args: unknown[]): Promise<unknown> { return _err(); }
-export async function browserPdfSave(..._args: unknown[]): Promise<unknown> { return _err(); }
+// SLIM: removed
+export const browserAct: any = undefined;
+export const browserConsoleMessages: any = undefined;
+export const browserArmDialog: any = undefined;
+export const browserArmFileChooser: any = undefined;
+export const browserNavigate: any = undefined;
+export const browserPdfSave: any = undefined;
+export const browserScreenshotAction: any = undefined;

@@ -48,7 +48,7 @@ export const wizardHandlers: GatewayRequestHandlers = {
       mode: params.mode,
       workspace: typeof params.workspace === "string" ? params.workspace : undefined,
     };
-    const session = new WizardSession((prompter) =>
+    const session = new WizardSession((prompter: any) =>
       context.wizardRunner(opts, defaultRuntime, prompter),
     );
     context.wizardSessions.set(sessionId, session);

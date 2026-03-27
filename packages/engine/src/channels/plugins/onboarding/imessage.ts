@@ -99,7 +99,7 @@ const dmPolicy: ChannelOnboardingDmPolicy = {
 export const imessageOnboardingAdapter: ChannelOnboardingAdapter = {
   channel,
   getStatus: async ({ cfg }) => {
-    const configured = listIMessageAccountIds(cfg).some((accountId) => {
+    const configured = listIMessageAccountIds(cfg).some((accountId: any) => {
       const account = resolveIMessageAccount({ cfg, accountId });
       return Boolean(
         account.config.cliPath ||
@@ -145,7 +145,7 @@ export const imessageOnboardingAdapter: ChannelOnboardingAdapter = {
       const entered = await prompter.text({
         message: "imsg CLI path",
         initialValue: resolvedCliPath,
-        validate: (value) => (value?.trim() ? undefined : "Required"),
+        validate: (value: any) => (value?.trim() ? undefined : "Required"),
       });
       resolvedCliPath = String(entered).trim();
       if (!resolvedCliPath) {

@@ -40,7 +40,7 @@ function parseEnvSecretRef(value: string): SecretRef | null {
 
 function resolveProviderDefaultEnvSecretRef(provider: string): SecretRef {
   const envVars = PROVIDER_ENV_VARS[provider];
-  const envVar = envVars?.find((candidate) => candidate.trim().length > 0);
+  const envVar = envVars?.find((candidate: any) => candidate.trim().length > 0);
   if (!envVar) {
     throw new Error(
       `Provider "${provider}" does not have a default env var mapping for secret-input-mode=ref.`,

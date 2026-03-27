@@ -80,7 +80,7 @@ export async function listSlackDirectoryPeersFromConfig(
   const ids = new Set<string>();
 
   addAllowFromAndDmsIds(ids, account.config.allowFrom ?? account.dm?.allowFrom, account.config.dms);
-  for (const channel of Object.values(account.config.channels ?? {})) {
+  for (const channel of Object.values(account.config.channels ?? {}) as any[]) {
     addTrimmedEntries(ids, channel.users ?? []);
   }
 
@@ -119,9 +119,9 @@ export async function listDiscordDirectoryPeersFromConfig(
     account.config.allowFrom ?? account.config.dm?.allowFrom,
     account.config.dms,
   );
-  for (const guild of Object.values(account.config.guilds ?? {})) {
+  for (const guild of Object.values(account.config.guilds ?? {}) as any[]) {
     addTrimmedEntries(ids, guild.users ?? []);
-    for (const channel of Object.values(guild.channels ?? {})) {
+    for (const channel of Object.values(guild.channels ?? {}) as any[]) {
       addTrimmedEntries(ids, channel.users ?? []);
     }
   }
@@ -142,7 +142,7 @@ export async function listDiscordDirectoryGroupsFromConfig(
 ): Promise<ChannelDirectoryEntry[]> {
   const account = inspectDiscordAccount({ cfg: params.cfg, accountId: params.accountId });
   const ids = new Set<string>();
-  for (const guild of Object.values(account.config.guilds ?? {})) {
+  for (const guild of Object.values(account.config.guilds ?? {}) as any[]) {
     addTrimmedEntries(ids, Object.keys(guild.channels ?? {}));
   }
 
@@ -203,11 +203,11 @@ export async function listWhatsAppDirectoryPeersFromConfig(
 ): Promise<ChannelDirectoryEntry[]> {
   const account = resolveWhatsAppAccount({ cfg: params.cfg, accountId: params.accountId });
   const ids = (account.allowFrom ?? [])
-    .map((entry) => String(entry).trim())
-    .filter((entry) => Boolean(entry) && entry !== "*")
-    .map((entry) => normalizeWhatsAppTarget(entry) ?? "")
+    .map((entry: any) => String(entry).trim())
+    .filter((entry: any) => Boolean(entry) && entry !== "*")
+    .map((entry: any) => normalizeWhatsAppTarget(entry) ?? "")
     .filter(Boolean)
-    .filter((id) => !isWhatsAppGroupJid(id));
+    .filter((id: any) => !isWhatsAppGroupJid(id));
   return toDirectoryEntries("user", applyDirectoryQueryAndLimit(ids, params));
 }
 

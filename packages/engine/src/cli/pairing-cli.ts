@@ -101,7 +101,7 @@ export function registerPairingCli(program: Command) {
             { key: "Meta", header: "Meta", minWidth: 8, flex: true },
             { key: "Requested", header: "Requested", minWidth: 12 },
           ],
-          rows: requests.map((r) => ({
+          rows: requests.map((r: any) => ({
             Code: r.code,
             ID: r.id,
             Meta: r.meta ? JSON.stringify(r.meta) : "",

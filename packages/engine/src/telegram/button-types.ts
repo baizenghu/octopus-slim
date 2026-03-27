@@ -1,10 +1,3 @@
-// STUB: removed from Octopus slim build
-export type TelegramButtonStyle = "danger" | "success" | "primary";
-
-export type TelegramInlineButton = {
-  text: string;
-  callback_data: string;
-  style?: TelegramButtonStyle;
-};
-
-export type TelegramInlineButtons = ReadonlyArray<ReadonlyArray<TelegramInlineButton>>;
+// SLIM: removed
+export type TelegramInlineButtons = any;
+export const TelegramInlineButtons: any = undefined;

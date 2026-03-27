@@ -1,2 +1,3 @@
-// STUB: removed from Octopus slim build
-export { startBrowserControlServiceFromConfig, stopBrowserControlService } from "./control-service.js";
+// SLIM: removed
+export const startBrowserControlServiceFromConfig: any = undefined;
+export const startBrowserControlServerFromConfig: any = undefined;

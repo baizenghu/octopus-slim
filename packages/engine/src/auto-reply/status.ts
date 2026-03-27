@@ -351,7 +351,7 @@ const formatMediaUnderstandingLine = (decisions?: ReadonlyArray<MediaUnderstandi
       const count = decision.attachments.length;
       const countLabel = count > 1 ? ` x${count}` : "";
       if (decision.outcome === "success") {
-        const chosen = decision.attachments.find((entry) => entry.chosen)?.chosen;
+        const chosen = decision.attachments.find((entry: any) => entry.chosen)?.chosen;
         const provider = chosen?.provider?.trim();
         const model = chosen?.model?.trim();
         const modelLabel = provider ? (model ? `${provider}/${model}` : provider) : null;
@@ -368,7 +368,7 @@ const formatMediaUnderstandingLine = (decisions?: ReadonlyArray<MediaUnderstandi
       }
       if (decision.outcome === "skipped") {
         const reason = decision.attachments
-          .flatMap((entry) => entry.attempts.map((attempt) => attempt.reason).filter(Boolean))
+          .flatMap((entry: any) => entry.attempts.map((attempt: any) => attempt.reason).filter(Boolean))
           .find(Boolean);
         const shortReason = reason ? reason.split(":")[0]?.trim() : undefined;
         return `${decision.capability} skipped${shortReason ? ` (${shortReason})` : ""}`;

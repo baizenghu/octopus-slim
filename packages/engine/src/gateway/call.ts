@@ -314,7 +314,7 @@ async function resolveGatewaySecretInputString(params: {
     value: params.value,
     env: params.env,
     normalize: trimToUndefined,
-    onResolveRefError: (error) => {
+    onResolveRefError: (error: any) => {
       const detail = error instanceof Error ? error.message : String(error);
       throw new Error(`${params.path} secret reference could not be resolved: ${detail}`, {
         cause: error,

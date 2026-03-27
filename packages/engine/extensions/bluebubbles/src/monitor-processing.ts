@@ -525,7 +525,7 @@ export async function processMessage(
     allowFrom: configuredAllowFrom,
     groupAllowFrom: account.config.groupAllowFrom,
     storeAllowFrom,
-    isSenderAllowed: (allowFrom) =>
+    isSenderAllowed: (allowFrom: any) =>
       isAllowedBlueBubblesSender({
         allowFrom,
         sender: message.senderId,
@@ -607,14 +607,14 @@ export async function processMessage(
           runtime.log?.(`[bluebubbles] pairing request sender=${message.senderId} created=true`);
           logVerbose(core, runtime, `bluebubbles pairing request sender=${message.senderId}`);
         },
-        sendPairingReply: async (text) => {
+        sendPairingReply: async (text: any) => {
           await sendMessageBlueBubbles(message.senderId, text, {
             cfg: config,
             accountId: account.accountId,
           });
           statusSink?.({ lastOutboundAt: Date.now() });
         },
-        onReplyError: (err) => {
+        onReplyError: (err: any) => {
           logVerbose(
             core,
             runtime,
@@ -1414,7 +1414,7 @@ export async function processReaction(
     allowFrom: account.config.allowFrom,
     groupAllowFrom: account.config.groupAllowFrom,
     storeAllowFrom,
-    isSenderAllowed: (allowFrom) =>
+    isSenderAllowed: (allowFrom: any) =>
       isAllowedBlueBubblesSender({
         allowFrom,
         sender: reaction.senderId,

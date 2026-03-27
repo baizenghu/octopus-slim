@@ -248,7 +248,7 @@ export function parseBlueBubblesTarget(raw: string): BlueBubblesTarget {
     trimmed,
     lower,
     servicePrefixes: SERVICE_PREFIXES,
-    isChatTarget: (remainderLower) =>
+    isChatTarget: (remainderLower: any) =>
       CHAT_ID_PREFIXES.some((p) => remainderLower.startsWith(p)) ||
       CHAT_GUID_PREFIXES.some((p) => remainderLower.startsWith(p)) ||
       CHAT_IDENTIFIER_PREFIXES.some((p) => remainderLower.startsWith(p)) ||

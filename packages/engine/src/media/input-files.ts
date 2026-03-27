@@ -1,0 +1,23 @@
+// SLIM: removed
+export type DEFAULT_INPUT_IMAGE_MAX_BYTES = any;
+export const DEFAULT_INPUT_IMAGE_MAX_BYTES: any = undefined;
+export type DEFAULT_INPUT_IMAGE_MIMES = any;
+export const DEFAULT_INPUT_IMAGE_MIMES: any = undefined;
+export type DEFAULT_INPUT_MAX_REDIRECTS = any;
+export const DEFAULT_INPUT_MAX_REDIRECTS: any = undefined;
+export type DEFAULT_INPUT_TIMEOUT_MS = any;
+export const DEFAULT_INPUT_TIMEOUT_MS: any = undefined;
+export type InputFileLimits = any;
+export const InputFileLimits: any = undefined;
+export type InputImageLimits = any;
+export const InputImageLimits: any = undefined;
+export type InputImageSource = any;
+export const InputImageSource: any = undefined;
+export type extractFileContentFromSource = any;
+export const extractFileContentFromSource: any = undefined;
+export type extractImageContentFromSource = any;
+export const extractImageContentFromSource: any = undefined;
+export type normalizeMimeList = any;
+export const normalizeMimeList: any = undefined;
+export type resolveInputFileLimits = any;
+export const resolveInputFileLimits: any = undefined;

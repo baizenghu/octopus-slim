@@ -482,7 +482,7 @@ export async function promptSingleChannelToken(params: {
     String(
       await params.prompter.text({
         message: params.inputPrompt,
-        validate: (value) => (value?.trim() ? undefined : "Required"),
+        validate: (value: any) => (value?.trim() ? undefined : "Required"),
       }),
     ).trim();
 
@@ -622,7 +622,7 @@ export async function promptParsedAllowFromForScopedChannel(params: {
     message: params.message,
     placeholder: params.placeholder,
     initialValue: existing[0] ? String(existing[0]) : undefined,
-    validate: (value) => {
+    validate: (value: any) => {
       const raw = String(value ?? "").trim();
       if (!raw) {
         return "Required";
@@ -695,7 +695,7 @@ export async function promptResolvedAllowFrom(params: {
       message: params.message,
       placeholder: params.placeholder,
       initialValue: params.existing[0] ? String(params.existing[0]) : undefined,
-      validate: (value) => (String(value ?? "").trim() ? undefined : "Required"),
+      validate: (value: any) => (String(value ?? "").trim() ? undefined : "Required"),
     });
     const parts = params.parseInputs(String(entry));
     if (!params.token) {

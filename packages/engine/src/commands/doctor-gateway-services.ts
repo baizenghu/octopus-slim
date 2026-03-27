@@ -165,7 +165,7 @@ async function cleanupLegacyLinuxUserServices(
       stdout: process.stdout,
     });
     const removedByLabel: Map<string, (typeof removedUnits)[number]> = new Map(
-      removedUnits.map((unit) => [`${unit.name}.service`, unit] as const),
+      removedUnits.map((unit: any) => [`${unit.name}.service`, unit] as const),
     );
     for (const svc of services) {
       const removedUnit = removedByLabel.get(svc.label);
@@ -288,14 +288,14 @@ export async function maybeRepairGatewayServiceConfig(
 
   note(
     audit.issues
-      .map((issue) =>
+      .map((issue: any) =>
         issue.detail ? `- ${issue.message} (${issue.detail})` : `- ${issue.message}`,
       )
       .join("\n"),
     "Gateway service config",
   );
 
-  const aggressiveIssues = audit.issues.filter((issue) => issue.level === "aggressive");
+  const aggressiveIssues = audit.issues.filter((issue: any) => issue.level === "aggressive");
   const needsAggressive = aggressiveIssues.length > 0;
 
   if (needsAggressive && !prompter.shouldForce) {
@@ -386,11 +386,11 @@ export async function maybeScanExtraGatewayServices(
   }
 
   note(
-    extraServices.map((svc) => `- ${svc.label} (${svc.scope}, ${svc.detail})`).join("\n"),
+    extraServices.map((svc: any) => `- ${svc.label} (${svc.scope}, ${svc.detail})`).join("\n"),
     "Other gateway-like services detected",
   );
 
-  const legacyServices = extraServices.filter((svc) => svc.legacy === true);
+  const legacyServices = extraServices.filter((svc: any) => svc.legacy === true);
   if (legacyServices.length > 0) {
     const shouldRemove = await prompter.confirmSkipInNonInteractive({
       message: "Remove legacy gateway services (clawdbot/moltbot) now?",
@@ -427,7 +427,7 @@ export async function maybeScanExtraGatewayServices(
 
   const cleanupHints = renderGatewayServiceCleanupHints();
   if (cleanupHints.length > 0) {
-    note(cleanupHints.map((hint) => `- ${hint}`).join("\n"), "Cleanup hints");
+    note(cleanupHints.map((hint: any) => `- ${hint}`).join("\n"), "Cleanup hints");
   }
 
   note(
