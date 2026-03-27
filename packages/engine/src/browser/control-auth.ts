@@ -1,98 +1,17 @@
-import type { OctopusConfig } from "../config/config.js";
-import { loadConfig } from "../config/config.js";
-import { resolveGatewayAuth } from "../gateway/auth.js";
-import { ensureGatewayStartupAuth } from "../gateway/startup-auth.js";
+// STUB: removed from Octopus slim build
 
 export type BrowserControlAuth = {
   token?: string;
   password?: string;
+  secret?: string;
+  auth?: { token?: string; password?: string };
+  [key: string]: unknown;
 };
 
-export function resolveBrowserControlAuth(
-  cfg: OctopusConfig | undefined,
-  env: NodeJS.ProcessEnv = process.env,
-): BrowserControlAuth {
-  const auth = resolveGatewayAuth({
-    authConfig: cfg?.gateway?.auth,
-    env,
-    tailscaleMode: cfg?.gateway?.tailscale?.mode,
-  });
-  const token = typeof auth.token === "string" ? auth.token.trim() : "";
-  const password = typeof auth.password === "string" ? auth.password.trim() : "";
-  return {
-    token: token || undefined,
-    password: password || undefined,
-  };
+export function resolveBrowserControlAuth(..._args: unknown[]): BrowserControlAuth | null {
+  return null;
 }
 
-function shouldAutoGenerateBrowserAuth(env: NodeJS.ProcessEnv): boolean {
-  const nodeEnv = (env.NODE_ENV ?? "").trim().toLowerCase();
-  if (nodeEnv === "test") {
-    return false;
-  }
-  const vitest = (env.VITEST ?? "").trim().toLowerCase();
-  if (vitest && vitest !== "0" && vitest !== "false" && vitest !== "off") {
-    return false;
-  }
-  return true;
-}
-
-export async function ensureBrowserControlAuth(params: {
-  cfg: OctopusConfig;
-  env?: NodeJS.ProcessEnv;
-}): Promise<{
-  auth: BrowserControlAuth;
-  generatedToken?: string;
-}> {
-  const env = params.env ?? process.env;
-  const auth = resolveBrowserControlAuth(params.cfg, env);
-  if (auth.token || auth.password) {
-    return { auth };
-  }
-  if (!shouldAutoGenerateBrowserAuth(env)) {
-    return { auth };
-  }
-
-  // Respect explicit password mode even if currently unset.
-  if (params.cfg.gateway?.auth?.mode === "password") {
-    return { auth };
-  }
-
-  if (params.cfg.gateway?.auth?.mode === "none") {
-    return { auth };
-  }
-
-  if (params.cfg.gateway?.auth?.mode === "trusted-proxy") {
-    return { auth };
-  }
-
-  // Re-read latest config to avoid racing with concurrent config writers.
-  const latestCfg = loadConfig();
-  const latestAuth = resolveBrowserControlAuth(latestCfg, env);
-  if (latestAuth.token || latestAuth.password) {
-    return { auth: latestAuth };
-  }
-  if (latestCfg.gateway?.auth?.mode === "password") {
-    return { auth: latestAuth };
-  }
-  if (latestCfg.gateway?.auth?.mode === "none") {
-    return { auth: latestAuth };
-  }
-  if (latestCfg.gateway?.auth?.mode === "trusted-proxy") {
-    return { auth: latestAuth };
-  }
-
-  const ensured = await ensureGatewayStartupAuth({
-    cfg: latestCfg,
-    env,
-    persist: true,
-  });
-  const ensuredAuth = {
-    token: ensured.auth.token,
-    password: ensured.auth.password,
-  };
-  return {
-    auth: ensuredAuth,
-    generatedToken: ensured.generatedToken,
-  };
+export async function ensureBrowserControlAuth(_params: unknown): Promise<BrowserControlAuth> {
+  throw new Error("Browser not available in Octopus slim build");
 }

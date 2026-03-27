@@ -1,3 +1,4 @@
+// STUB: removed from Octopus slim build
 export const DEFAULT_OCTOPUS_BROWSER_ENABLED = true;
 export const DEFAULT_BROWSER_EVALUATE_ENABLED = true;
 export const DEFAULT_OCTOPUS_BROWSER_COLOR = "#FF4500";
