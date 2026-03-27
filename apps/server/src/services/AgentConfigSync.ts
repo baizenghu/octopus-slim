@@ -49,7 +49,7 @@ function computeMcpDenyTools(mcpFilter: string[] | null): string[] {
 /**
  * 计算 tools RPC 参数（profile + alsoAllow + deny）
  */
-function computeToolsUpdate(
+export function computeToolsUpdate(
   agentName: string,
   toolsFilter: string[] | null | undefined,
   mcpFilter: string[] | null | undefined,

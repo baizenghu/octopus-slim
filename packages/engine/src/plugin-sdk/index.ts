@@ -804,6 +804,7 @@ export type { ContextEngineFactory } from "../context-engine/registry.js";
 // Agent store
 export type { AgentStore, AgentStoreEntry } from "../agents/store.js";
 export { registerAgentStore, resolveAgentStore } from "../agents/store-registry.js";
+export { refreshAgentStoreCache, invalidateAgentStoreCache } from "../agents/agent-scope.js";
 
 // Model authentication types for plugins.
 // Plugins should use runtime.modelAuth (which strips unsafe overrides like

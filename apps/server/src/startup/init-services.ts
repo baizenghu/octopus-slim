@@ -172,6 +172,9 @@ export async function initServices(config: AppConfig): Promise<Services> {
         const { registerAgentStore } = await import('@octopus/engine/plugin-sdk');
         const prismaStore = new PrismaAgentStore(prismaClient);
         registerAgentStore('prisma', prismaStore);
+        // 预加载 agent 缓存，让引擎运行时同步读取 DB 中的 agent 配置
+        const { refreshAgentStoreCache } = await import('@octopus/engine/plugin-sdk');
+        await refreshAgentStoreCache();
         logger.info('AgentStore: PrismaAgentStore registered (DB-backed)');
       }
 

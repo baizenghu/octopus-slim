@@ -13,7 +13,35 @@ import {
 import { resolveUserPath } from "../utils.js";
 import { normalizeSkillFilter } from "./skills/filter.js";
 import { resolveDefaultAgentWorkspaceDir } from "./workspace.js";
+import { resolveAgentStore } from "./store-registry.js";
 const log = createSubsystemLogger("agent-scope");
+
+// ── AgentStore 同步缓存 ──
+// listAgentEntries 是同步函数（50+ 处调用），无法改为 async。
+// 通过缓存层让它读 AgentStore 的数据：
+// - 引擎启动时和 agent 变更时异步刷新缓存
+// - listAgentEntries 优先从缓存读，回退到 config.agents.list
+let _agentStoreCache: AgentEntry[] | null = null;
+let _agentStoreCacheTs = 0;
+const AGENT_STORE_CACHE_TTL = 5_000; // 5s TTL
+
+/** 异步刷新 AgentStore 缓存（供启动时和 agent 变更时调用） */
+export async function refreshAgentStoreCache(): Promise<void> {
+  try {
+    const store = resolveAgentStore();
+    const entries = await store.list();
+    _agentStoreCache = entries as AgentEntry[];
+    _agentStoreCacheTs = Date.now();
+  } catch {
+    // AgentStore 不可用时静默回退到 config
+  }
+}
+
+/** 使缓存失效（agent 变更后调用） */
+export function invalidateAgentStoreCache(): void {
+  _agentStoreCache = null;
+  _agentStoreCacheTs = 0;
+}
 
 /** Strip null bytes from paths to prevent ENOTDIR errors. */
 function stripNullBytes(s: string): string {
@@ -44,6 +72,16 @@ type ResolvedAgentConfig = {
 let defaultAgentWarned = false;
 
 export function listAgentEntries(cfg: OctopusConfig): AgentEntry[] {
+  // 优先从 AgentStore 缓存读取（DB-backed agent 配置）
+  if (_agentStoreCache && (Date.now() - _agentStoreCacheTs < AGENT_STORE_CACHE_TTL)) {
+    return _agentStoreCache;
+  }
+  // 缓存过期时异步刷新（不阻塞当前调用）
+  if (_agentStoreCache && (Date.now() - _agentStoreCacheTs >= AGENT_STORE_CACHE_TTL)) {
+    refreshAgentStoreCache().catch(() => {});
+    return _agentStoreCache; // 用旧缓存兜底
+  }
+  // 无缓存时回退到 config.agents.list（兼容无 AgentStore 的原生模式）
   const list = cfg.agents?.list;
   if (!Array.isArray(list)) {
     return [];

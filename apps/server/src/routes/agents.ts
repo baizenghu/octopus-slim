@@ -19,7 +19,7 @@ import type { WorkspaceManager } from '@octopus/workspace';
 import { createAuthMiddleware, type AuthenticatedRequest } from '../middleware/auth';
 import { EngineAdapter } from '../services/EngineAdapter';
 import { TenantEngineAdapter } from '../services/TenantEngineAdapter';
-import { syncAgentToEngine, ensureAndSyncNativeAgent } from '../services/AgentConfigSync';
+import { syncAgentToEngine, ensureAndSyncNativeAgent, computeToolsUpdate } from '../services/AgentConfigSync';
 import { invalidatePromptCache } from '../services/SystemPromptBuilder';
 import { createAvatarUpload, mimeToExt } from '../utils/avatar';
 import { createLogger } from '../utils/logger';
@@ -185,6 +185,10 @@ export function createAgentsRouter(
     ]);
 
     const defaultMcpFilter = mcpServers.map((s: { id: string }) => s.id);
+    const defaultToolsFilter = ['read', 'write', 'exec'];
+    const defaultSkillsFilter = skills.map((s: { name: string }) => s.name);
+    // 计算 tools deny/profile 写入 DB（引擎通过 AgentStore 从 DB 读取）
+    const defaultTools = computeToolsUpdate('default', defaultToolsFilter, defaultMcpFilter, defaultSkillsFilter, []);
     await prisma.agent.create({
       data: {
         id: randomUUID().replace(/-/g, '').slice(0, 16),
@@ -194,15 +198,17 @@ export function createAgentsRouter(
         enabled: true,
         isDefault: true,
         identity: { name: 'Octopus AI', emoji: '🐙' },
-        toolsFilter: ['read', 'write', 'exec'],
-        skillsFilter: skills.map((s: { name: string }) => s.name),
+        toolsFilter: defaultToolsFilter,
+        skillsFilter: defaultSkillsFilter,
         mcpFilter: defaultMcpFilter,
         allowedConnections: connections.map((c: { name: string }) => c.name),
+        toolsProfile: defaultTools.profile,
+        toolsDeny: defaultTools.deny ?? [],
+        toolsAllow: defaultTools.alsoAllow,
       },
     });
 
     // 首次创建 default agent 时同步 TOOLS.md（包含原生工具 + MCP 工具）
-    const defaultToolsFilter = ['read', 'write', 'exec'];
     syncToolsMd(userId, 'default', defaultMcpFilter, defaultToolsFilter).catch((e: unknown) =>
       logger.error('[agents] syncToolsMd for new default agent failed:', { error: e instanceof Error ? e.message : String(e) }),
     );
@@ -239,6 +245,9 @@ export function createAgentsRouter(
         return;
       }
 
+      // 计算 tools deny/profile/alsoAllow 写入 DB（引擎通过 AgentStore 从 DB 读取）
+      const computedTools = computeToolsUpdate(name.trim(), toolsFilter ?? [], mcpFilter ?? [], skillsFilter ?? [], []);
+
       const agent = await prisma.agent.create({
         data: {
           id: randomUUID().replace(/-/g, '').slice(0, 16),
@@ -252,6 +261,9 @@ export function createAgentsRouter(
           mcpFilter: mcpFilter ?? [],
           toolsFilter: toolsFilter ?? [],
           allowedConnections: allowedConnections ?? [],
+          toolsProfile: computedTools.profile,
+          toolsDeny: computedTools.deny ?? [],
+          toolsAllow: computedTools.alsoAllow,
           enabled: true,
           isDefault: false,
         },
@@ -316,6 +328,17 @@ export function createAgentsRouter(
       if (toolsFilter !== undefined) data.toolsFilter = toolsFilter;
       if (allowedConnections !== undefined) data.allowedConnections = allowedConnections;
       if (enabled !== undefined) data.enabled = Boolean(enabled);
+
+      // 重新计算 tools deny/profile（引擎通过 AgentStore 从 DB 读取）
+      if (toolsFilter !== undefined || mcpFilter !== undefined || skillsFilter !== undefined) {
+        const finalToolsFilter = toolsFilter ?? existing.toolsFilter as string[] ?? [];
+        const finalMcpFilter = mcpFilter ?? existing.mcpFilter as string[] ?? [];
+        const finalSkillsFilter = skillsFilter ?? existing.skillsFilter as string[] ?? [];
+        const computed = computeToolsUpdate(existing.name, finalToolsFilter, finalMcpFilter, finalSkillsFilter, []);
+        data.toolsProfile = computed.profile;
+        data.toolsDeny = computed.deny ?? [];
+        data.toolsAllow = computed.alsoAllow;
+      }
 
       const agent = await prisma.agent.update({
         where: { id },
