@@ -1,4 +1,4 @@
-import { stopBrowserBridgeServer } from "../../browser/bridge-server.js";
+import { stopBrowserBridgeServer } from "../../browser/index.js";
 import { loadConfig } from "../../config/config.js";
 import { BROWSER_BRIDGES } from "./browser-bridges.js";
 import { resolveSandboxConfigForAgent } from "./config.js";

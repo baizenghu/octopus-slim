@@ -27,8 +27,6 @@ const browserClientMocks = vi.hoisted(() => ({
   browserStop: vi.fn(async (..._args: unknown[]) => ({})),
   browserTabs: vi.fn(async (..._args: unknown[]): Promise<Array<Record<string, unknown>>> => []),
 }));
-vi.mock("../../browser/client.js", () => browserClientMocks);
-
 const browserActionsMocks = vi.hoisted(() => ({
   browserAct: vi.fn(async () => ({ ok: true })),
   browserArmDialog: vi.fn(async () => ({ ok: true })),
@@ -48,7 +46,6 @@ const browserActionsMocks = vi.hoisted(() => ({
   browserPdfSave: vi.fn(async () => ({ ok: true, path: "/tmp/test.pdf" })),
   browserScreenshotAction: vi.fn(async () => ({ ok: true, path: "/tmp/test.png" })),
 }));
-vi.mock("../../browser/client-actions.js", () => browserActionsMocks);
 
 const browserConfigMocks = vi.hoisted(() => ({
   resolveBrowserConfig: vi.fn(() => ({
@@ -56,7 +53,6 @@ const browserConfigMocks = vi.hoisted(() => ({
     controlPort: 18791,
   })),
 }));
-vi.mock("../../browser/config.js", () => browserConfigMocks);
 
 const nodesUtilsMocks = vi.hoisted(() => ({
   listNodes: vi.fn(async (..._args: unknown[]): Promise<Array<Record<string, unknown>>> => []),
@@ -86,7 +82,17 @@ const sessionTabRegistryMocks = vi.hoisted(() => ({
   trackSessionBrowserTab: vi.fn(),
   untrackSessionBrowserTab: vi.fn(),
 }));
-vi.mock("../../browser/session-tab-registry.js", () => sessionTabRegistryMocks);
+vi.mock("../../browser/index.js", () => ({
+  ...browserClientMocks,
+  ...browserActionsMocks,
+  ...browserConfigMocks,
+  ...sessionTabRegistryMocks,
+  DEFAULT_AI_SNAPSHOT_MAX_CHARS: 0,
+  DEFAULT_UPLOAD_DIR: '',
+  resolveExistingPathsWithinRoot: vi.fn(),
+  applyBrowserProxyPaths: vi.fn(),
+  persistBrowserProxyFiles: vi.fn(),
+}));
 
 const toolCommonMocks = vi.hoisted(() => ({
   imageResultFromFile: vi.fn(),
@@ -99,7 +105,7 @@ vi.mock("./common.js", async () => {
   };
 });
 
-import { DEFAULT_AI_SNAPSHOT_MAX_CHARS } from "../../browser/constants.js";
+import { DEFAULT_AI_SNAPSHOT_MAX_CHARS } from "../../browser/index.js";
 import { createBrowserTool } from "./browser-tool.js";
 
 function mockSingleBrowserProxyNode() {

@@ -23,7 +23,7 @@ vi.mock("../../hooks/internal-hooks.js", () => ({
 vi.mock("../../link-understanding/apply.js", () => ({
   applyLinkUnderstanding: mocks.applyLinkUnderstanding,
 }));
-vi.mock("../../media-understanding/apply.js", () => ({
+vi.mock("../../media-understanding/index.js", () => ({
   applyMediaUnderstanding: mocks.applyMediaUnderstanding,
 }));
 vi.mock("./commands-core.js", () => ({

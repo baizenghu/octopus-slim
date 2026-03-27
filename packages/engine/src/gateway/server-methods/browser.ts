@@ -2,9 +2,10 @@ import crypto from "node:crypto";
 import {
   createBrowserControlContext,
   startBrowserControlServiceFromConfig,
-} from "../../browser/control-service.js";
-import { applyBrowserProxyPaths, persistBrowserProxyFiles } from "../../browser/proxy-files.js";
-import { createBrowserRouteDispatcher } from "../../browser/routes/dispatcher.js";
+  applyBrowserProxyPaths,
+  persistBrowserProxyFiles,
+  createBrowserRouteDispatcher,
+} from "../../browser/index.js";
 import { loadConfig } from "../../config/config.js";
 import { isNodeCommandAllowed, resolveNodeCommandAllowlist } from "../node-command-policy.js";
 import type { NodeSession } from "../node-registry.js";

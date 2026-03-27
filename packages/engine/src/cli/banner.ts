@@ -3,7 +3,10 @@ import { resolveCommitHash } from "../infra/git-commit.js";
 import { visibleWidth } from "../terminal/ansi.js";
 import { isRich, theme } from "../terminal/theme.js";
 import { hasRootVersionAlias } from "./argv.js";
-import { pickTagline, type TaglineMode, type TaglineOptions } from "./tagline.js";
+// SLIM: tagline module removed
+type TaglineMode = "random" | "default" | "off";
+type TaglineOptions = { mode?: TaglineMode; env?: Record<string, string | undefined> };
+const pickTagline = (_opts?: TaglineOptions): string => "";
 
 type BannerOptions = TaglineOptions & {
   argv?: string[];

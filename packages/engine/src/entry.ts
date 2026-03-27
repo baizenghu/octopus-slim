@@ -180,8 +180,8 @@ if (
     }
 
     if (!tryHandleRootVersionFastPath(process.argv) && !tryHandleRootHelpFastPath(process.argv)) {
-      import("./cli/run-main.js")
-        .then(({ runCli }) => runCli(process.argv))
+      import("./cli/program.js")
+        .then(({ buildProgram }) => buildProgram().parseAsync(process.argv))
         .catch((error) => {
           console.error(
             "[octopus] Failed to start CLI:",

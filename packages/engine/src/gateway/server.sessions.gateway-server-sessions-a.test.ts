@@ -126,8 +126,8 @@ vi.mock("../acp/runtime/registry.js", async (importOriginal) => {
   };
 });
 
-vi.mock("../browser/session-tab-registry.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../browser/session-tab-registry.js")>();
+vi.mock("../browser/index.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../browser/index.js")>();
   return {
     ...actual,
     closeTrackedBrowserTabsForSessions: browserSessionTabMocks.closeTrackedBrowserTabsForSessions,

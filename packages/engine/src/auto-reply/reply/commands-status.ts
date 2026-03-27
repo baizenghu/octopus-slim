@@ -18,7 +18,7 @@ import {
   loadProviderUsageSummary,
   resolveUsageProviderId,
 } from "../../infra/provider-usage.js";
-import type { MediaUnderstandingDecision } from "../../media-understanding/types.js";
+import type { MediaUnderstandingDecision } from "../../media-understanding/index.js";
 import { normalizeGroupActivation } from "../group-activation.js";
 import { resolveSelectedAndActiveModel } from "../model-runtime.js";
 import { buildStatusMessage } from "../status.js";

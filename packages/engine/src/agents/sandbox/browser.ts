@@ -1,11 +1,13 @@
 import crypto from "node:crypto";
-import { startBrowserBridgeServer, stopBrowserBridgeServer } from "../../browser/bridge-server.js";
-import { type ResolvedBrowserConfig, resolveProfile } from "../../browser/config.js";
 import {
+  startBrowserBridgeServer,
+  stopBrowserBridgeServer,
+  type ResolvedBrowserConfig,
+  resolveProfile,
   DEFAULT_BROWSER_EVALUATE_ENABLED,
   DEFAULT_OCTOPUS_BROWSER_COLOR,
   DEFAULT_OCTOPUS_BROWSER_PROFILE_NAME,
-} from "../../browser/constants.js";
+} from "../../browser/index.js";
 import { deriveDefaultBrowserCdpPortRange } from "../../config/port-defaults.js";
 import { defaultRuntime } from "../../runtime.js";
 import { BROWSER_BRIDGES } from "./browser-bridges.js";

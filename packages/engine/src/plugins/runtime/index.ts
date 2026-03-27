@@ -4,7 +4,7 @@ import {
   resolveApiKeyForProvider as resolveApiKeyForProviderRaw,
 } from "../../agents/model-auth.js";
 import { resolveStateDir } from "../../config/paths.js";
-import { transcribeAudioFile } from "../../media-understanding/transcribe-audio.js";
+import { transcribeAudioFile } from "../../media-understanding/index.js";
 import { textToSpeechTelephony } from "../../tts/tts.js";
 import { createRuntimeChannel } from "./runtime-channel.js";
 import { createRuntimeConfig } from "./runtime-config.js";

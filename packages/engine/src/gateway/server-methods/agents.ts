@@ -18,7 +18,7 @@ import {
   ensureAgentWorkspace,
   isWorkspaceOnboardingCompleted,
 } from "../../agents/workspace.js";
-import { movePathToTrash } from "../../browser/trash.js";
+import { movePathToTrash } from "../../browser/index.js";
 import {
   applyAgentConfig,
   findAgentEntryIndex,

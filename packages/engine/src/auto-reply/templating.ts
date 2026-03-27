@@ -2,7 +2,7 @@ import type { ChannelId } from "../channels/plugins/types.js";
 import type {
   MediaUnderstandingDecision,
   MediaUnderstandingOutput,
-} from "../media-understanding/types.js";
+} from "../media-understanding/index.js";
 import type { InputProvenance } from "../sessions/input-provenance.js";
 import type { StickerMetadata } from "../telegram/bot/types.js";
 import type { InternalMessageChannel } from "../utils/message-channel.js";

@@ -14,7 +14,7 @@ registerGetReplyCommonMocks();
 vi.mock("../../link-understanding/apply.js", () => ({
   applyLinkUnderstanding: vi.fn(async () => undefined),
 }));
-vi.mock("../../media-understanding/apply.js", () => ({
+vi.mock("../../media-understanding/index.js", () => ({
   applyMediaUnderstanding: vi.fn(async () => undefined),
 }));
 vi.mock("./commands-core.js", () => ({

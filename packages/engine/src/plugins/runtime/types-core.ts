@@ -28,10 +28,10 @@ export type PluginRuntimeCore = {
     resizeToJpeg: typeof import("../../media/image-ops.js").resizeToJpeg;
   };
   tts: {
-    textToSpeechTelephony: typeof import("../../tts/tts.js").textToSpeechTelephony;
+    textToSpeechTelephony: (...args: any[]) => any;
   };
   stt: {
-    transcribeAudioFile: typeof import("../../media-understanding/transcribe-audio.js").transcribeAudioFile;
+    transcribeAudioFile: (...args: any[]) => any;
   };
   tools: {
     createMemoryGetTool: typeof import("../../agents/tools/memory-tool.js").createMemoryGetTool;

@@ -10,7 +10,7 @@ import { DEFAULT_AGENT_WORKSPACE_DIR, ensureAgentWorkspace } from "../../agents/
 import { resolveChannelModelOverride } from "../../channels/model-overrides.js";
 import { type OctopusConfig, loadConfig } from "../../config/config.js";
 // SLIM: link-understanding/ removed — import { applyLinkUnderstanding } from "../../link-understanding/apply.js";
-import { applyMediaUnderstanding } from "../../media-understanding/apply.js";
+import { applyMediaUnderstanding } from "../../media-understanding/index.js";
 import { defaultRuntime } from "../../runtime.js";
 import { normalizeStringEntries } from "../../shared/string-normalization.js";
 import { resolveCommandAuthorization } from "../command-auth.js";

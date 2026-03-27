@@ -38,7 +38,7 @@ const PLUGIN_REQUIRED_COMMANDS = new Set([
 ]);
 const CONFIG_GUARD_BYPASS_COMMANDS = new Set(["backup", "doctor", "completion", "secrets"]);
 const JSON_PARSE_ONLY_COMMANDS = new Set(["config set"]);
-let configGuardModulePromise: Promise<typeof import("./config-guard.js")> | undefined;
+let configGuardModulePromise: Promise<{ loadAndMaybeMigrateDoctorConfig: () => Promise<void>; ensureConfigReady: (...args: any[]) => Promise<void> }> | undefined;
 let pluginRegistryModulePromise: Promise<typeof import("../plugin-registry.js")> | undefined;
 
 function shouldBypassConfigGuard(commandPath: string[]): boolean {
@@ -58,7 +58,7 @@ function shouldBypassConfigGuard(commandPath: string[]): boolean {
 }
 
 function loadConfigGuardModule() {
-  configGuardModulePromise ??= import("./config-guard.js");
+  configGuardModulePromise ??= Promise.resolve({ loadAndMaybeMigrateDoctorConfig: async () => {}, ensureConfigReady: async () => {} });
   return configGuardModulePromise;
 }
 

@@ -809,7 +809,7 @@ export async function startGatewayServer(
     },
   });
 
-  const canvasHostServerPort = (canvasHostServer as CanvasHostServer | null)?.port;
+  const canvasHostServerPort = (canvasHostServer as CanvasHostServer | null)?.port ?? undefined;
 
   const gatewayRequestContext: import("./server-methods/types.js").GatewayRequestContext = {
     deps,

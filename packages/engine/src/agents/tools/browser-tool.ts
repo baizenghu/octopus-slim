@@ -6,8 +6,6 @@ import {
   browserNavigate,
   browserPdfSave,
   browserScreenshotAction,
-} from "../../browser/client-actions.js";
-import {
   browserCloseTab,
   browserFocusTab,
   browserOpenTab,
@@ -15,14 +13,14 @@ import {
   browserStart,
   browserStatus,
   browserStop,
-} from "../../browser/client.js";
-import { resolveBrowserConfig } from "../../browser/config.js";
-import { DEFAULT_UPLOAD_DIR, resolveExistingPathsWithinRoot } from "../../browser/paths.js";
-import { applyBrowserProxyPaths, persistBrowserProxyFiles } from "../../browser/proxy-files.js";
-import {
+  resolveBrowserConfig,
+  DEFAULT_UPLOAD_DIR,
+  resolveExistingPathsWithinRoot,
+  applyBrowserProxyPaths,
+  persistBrowserProxyFiles,
   trackSessionBrowserTab,
   untrackSessionBrowserTab,
-} from "../../browser/session-tab-registry.js";
+} from "../../browser/index.js";
 import { loadConfig } from "../../config/config.js";
 import {
   executeActAction,

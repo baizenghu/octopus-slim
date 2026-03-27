@@ -1,7 +1,6 @@
 import { isValueToken } from "../../infra/cli-root-options.js";
 import { defaultRuntime } from "../../runtime.js";
 import {
-  getCommandPositionalsWithRootOptions,
   getFlagValue,
   getPositiveIntFlagValue,
   getVerboseFlag,
@@ -53,41 +52,7 @@ const routeStatus: RouteSpec = {
   },
 };
 
-const routeSessions: RouteSpec = {
-  // Fast-path only bare `sessions`; subcommands (e.g. `sessions cleanup`)
-  // must fall through to Commander so nested handlers run.
-  match: (path) => path[0] === "sessions" && !path[1],
-  run: async (argv) => {
-    const json = hasFlag(argv, "--json");
-    const allAgents = hasFlag(argv, "--all-agents");
-    const agent = getFlagValue(argv, "--agent");
-    if (agent === null) {
-      return false;
-    }
-    const store = getFlagValue(argv, "--store");
-    if (store === null) {
-      return false;
-    }
-    const active = getFlagValue(argv, "--active");
-    if (active === null) {
-      return false;
-    }
-    const { sessionsCommand } = await import("../../commands/sessions.js");
-    await sessionsCommand({ json, store, agent, allAgents, active }, defaultRuntime);
-    return true;
-  },
-};
-
-const routeAgentsList: RouteSpec = {
-  match: (path) => path[0] === "agents" && path[1] === "list",
-  run: async (argv) => {
-    const json = hasFlag(argv, "--json");
-    const bindings = hasFlag(argv, "--bindings");
-    const { agentsListCommand } = await import("../../commands/agents.js");
-    await agentsListCommand({ json, bindings }, defaultRuntime);
-    return true;
-  },
-};
+// SLIM: routeSessions and routeAgentsList removed (CLI commands deleted)
 
 const routeMemoryStatus: RouteSpec = {
   match: (path) => path[0] === "memory" && path[1] === "status",
@@ -134,130 +99,14 @@ function getFlagValues(argv: string[], name: string): string[] | null {
   return values;
 }
 
-const routeConfigGet: RouteSpec = {
-  match: (path) => path[0] === "config" && path[1] === "get",
-  run: async (argv) => {
-    const positionals = getCommandPositionalsWithRootOptions(argv, {
-      commandPath: ["config", "get"],
-      booleanFlags: ["--json"],
-    });
-    if (!positionals || positionals.length !== 1) {
-      return false;
-    }
-    const pathArg = positionals[0];
-    if (!pathArg) {
-      return false;
-    }
-    const json = hasFlag(argv, "--json");
-    const { runConfigGet } = await import("../config-cli.js");
-    await runConfigGet({ path: pathArg, json });
-    return true;
-  },
-};
+// SLIM: routeConfigGet and routeConfigUnset removed (config-cli deleted)
 
-const routeConfigUnset: RouteSpec = {
-  match: (path) => path[0] === "config" && path[1] === "unset",
-  run: async (argv) => {
-    const positionals = getCommandPositionalsWithRootOptions(argv, {
-      commandPath: ["config", "unset"],
-    });
-    if (!positionals || positionals.length !== 1) {
-      return false;
-    }
-    const pathArg = positionals[0];
-    if (!pathArg) {
-      return false;
-    }
-    const { runConfigUnset } = await import("../config-cli.js");
-    await runConfigUnset({ path: pathArg });
-    return true;
-  },
-};
-
-const routeModelsList: RouteSpec = {
-  match: (path) => path[0] === "models" && path[1] === "list",
-  run: async (argv) => {
-    const provider = getFlagValue(argv, "--provider");
-    if (provider === null) {
-      return false;
-    }
-    const all = hasFlag(argv, "--all");
-    const local = hasFlag(argv, "--local");
-    const json = hasFlag(argv, "--json");
-    const plain = hasFlag(argv, "--plain");
-    const { modelsListCommand } = await import("../../commands/models.js");
-    await modelsListCommand({ all, local, provider, json, plain }, defaultRuntime);
-    return true;
-  },
-};
-
-const routeModelsStatus: RouteSpec = {
-  match: (path) => path[0] === "models" && path[1] === "status",
-  run: async (argv) => {
-    const probeProvider = getFlagValue(argv, "--probe-provider");
-    if (probeProvider === null) {
-      return false;
-    }
-    const probeTimeout = getFlagValue(argv, "--probe-timeout");
-    if (probeTimeout === null) {
-      return false;
-    }
-    const probeConcurrency = getFlagValue(argv, "--probe-concurrency");
-    if (probeConcurrency === null) {
-      return false;
-    }
-    const probeMaxTokens = getFlagValue(argv, "--probe-max-tokens");
-    if (probeMaxTokens === null) {
-      return false;
-    }
-    const agent = getFlagValue(argv, "--agent");
-    if (agent === null) {
-      return false;
-    }
-    const probeProfileValues = getFlagValues(argv, "--probe-profile");
-    if (probeProfileValues === null) {
-      return false;
-    }
-    const probeProfile =
-      probeProfileValues.length === 0
-        ? undefined
-        : probeProfileValues.length === 1
-          ? probeProfileValues[0]
-          : probeProfileValues;
-    const json = hasFlag(argv, "--json");
-    const plain = hasFlag(argv, "--plain");
-    const check = hasFlag(argv, "--check");
-    const probe = hasFlag(argv, "--probe");
-    const { modelsStatusCommand } = await import("../../commands/models.js");
-    await modelsStatusCommand(
-      {
-        json,
-        plain,
-        check,
-        probe,
-        probeProvider,
-        probeProfile,
-        probeTimeout,
-        probeConcurrency,
-        probeMaxTokens,
-        agent,
-      },
-      defaultRuntime,
-    );
-    return true;
-  },
-};
+// SLIM: routeModelsList and routeModelsStatus removed (CLI commands deleted)
 
 const routes: RouteSpec[] = [
   routeHealth,
   routeStatus,
-  routeSessions,
-  routeAgentsList,
   routeMemoryStatus,
-  routeConfigGet,
-  routeConfigUnset,
-  routeModelsList,
-  routeModelsStatus,
 ];
 
 export function findRoutedCommand(path: string[]): RouteSpec | null {

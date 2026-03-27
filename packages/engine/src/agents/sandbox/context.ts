@@ -1,6 +1,5 @@
 import fs from "node:fs/promises";
-import { DEFAULT_BROWSER_EVALUATE_ENABLED } from "../../browser/constants.js";
-import { ensureBrowserControlAuth, resolveBrowserControlAuth } from "../../browser/control-auth.js";
+import { DEFAULT_BROWSER_EVALUATE_ENABLED, ensureBrowserControlAuth, resolveBrowserControlAuth } from "../../browser/index.js";
 import type { OctopusConfig } from "../../config/config.js";
 import { loadConfig } from "../../config/config.js";
 import { defaultRuntime } from "../../runtime.js";

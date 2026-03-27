@@ -1,4 +1,4 @@
-import { stopBrowserBridgeServer } from "../../browser/bridge-server.js";
+import { stopBrowserBridgeServer } from "../../browser/index.js";
 import { defaultRuntime } from "../../runtime.js";
 import { BROWSER_BRIDGES } from "./browser-bridges.js";
 import { dockerContainerState, execDocker } from "./docker.js";
