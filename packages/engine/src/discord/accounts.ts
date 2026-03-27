@@ -1,10 +1,7 @@
-import { createAccountActionGate } from "../channels/plugins/account-action-gate.js";
+// STUB: removed from Octopus slim build
 import { createAccountListHelpers } from "../channels/plugins/account-helpers.js";
 import type { OctopusConfig } from "../config/config.js";
 import type { DiscordAccountConfig, DiscordActionConfig } from "../config/types.js";
-import { resolveAccountEntry } from "../routing/account-lookup.js";
-import { normalizeAccountId } from "../routing/session-key.js";
-import { resolveDiscordToken } from "./token.js";
 
 export type ResolvedDiscordAccount = {
   accountId: string;
@@ -23,49 +20,28 @@ export function resolveDiscordAccountConfig(
   cfg: OctopusConfig,
   accountId: string,
 ): DiscordAccountConfig | undefined {
-  return resolveAccountEntry(cfg.channels?.discord?.accounts, accountId);
+  throw new Error("Channel not available in Octopus slim build");
 }
 
 export function mergeDiscordAccountConfig(
   cfg: OctopusConfig,
   accountId: string,
 ): DiscordAccountConfig {
-  const { accounts: _ignored, ...base } = (cfg.channels?.discord ?? {}) as DiscordAccountConfig & {
-    accounts?: unknown;
-  };
-  const account = resolveDiscordAccountConfig(cfg, accountId) ?? {};
-  return { ...base, ...account };
+  throw new Error("Channel not available in Octopus slim build");
 }
 
 export function createDiscordActionGate(params: {
   cfg: OctopusConfig;
   accountId?: string | null;
 }): (key: keyof DiscordActionConfig, defaultValue?: boolean) => boolean {
-  const accountId = normalizeAccountId(params.accountId);
-  return createAccountActionGate({
-    baseActions: params.cfg.channels?.discord?.actions,
-    accountActions: resolveDiscordAccountConfig(params.cfg, accountId)?.actions,
-  });
+  throw new Error("Channel not available in Octopus slim build");
 }
 
 export function resolveDiscordAccount(params: {
   cfg: OctopusConfig;
   accountId?: string | null;
 }): ResolvedDiscordAccount {
-  const accountId = normalizeAccountId(params.accountId);
-  const baseEnabled = params.cfg.channels?.discord?.enabled !== false;
-  const merged = mergeDiscordAccountConfig(params.cfg, accountId);
-  const accountEnabled = merged.enabled !== false;
-  const enabled = baseEnabled && accountEnabled;
-  const tokenResolution = resolveDiscordToken(params.cfg, { accountId });
-  return {
-    accountId,
-    enabled,
-    name: merged.name?.trim() || undefined,
-    token: tokenResolution.token,
-    tokenSource: tokenResolution.source,
-    config: merged,
-  };
+  throw new Error("Channel not available in Octopus slim build");
 }
 
 export function resolveDiscordMaxLinesPerMessage(params: {
@@ -73,17 +49,9 @@ export function resolveDiscordMaxLinesPerMessage(params: {
   discordConfig?: DiscordAccountConfig | null;
   accountId?: string | null;
 }): number | undefined {
-  if (typeof params.discordConfig?.maxLinesPerMessage === "number") {
-    return params.discordConfig.maxLinesPerMessage;
-  }
-  return resolveDiscordAccount({
-    cfg: params.cfg,
-    accountId: params.accountId,
-  }).config.maxLinesPerMessage;
+  throw new Error("Channel not available in Octopus slim build");
 }
 
 export function listEnabledDiscordAccounts(cfg: OctopusConfig): ResolvedDiscordAccount[] {
-  return listDiscordAccountIds(cfg)
-    .map((accountId) => resolveDiscordAccount({ cfg, accountId }))
-    .filter((account) => account.enabled);
+  throw new Error("Channel not available in Octopus slim build");
 }

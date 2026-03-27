@@ -1,3 +1,4 @@
+// STUB: removed from Octopus slim build
 import type { Message, UserFromGetMe } from "@grammyjs/types";
 
 /** App-specific stream mode for Telegram stream previews. */

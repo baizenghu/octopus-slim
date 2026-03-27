@@ -1,3 +1,6 @@
+// STUB: removed from Octopus slim build
+import type { OctopusConfig, ReplyToMode } from "../config/config.js";
+
 export type {
   DiscordAllowList,
   DiscordChannelConfigResolved,
@@ -16,13 +19,46 @@ export {
   resolveGroupDmAllow,
   shouldEmitDiscordReactionNotification,
 } from "./monitor/allow-list.js";
-export type { DiscordMessageEvent, DiscordMessageHandler } from "./monitor/listeners.js";
-export { registerDiscordListener } from "./monitor/listeners.js";
 
-export { createDiscordMessageHandler } from "./monitor/message-handler.js";
-export { buildDiscordMediaPayload } from "./monitor/message-utils.js";
-export { createDiscordNativeCommand } from "./monitor/native-command.js";
-export type { MonitorDiscordOpts } from "./monitor/provider.js";
-export { monitorDiscordProvider } from "./monitor/provider.js";
+export type DiscordMessageEvent = unknown;
+export type DiscordMessageHandler = (...args: unknown[]) => Promise<void>;
 
-export { resolveDiscordReplyTarget, sanitizeDiscordThreadName } from "./monitor/threading.js";
+export function registerDiscordListener(..._args: unknown[]): unknown {
+  throw new Error("Channel not available in Octopus slim build");
+}
+
+export function createDiscordMessageHandler(..._args: unknown[]): unknown {
+  throw new Error("Channel not available in Octopus slim build");
+}
+
+export function buildDiscordMediaPayload(..._args: unknown[]): unknown {
+  throw new Error("Channel not available in Octopus slim build");
+}
+
+export function createDiscordNativeCommand(..._args: unknown[]): unknown {
+  throw new Error("Channel not available in Octopus slim build");
+}
+
+export type MonitorDiscordOpts = {
+  token?: string;
+  accountId?: string;
+  config?: OctopusConfig;
+  runtime?: unknown;
+  abortSignal?: AbortSignal;
+  mediaMaxMb?: number;
+  historyLimit?: number;
+  replyToMode?: ReplyToMode;
+  setStatus?: unknown;
+};
+
+export async function monitorDiscordProvider(opts: MonitorDiscordOpts = {}): Promise<void> {
+  throw new Error("Channel not available in Octopus slim build");
+}
+
+export function resolveDiscordReplyTarget(..._args: unknown[]): unknown {
+  throw new Error("Channel not available in Octopus slim build");
+}
+
+export function sanitizeDiscordThreadName(..._args: unknown[]): unknown {
+  throw new Error("Channel not available in Octopus slim build");
+}

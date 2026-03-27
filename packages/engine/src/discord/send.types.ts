@@ -1,4 +1,4 @@
-import type { RequestClient } from "@buape/carbon";
+// STUB: removed from Octopus slim build
 import type { OctopusConfig } from "../config/config.js";
 import type { RetryConfig } from "../infra/retry.js";
 
@@ -32,7 +32,7 @@ export type DiscordReactOpts = {
   cfg?: OctopusConfig;
   token?: string;
   accountId?: string;
-  rest?: RequestClient;
+  rest?: unknown;
   verbose?: boolean;
   retry?: RetryConfig;
 };
@@ -74,9 +74,7 @@ export type DiscordThreadCreate = {
   name: string;
   autoArchiveMinutes?: number;
   content?: string;
-  /** Discord thread type (default: PublicThread for standalone threads). */
   type?: number;
-  /** Tag IDs to apply when creating a forum/media thread (Discord `applied_tags`). */
   appliedTags?: string[];
 };
 

@@ -1,3 +1,4 @@
+// STUB: removed from Octopus slim build
 import { type RetryOptions, type WebClientOptions, WebClient } from "@slack/web-api";
 
 export const SLACK_DEFAULT_RETRY_OPTIONS: RetryOptions = {
@@ -8,13 +9,10 @@ export const SLACK_DEFAULT_RETRY_OPTIONS: RetryOptions = {
   randomize: true,
 };
 
-export function resolveSlackWebClientOptions(options: WebClientOptions = {}): WebClientOptions {
-  return {
-    ...options,
-    retryConfig: options.retryConfig ?? SLACK_DEFAULT_RETRY_OPTIONS,
-  };
+export function resolveSlackWebClientOptions(_options: WebClientOptions = {}): WebClientOptions {
+  throw new Error('Channel not available in Octopus slim build');
 }
 
-export function createSlackWebClient(token: string, options: WebClientOptions = {}) {
-  return new WebClient(token, resolveSlackWebClientOptions(options));
+export function createSlackWebClient(_token: string, _options: WebClientOptions = {}): WebClient {
+  throw new Error('Channel not available in Octopus slim build');
 }

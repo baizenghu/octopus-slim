@@ -1,57 +1,20 @@
-import {
-  buildMessagingTarget,
-  ensureTargetId,
-  parseMentionPrefixOrAtUserTarget,
-  requireTargetKind,
-  type MessagingTarget,
-  type MessagingTargetKind,
-  type MessagingTargetParseOptions,
+// STUB: removed from Octopus slim build
+import type {
+  MessagingTarget,
+  MessagingTargetKind,
 } from "../channels/targets.js";
 
 export type SlackTargetKind = MessagingTargetKind;
 
 export type SlackTarget = MessagingTarget;
 
-type SlackTargetParseOptions = MessagingTargetParseOptions;
-
 export function parseSlackTarget(
-  raw: string,
-  options: SlackTargetParseOptions = {},
+  _raw: string,
+  _options: { defaultKind?: MessagingTargetKind } = {},
 ): SlackTarget | undefined {
-  const trimmed = raw.trim();
-  if (!trimmed) {
-    return undefined;
-  }
-  const userTarget = parseMentionPrefixOrAtUserTarget({
-    raw: trimmed,
-    mentionPattern: /^<@([A-Z0-9]+)>$/i,
-    prefixes: [
-      { prefix: "user:", kind: "user" },
-      { prefix: "channel:", kind: "channel" },
-      { prefix: "slack:", kind: "user" },
-    ],
-    atUserPattern: /^[A-Z0-9]+$/i,
-    atUserErrorMessage: "Slack DMs require a user id (use user:<id> or <@id>)",
-  });
-  if (userTarget) {
-    return userTarget;
-  }
-  if (trimmed.startsWith("#")) {
-    const candidate = trimmed.slice(1).trim();
-    const id = ensureTargetId({
-      candidate,
-      pattern: /^[A-Z0-9]+$/i,
-      errorMessage: "Slack channels require a channel id (use channel:<id>)",
-    });
-    return buildMessagingTarget("channel", id, trimmed);
-  }
-  if (options.defaultKind) {
-    return buildMessagingTarget(options.defaultKind, trimmed, trimmed);
-  }
-  return buildMessagingTarget("channel", trimmed, trimmed);
+  throw new Error('Channel not available in Octopus slim build');
 }
 
-export function resolveSlackChannelId(raw: string): string {
-  const target = parseSlackTarget(raw, { defaultKind: "channel" });
-  return requireTargetKind({ platform: "Slack", target, kind: "channel" });
+export function resolveSlackChannelId(_raw: string): string {
+  throw new Error('Channel not available in Octopus slim build');
 }

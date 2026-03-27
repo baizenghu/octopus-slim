@@ -1,3 +1,4 @@
+// STUB: removed from Octopus slim build
 export type TelegramTarget = {
   chatId: string;
   messageThreadId?: number;

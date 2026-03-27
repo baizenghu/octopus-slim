@@ -1,11 +1,8 @@
-import { normalizeChatType } from "../channels/chat-type.js";
+// STUB: removed from Octopus slim build
 import { createAccountListHelpers } from "../channels/plugins/account-helpers.js";
 import type { OctopusConfig } from "../config/config.js";
 import type { SlackAccountConfig } from "../config/types.js";
-import { resolveAccountEntry } from "../routing/account-lookup.js";
-import { DEFAULT_ACCOUNT_ID, normalizeAccountId } from "../routing/session-key.js";
 import type { SlackAccountSurfaceFields } from "./account-surface-fields.js";
-import { resolveSlackAppToken, resolveSlackBotToken, resolveSlackUserToken } from "./token.js";
 
 export type SlackTokenSource = "env" | "config" | "none";
 
@@ -26,97 +23,27 @@ const { listAccountIds, resolveDefaultAccountId } = createAccountListHelpers("sl
 export const listSlackAccountIds = listAccountIds;
 export const resolveDefaultSlackAccountId = resolveDefaultAccountId;
 
-function resolveAccountConfig(
-  cfg: OctopusConfig,
-  accountId: string,
-): SlackAccountConfig | undefined {
-  return resolveAccountEntry(cfg.channels?.slack?.accounts, accountId);
-}
-
 export function mergeSlackAccountConfig(
-  cfg: OctopusConfig,
-  accountId: string,
+  _cfg: OctopusConfig,
+  _accountId: string,
 ): SlackAccountConfig {
-  const { accounts: _ignored, ...base } = (cfg.channels?.slack ?? {}) as SlackAccountConfig & {
-    accounts?: unknown;
-  };
-  const account = resolveAccountConfig(cfg, accountId) ?? {};
-  return { ...base, ...account };
+  throw new Error('Channel not available in Octopus slim build');
 }
 
-export function resolveSlackAccount(params: {
+export function resolveSlackAccount(_params: {
   cfg: OctopusConfig;
   accountId?: string | null;
 }): ResolvedSlackAccount {
-  const accountId = normalizeAccountId(params.accountId);
-  const baseEnabled = params.cfg.channels?.slack?.enabled !== false;
-  const merged = mergeSlackAccountConfig(params.cfg, accountId);
-  const accountEnabled = merged.enabled !== false;
-  const enabled = baseEnabled && accountEnabled;
-  const allowEnv = accountId === DEFAULT_ACCOUNT_ID;
-  const envBot = allowEnv ? resolveSlackBotToken(process.env.SLACK_BOT_TOKEN) : undefined;
-  const envApp = allowEnv ? resolveSlackAppToken(process.env.SLACK_APP_TOKEN) : undefined;
-  const envUser = allowEnv ? resolveSlackUserToken(process.env.SLACK_USER_TOKEN) : undefined;
-  const configBot = resolveSlackBotToken(
-    merged.botToken,
-    `channels.slack.accounts.${accountId}.botToken`,
-  );
-  const configApp = resolveSlackAppToken(
-    merged.appToken,
-    `channels.slack.accounts.${accountId}.appToken`,
-  );
-  const configUser = resolveSlackUserToken(
-    merged.userToken,
-    `channels.slack.accounts.${accountId}.userToken`,
-  );
-  const botToken = configBot ?? envBot;
-  const appToken = configApp ?? envApp;
-  const userToken = configUser ?? envUser;
-  const botTokenSource: SlackTokenSource = configBot ? "config" : envBot ? "env" : "none";
-  const appTokenSource: SlackTokenSource = configApp ? "config" : envApp ? "env" : "none";
-  const userTokenSource: SlackTokenSource = configUser ? "config" : envUser ? "env" : "none";
-
-  return {
-    accountId,
-    enabled,
-    name: merged.name?.trim() || undefined,
-    botToken,
-    appToken,
-    userToken,
-    botTokenSource,
-    appTokenSource,
-    userTokenSource,
-    config: merged,
-    groupPolicy: merged.groupPolicy,
-    textChunkLimit: merged.textChunkLimit,
-    mediaMaxMb: merged.mediaMaxMb,
-    reactionNotifications: merged.reactionNotifications,
-    reactionAllowlist: merged.reactionAllowlist,
-    replyToMode: merged.replyToMode,
-    replyToModeByChatType: merged.replyToModeByChatType,
-    actions: merged.actions,
-    slashCommand: merged.slashCommand,
-    dm: merged.dm,
-    channels: merged.channels,
-  };
+  throw new Error('Channel not available in Octopus slim build');
 }
 
-export function listEnabledSlackAccounts(cfg: OctopusConfig): ResolvedSlackAccount[] {
-  return listSlackAccountIds(cfg)
-    .map((accountId) => resolveSlackAccount({ cfg, accountId }))
-    .filter((account) => account.enabled);
+export function listEnabledSlackAccounts(_cfg: OctopusConfig): ResolvedSlackAccount[] {
+  throw new Error('Channel not available in Octopus slim build');
 }
 
 export function resolveSlackReplyToMode(
-  account: ResolvedSlackAccount,
-  chatType?: string | null,
+  _account: ResolvedSlackAccount,
+  _chatType?: string | null,
 ): "off" | "first" | "all" {
-  const normalized = normalizeChatType(chatType ?? undefined);
-  if (normalized && account.replyToModeByChatType?.[normalized] !== undefined) {
-    return account.replyToModeByChatType[normalized] ?? "off";
-  }
-  if (normalized === "direct" && account.dm?.replyToMode !== undefined) {
-    return account.dm.replyToMode;
-  }
-  return account.replyToMode ?? "off";
+  throw new Error('Channel not available in Octopus slim build');
 }

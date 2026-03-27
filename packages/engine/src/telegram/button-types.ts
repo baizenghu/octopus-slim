@@ -1,3 +1,4 @@
+// STUB: removed from Octopus slim build
 export type TelegramButtonStyle = "danger" | "success" | "primary";
 
 export type TelegramInlineButton = {
