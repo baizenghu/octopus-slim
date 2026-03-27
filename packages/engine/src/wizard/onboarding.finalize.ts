@@ -28,7 +28,7 @@ import { isSystemdUserServiceAvailable } from "../daemon/systemd.js";
 import { ensureControlUiAssetsBuilt } from "../infra/control-ui-assets.js";
 import type { RuntimeEnv } from "../runtime.js";
 import { restoreTerminalState } from "../terminal/restore.js";
-import { runTui } from "../tui/tui.js";
+// SLIM: tui/ removed — import { runTui } from "../tui/tui.js";
 import { resolveUserPath } from "../utils.js";
 import { setupOnboardingShellCompletion } from "./onboarding.completion.js";
 import { resolveOnboardingSecretInputString } from "./onboarding.secret-input.js";
@@ -368,15 +368,7 @@ export async function finalizeOnboardingWizard(
     });
 
     if (hatchChoice === "tui") {
-      restoreTerminalState("pre-onboarding tui", { resumeStdinIfPaused: true });
-      await runTui({
-        url: links.wsUrl,
-        token: settings.authMode === "token" ? settings.gatewayToken : undefined,
-        password: settings.authMode === "password" ? resolvedGatewayPassword : "",
-        // Safety: onboarding TUI should not auto-deliver to lastProvider/lastTo.
-        deliver: false,
-        message: hasBootstrap ? "Wake up, my friend!" : undefined,
-      });
+      // SLIM: tui/ removed — runTui unavailable in slim build
       launchedTui = true;
     } else if (hatchChoice === "web") {
       const browserSupport = await detectBrowserOpenSupport();
