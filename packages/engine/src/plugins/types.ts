@@ -296,6 +296,11 @@ export type OctopusPluginApi = {
     id: string,
     factory: import("../context-engine/registry.js").ContextEngineFactory,
   ) => void;
+  /** Register an AgentStore implementation (exclusive slot — only one active at a time). */
+  registerAgentStore: (
+    id: string,
+    store: import("../agents/store.js").AgentStore,
+  ) => void;
   resolvePath: (input: string) => string;
   /** Register a lifecycle hook handler */
   on: <K extends PluginHookName>(

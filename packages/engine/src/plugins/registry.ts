@@ -2,6 +2,7 @@ import path from "node:path";
 import type { AnyAgentTool } from "../agents/tools/common.js";
 import type { ChannelDock } from "../channels/dock.js";
 import type { ChannelPlugin } from "../channels/plugins/types.js";
+import { registerAgentStore } from "../agents/store-registry.js";
 import { registerContextEngine } from "../context-engine/registry.js";
 import type {
   GatewayRequestHandler,
@@ -601,6 +602,7 @@ export function createPluginRegistry(registryParams: PluginRegistryParams) {
       registerService: (service) => registerService(record, service),
       registerCommand: (command) => registerCommand(record, command),
       registerContextEngine: (id, factory) => registerContextEngine(id, factory),
+      registerAgentStore: (id, store) => registerAgentStore(id, store),
       resolvePath: (input: string) => resolveUserPath(input),
       on: (hookName, handler, opts) =>
         registerTypedHook(record, hookName, handler, opts, params.hookPolicy),
