@@ -22,7 +22,7 @@ async function withPlatform<T>(platform: NodeJS.Platform, run: () => Promise<T> 
 }
 
 describe("killProcessTree", () => {
-  let killSpy: ReturnType<typeof vi.spyOn>;
+  let killSpy: any;
 
   beforeEach(() => {
     spawnMock.mockClear();

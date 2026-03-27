@@ -220,7 +220,7 @@ export async function runBrowserProxyCommand(paramsJSON?: string | null): Promis
   const allowedProfiles = proxyConfig.allowProfiles;
   if (allowedProfiles.length > 0) {
     if (pathValue !== "/profiles") {
-      const profileToCheck = requestedProfile || resolved.defaultProfile;
+      const profileToCheck = requestedProfile || (resolved.defaultProfile as string | undefined);
       if (!isProfileAllowed({ allowProfiles: allowedProfiles, profile: profileToCheck })) {
         throw new Error("INVALID_REQUEST: browser profile not allowed");
       }
@@ -266,7 +266,7 @@ export async function runBrowserProxyCommand(paramsJSON?: string | null): Promis
     if (!isBrowserProxyTimeoutError(err)) {
       throw err;
     }
-    const profileForStatus = requestedProfile || resolved.defaultProfile;
+    const profileForStatus = requestedProfile || (resolved.defaultProfile as string | undefined);
     const status = await readBrowserProxyStatus({
       dispatcher,
       profile: path === "/profiles" ? undefined : profileForStatus,

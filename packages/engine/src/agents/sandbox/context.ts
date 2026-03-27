@@ -149,7 +149,7 @@ export async function resolveSandboxContext(params: {
         let browserAuth = resolveBrowserControlAuth(cfgForAuth);
         try {
           const ensured = await ensureBrowserControlAuth({ cfg: cfgForAuth });
-          browserAuth = ensured.auth;
+          browserAuth = ensured.auth as typeof browserAuth;
         } catch (error) {
           const message = error instanceof Error ? error.message : JSON.stringify(error);
           defaultRuntime.error?.(`Sandbox browser auth ensure failed: ${message}`);
@@ -163,7 +163,7 @@ export async function resolveSandboxContext(params: {
     agentWorkspaceDir,
     cfg: resolvedCfg,
     evaluateEnabled,
-    bridgeAuth,
+    bridgeAuth: bridgeAuth as any,
   });
 
   const sandboxContext: SandboxContext = {

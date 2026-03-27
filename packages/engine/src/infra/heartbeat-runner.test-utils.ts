@@ -67,7 +67,7 @@ export async function withTempHeartbeatSandbox<T>(
     process.env[envName] = "";
   }
   try {
-    return await fn({ tmpDir, storePath, replySpy });
+    return await fn({ tmpDir, storePath, replySpy: replySpy as any });
   } finally {
     replySpy.mockRestore();
     for (const [envName, previousValue] of previousEnv.entries()) {

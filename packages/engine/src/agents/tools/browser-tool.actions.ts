@@ -65,11 +65,12 @@ function isChromeStaleTargetError(profile: string | undefined, err: unknown): bo
 function stripTargetIdFromActRequest(
   request: Parameters<typeof browserAct>[1],
 ): Parameters<typeof browserAct>[1] | null {
-  const targetId = typeof request.targetId === "string" ? request.targetId.trim() : undefined;
+  const req = request as any;
+  const targetId = typeof req.targetId === "string" ? req.targetId.trim() : undefined;
   if (!targetId) {
     return null;
   }
-  const retryRequest = { ...request };
+  const retryRequest = { ...req };
   delete retryRequest.targetId;
   return retryRequest as Parameters<typeof browserAct>[1];
 }
@@ -226,7 +227,7 @@ export async function executeSnapshotAction(params: {
         format: "aria",
         targetId: snapshot.targetId,
         url: snapshot.url,
-        nodeCount: snapshot.nodes.length,
+        nodeCount: (snapshot.nodes as any)?.length,
         externalContent: {
           untrusted: true,
           source: "browser",
@@ -272,7 +273,7 @@ export async function executeConsoleAction(params: {
       },
     };
   }
-  const result = await browserConsoleMessages(baseUrl, { level, targetId, profile });
+  const result = await browserConsoleMessages(baseUrl, { level, targetId, profile }) as any;
   const wrapped = wrapBrowserExternalJson({
     kind: "console",
     payload: result,
@@ -283,7 +284,7 @@ export async function executeConsoleAction(params: {
     details: {
       ...wrapped.safeDetails,
       targetId: result.targetId,
-      messageCount: result.messages.length,
+      messageCount: result.messages?.length,
     },
   };
 }

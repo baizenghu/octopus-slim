@@ -742,7 +742,7 @@ function collectBrowserControlFindings(
   const browserAuth = resolveBrowserControlAuth(cfg, env);
   const explicitAuthMode = cfg.gateway?.auth?.mode;
   const tokenConfigured =
-    Boolean(browserAuth.token) ||
+    Boolean(browserAuth?.token) ||
     hasNonEmptyString(env.OCTOPUS_GATEWAY_TOKEN) ||
     hasNonEmptyString(env.CLAWDBOT_GATEWAY_TOKEN) ||
     hasConfiguredSecretInput(cfg.gateway?.auth?.token, cfg.secrets?.defaults);
@@ -753,7 +753,7 @@ function collectBrowserControlFindings(
       explicitAuthMode !== "trusted-proxy" &&
       !tokenConfigured);
   const passwordConfigured =
-    Boolean(browserAuth.password) ||
+    Boolean(browserAuth?.password) ||
     (passwordCanWin &&
       (hasNonEmptyString(env.OCTOPUS_GATEWAY_PASSWORD) ||
         hasNonEmptyString(env.CLAWDBOT_GATEWAY_PASSWORD) ||
@@ -778,7 +778,7 @@ function collectBrowserControlFindings(
     }
     let url: URL;
     try {
-      url = new URL(profile.cdpUrl);
+      url = new URL(profile.cdpUrl ?? "");
     } catch {
       continue;
     }

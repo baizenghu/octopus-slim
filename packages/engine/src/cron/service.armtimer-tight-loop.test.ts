@@ -39,7 +39,8 @@ function createStuckPastDueJob(params: { id: string; nowMs: number; pastDueMs: n
 }
 
 describe("CronService - armTimer tight loop prevention", () => {
-  function extractTimeoutDelays(timeoutSpy: ReturnType<typeof vi.spyOn>) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  function extractTimeoutDelays(timeoutSpy: ReturnType<typeof vi.spyOn<any, any>>) {
     const calls = timeoutSpy.mock.calls as Array<[unknown, unknown, ...unknown[]]>;
     return calls
       .map(([, delay]: [unknown, unknown, ...unknown[]]) => delay)
@@ -91,7 +92,7 @@ describe("CronService - armTimer tight loop prevention", () => {
     armTimer(state);
 
     expect(state.timer).not.toBeNull();
-    const delays = extractTimeoutDelays(timeoutSpy);
+    const delays = extractTimeoutDelays(timeoutSpy as any);
 
     // Before the fix, delay would be 0 (tight loop).
     // After the fix, delay must be >= MIN_REFIRE_GAP_MS (2000 ms).
@@ -133,7 +134,7 @@ describe("CronService - armTimer tight loop prevention", () => {
 
     armTimer(state);
 
-    const delays = extractTimeoutDelays(timeoutSpy);
+    const delays = extractTimeoutDelays(timeoutSpy as any);
 
     // The natural delay (10 s) should be used, not the floor.
     expect(delays).toContain(10_000);
@@ -175,7 +176,7 @@ describe("CronService - armTimer tight loop prevention", () => {
 
     // The re-armed timer must NOT use delay=0. It should use at least
     // MIN_REFIRE_GAP_MS to prevent the hot-loop.
-    const allDelays = extractTimeoutDelays(timeoutSpy);
+    const allDelays = extractTimeoutDelays(timeoutSpy as any);
 
     // The last setTimeout call is from the finally→armTimer path.
     const lastDelay = allDelays[allDelays.length - 1];

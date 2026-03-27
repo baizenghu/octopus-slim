@@ -505,7 +505,7 @@ export function createBrowserTool(opts?: {
                   element,
                   type,
                 },
-              })) as Awaited<ReturnType<typeof browserScreenshotAction>>)
+              })) as any)
             : await browserScreenshotAction(baseUrl, {
                 targetId,
                 fullPage,
@@ -513,11 +513,11 @@ export function createBrowserTool(opts?: {
                 element,
                 type,
                 profile,
-              });
+              }) as any;
           return await imageResultFromFile({
             label: "browser:screenshot",
-            path: result.path,
-            details: result,
+            path: (result as any).path,
+            details: result as any,
           });
         }
         case "navigate": {
@@ -558,11 +558,11 @@ export function createBrowserTool(opts?: {
                 path: "/pdf",
                 profile,
                 body: { targetId },
-              })) as Awaited<ReturnType<typeof browserPdfSave>>)
-            : await browserPdfSave(baseUrl, { targetId, profile });
+              })) as any)
+            : await browserPdfSave(baseUrl, { targetId, profile }) as any;
           return {
-            content: [{ type: "text" as const, text: `FILE:${result.path}` }],
-            details: result,
+            content: [{ type: "text" as const, text: `FILE:${(result as any).path}` }],
+            details: result as any,
           };
         }
         case "upload": {

@@ -4,13 +4,13 @@ export type ResolvedBrowserConfig = {
   enabled: boolean;
   port?: number;
   cdpPort?: number;
-  profiles: ResolvedBrowserProfile[];
-  defaultProfile?: ResolvedBrowserProfile;
+  profiles: ResolvedBrowserProfile[] | Record<string, ResolvedBrowserProfile>;
+  defaultProfile?: string | ResolvedBrowserProfile;
   [key: string]: unknown;
 };
 
 export type ResolvedBrowserProfile = {
-  name: string;
+  name?: string;
   type?: string;
   cdpPort?: number;
   cdpUrl?: string;

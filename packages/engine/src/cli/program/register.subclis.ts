@@ -141,15 +141,8 @@ const entries: SubCliEntry[] = [
       mod.registerSandboxCli(program);
     },
   },
-  {
-    name: "tui",
-    description: "Open a terminal UI connected to the Gateway",
-    hasSubcommands: false,
-    register: async (program) => {
-      const mod = await import("../tui-cli.js");
-      mod.registerTuiCli(program);
-    },
-  },
+  // STUB: tui removed from slim build
+  // { name: "tui", ... },
   {
     name: "cron",
     description: "Manage cron jobs via the Gateway scheduler",

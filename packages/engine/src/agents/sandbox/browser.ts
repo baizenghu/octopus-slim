@@ -89,6 +89,7 @@ function buildSandboxBrowserResolvedConfig(params: {
     extraArgs: [],
     profiles: {
       [DEFAULT_OCTOPUS_BROWSER_PROFILE_NAME]: {
+        name: DEFAULT_OCTOPUS_BROWSER_PROFILE_NAME,
         cdpPort: params.cdpPort,
         color: DEFAULT_OCTOPUS_BROWSER_COLOR,
       },
@@ -287,7 +288,7 @@ export async function ensureSandboxBrowser(params: {
 
   const existing = BROWSER_BRIDGES.get(params.scopeKey);
   const existingProfile = existing
-    ? resolveProfile(existing.bridge.state.resolved, DEFAULT_OCTOPUS_BROWSER_PROFILE_NAME)
+    ? resolveProfile(existing.bridge.state?.resolved, DEFAULT_OCTOPUS_BROWSER_PROFILE_NAME)
     : null;
 
   let desiredAuthToken = params.bridgeAuth?.token?.trim() || undefined;
@@ -309,11 +310,11 @@ export async function ensureSandboxBrowser(params: {
     !existing ||
     (existing.authToken === desiredAuthToken && existing.authPassword === desiredAuthPassword);
   if (existing && !shouldReuse) {
-    await stopBrowserBridgeServer(existing.bridge.server).catch(() => undefined);
+    await stopBrowserBridgeServer(existing.bridge.server!).catch(() => undefined);
     BROWSER_BRIDGES.delete(params.scopeKey);
   }
   if (existing && shouldReuse && !authMatches) {
-    await stopBrowserBridgeServer(existing.bridge.server).catch(() => undefined);
+    await stopBrowserBridgeServer(existing.bridge.server!).catch(() => undefined);
     BROWSER_BRIDGES.delete(params.scopeKey);
   }
 
@@ -389,12 +390,12 @@ export async function ensureSandboxBrowser(params: {
             noVncPort: mappedNoVnc,
             password: noVncPassword,
           });
-          return buildNoVncObserverTokenUrl(resolvedBridge.baseUrl, token);
+          return buildNoVncObserverTokenUrl(resolvedBridge.baseUrl!, token);
         })()
       : undefined;
 
   return {
-    bridgeUrl: resolvedBridge.baseUrl,
+    bridgeUrl: resolvedBridge.baseUrl!,
     noVncUrl,
     containerName,
   };

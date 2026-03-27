@@ -17,8 +17,8 @@ function stubPinnedHostname(hostname: string) {
 }
 
 describe("describeGeminiVideo", () => {
-  let resolvePinnedHostnameWithPolicySpy: ReturnType<typeof vi.spyOn>;
-  let resolvePinnedHostnameSpy: ReturnType<typeof vi.spyOn>;
+  let resolvePinnedHostnameWithPolicySpy: any;
+  let resolvePinnedHostnameSpy: any;
 
   beforeEach(() => {
     // Stub both entry points so fetch-guard never does live DNS (CI can use either path).

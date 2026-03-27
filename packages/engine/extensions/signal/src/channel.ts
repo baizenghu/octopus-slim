@@ -311,7 +311,7 @@ export const signalPlugin: ChannelPlugin<ResolvedSignalAccount> = {
       });
       ctx.log?.info(`[${account.accountId}] starting provider (${account.baseUrl})`);
       // Lazy import: the monitor pulls the reply pipeline; avoid ESM init cycles.
-      return getSignalRuntime().channel.signal.monitorSignalProvider({
+      return (getSignalRuntime().channel.signal.monitorSignalProvider as any)({
         accountId: account.accountId,
         config: ctx.cfg,
         runtime: ctx.runtime,

@@ -197,7 +197,7 @@ async function ensureSessionRuntimeCleanup(params: {
     ]);
     return await closeTrackedBrowserTabsForSessions({
       sessionKeys: [...closeKeys],
-      onWarn: (message) => logVerbose(message),
+      onWarn: (message: string) => logVerbose(message),
     });
   };
 

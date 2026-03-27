@@ -33,7 +33,7 @@ describe("runHeartbeatOnce", () => {
           lastTo: "1644620762",
         });
 
-        replySpy.mockImplementation(async (ctx: { To?: string; From?: string }) => {
+        replySpy.mockImplementation(async (ctx: any) => {
           expect(ctx.To).toBe("C0A9P2N8QHY");
           expect(ctx.From).toBe("C0A9P2N8QHY");
           return { text: "ok" };

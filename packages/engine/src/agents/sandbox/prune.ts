@@ -77,7 +77,7 @@ async function pruneSandboxBrowsers(cfg: SandboxConfig) {
     onRemoved: async (entry) => {
       const bridge = BROWSER_BRIDGES.get(entry.sessionKey);
       if (bridge?.containerName === entry.containerName) {
-        await stopBrowserBridgeServer(bridge.bridge.server).catch(() => undefined);
+        await stopBrowserBridgeServer(bridge.bridge.server!).catch(() => undefined);
         BROWSER_BRIDGES.delete(entry.sessionKey);
       }
     },
