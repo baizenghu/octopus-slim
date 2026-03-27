@@ -653,7 +653,8 @@ export default function enterpriseMcpPlugin(api: any) {
 
         try {
           // 1. 从数据库查找技能
-          const skill = await prisma.skill.findFirst({
+          // 支持 scoped name（如 "hello-test:user-b"）：先按原名查，再按去掉 :suffix 的基础名查
+          let skill = await prisma.skill.findFirst({
             where: {
               name: skillName,
               enabled: true,
@@ -663,6 +664,23 @@ export default function enterpriseMcpPlugin(api: any) {
               ],
             },
           });
+          // 如果按原名未找到，尝试去掉 scoped 后缀（引擎注入的 skillMdName 格式 "name:ownerShort"）
+          if (!skill) {
+            const colonIdx = skillName.lastIndexOf(':');
+            if (colonIdx > 0 && skillName.length - colonIdx <= 7) {
+              const baseName = skillName.slice(0, colonIdx);
+              skill = await prisma.skill.findFirst({
+                where: {
+                  name: baseName,
+                  enabled: true,
+                  OR: [
+                    { scope: 'enterprise', status: 'approved' },
+                    { scope: 'personal', ownerId: userId, status: 'active' },
+                  ],
+                },
+              });
+            }
+          }
 
           if (!skill) {
             return {
