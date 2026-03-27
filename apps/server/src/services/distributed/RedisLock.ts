@@ -7,15 +7,14 @@
 
 import type Redis from 'ioredis';
 import { createLogger } from '../../utils/logger';
+import { NODE_ID } from './node-id';
 
 const logger = createLogger('redis-lock');
 
 export class RedisDistributedLock {
-  private nodeId: string;
+  private readonly nodeId = NODE_ID;
 
-  constructor(private redis: Redis) {
-    this.nodeId = `node-${process.pid}-${Date.now()}`;
-  }
+  constructor(private redis: Redis) {}
 
   /**
    * 尝试获取锁（非阻塞）

@@ -15,6 +15,7 @@
     "@octopus/audit": "workspace:*",
     "@octopus/auth": "workspace:*",
     "@octopus/database": "workspace:*",
+    "@octopus/engine": "workspace:*",
     "@octopus/mcp": "workspace:*",
     "@octopus/skills": "workspace:*",
     "@octopus/workspace": "workspace:*",

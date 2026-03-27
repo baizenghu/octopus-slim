@@ -33,8 +33,8 @@ const logger = createLogger('agents');
 /** 过滤 skillsFilter：只保留 DB 中 enabled=true 的 skill，返回引擎可识别的 skillMdName */
 async function filterEnabledSkills(prisma: AppPrismaClient, skillsFilter: string[]): Promise<string[]> {
   if (!skillsFilter.length) return [];
-  const skills = await prisma.skill.findMany({
-    where: { enabled: true, name: { in: skillsFilter } },
+  const skills = await prisma.toolSource.findMany({
+    where: { type: 'skill', enabled: true, name: { in: skillsFilter } },
     select: { name: true, scope: true, ownerId: true },
   });
   return skills.map((s: { name: string; scope: string; ownerId: string | null }) =>
@@ -116,8 +116,8 @@ export function createAgentsRouter(
       }
 
       // 3. 从 DB 获取该用户的 personal MCP 工具名
-      const personalServers = await prisma.mCPServer.findMany({
-        where: { scope: 'personal', ownerId: userId, enabled: true },
+      const personalServers = await prisma.toolSource.findMany({
+        where: { type: 'mcp', scope: 'personal', ownerId: userId, enabled: true },
         select: { id: true, name: true, description: true },
       });
 
@@ -188,8 +188,8 @@ export function createAgentsRouter(
 
     // 默认 agent 权限全部开启：查询所有已启用的 MCP/Skills/Connections
     const [mcpServers, skills, connections] = await Promise.all([
-      prisma.mCPServer.findMany({ where: { enabled: true }, select: { id: true } }),
-      prisma.skill.findMany({ where: { enabled: true }, select: { name: true } }),
+      prisma.toolSource.findMany({ where: { type: 'mcp', enabled: true }, select: { id: true } }),
+      prisma.toolSource.findMany({ where: { type: 'skill', enabled: true }, select: { name: true } }),
       prisma.databaseConnection.findMany({ where: { userId, enabled: true }, select: { name: true } }),
     ]);
 

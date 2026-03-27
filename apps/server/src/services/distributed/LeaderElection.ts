@@ -7,11 +7,12 @@
 
 import type Redis from 'ioredis';
 import { createLogger } from '../../utils/logger';
+import { NODE_ID } from './node-id';
 
 const logger = createLogger('leader-election');
 
 export class RedisLeaderElection {
-  private nodeId: string;
+  private readonly nodeId = NODE_ID;
   private renewInterval?: ReturnType<typeof setInterval>;
   private isLeader = false;
 
@@ -20,9 +21,7 @@ export class RedisLeaderElection {
     private key: string,
     private ttlMs: number = 30_000,
     private renewMs: number = 10_000,
-  ) {
-    this.nodeId = `node-${process.pid}-${Date.now()}`;
-  }
+  ) {}
 
   /**
    * 尝试成为 leader

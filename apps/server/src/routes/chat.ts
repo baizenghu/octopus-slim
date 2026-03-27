@@ -105,8 +105,8 @@ export function createChatRouter(
         const mcpArg = mcpParts[0];
         if (!mcpArg) return { reply: '用法: `/mcp <名称> [问题]` — 请指定 MCP 工具' };
         // 按 id 或 name 查找
-        const mcpServer = await prisma.mCPServer.findFirst({
-          where: { OR: [{ id: mcpArg }, { name: mcpArg }] },
+        const mcpServer = await prisma.toolSource.findFirst({
+          where: { type: 'mcp', OR: [{ id: mcpArg }, { name: mcpArg }] },
         });
         const mcpId = mcpServer?.id || mcpArg;
         const mcpName = mcpServer?.name || mcpArg;
@@ -132,13 +132,13 @@ export function createChatRouter(
         const skillArg = skillParts[0];
         if (!skillArg) return { reply: '用法: `/skill <名称> [问题]` — 请指定 Skill 名称\n例如: `/skill ppt-generator 做一个PPT`' };
         // 按 id 或 name 查找（精确匹配）
-        let skillRecord = await prisma.skill.findFirst({
-          where: { OR: [{ id: skillArg }, { name: skillArg }] },
+        let skillRecord = await prisma.toolSource.findFirst({
+          where: { type: 'skill', OR: [{ id: skillArg }, { name: skillArg }] },
         });
         // 未找到时尝试模糊匹配（用户可能没写完整名称）
         if (!skillRecord) {
-          skillRecord = await prisma.skill.findFirst({
-            where: { OR: [
+          skillRecord = await prisma.toolSource.findFirst({
+            where: { type: 'skill', OR: [
               { name: { contains: skillArg } },
               { id: { contains: skillArg } },
             ] },
@@ -146,7 +146,7 @@ export function createChatRouter(
         }
         if (!skillRecord) {
           // 列出可用 Skill 帮助用户
-          const available = await prisma.skill.findMany({ where: { enabled: true }, select: { name: true } });
+          const available = await prisma.toolSource.findMany({ where: { type: 'skill', enabled: true }, select: { name: true } });
           const list = available.map((s: { name: string }) => `\`${s.name}\``).join(', ');
           return { reply: `未找到 Skill \`${skillArg}\`\n\n可用 Skill: ${list || '无'}\n\n用法: \`/skill <名称> [问题]\`` };
         }
@@ -343,12 +343,12 @@ export function createChatRouter(
     const prefs = sessionPrefs.get(sid0);
     if (prefs && !finalMessage.startsWith('[请使用')) {
       if (prefs.skillId) {
-        const skillRec = await prisma.skill.findFirst({ where: { id: prefs.skillId } });
+        const skillRec = await prisma.toolSource.findFirst({ where: { type: 'skill', id: prefs.skillId } });
         if (skillRec) {
           finalMessage = `[请优先使用 ${skillRec.name} skill]\n${finalMessage}`;
         }
       } else if (prefs.mcpId) {
-        const mcpRec = await prisma.mCPServer.findFirst({ where: { id: prefs.mcpId } });
+        const mcpRec = await prisma.toolSource.findFirst({ where: { type: 'mcp', id: prefs.mcpId } });
         if (mcpRec) {
           finalMessage = `[请优先使用 ${mcpRec.name} MCP 工具]\n${finalMessage}`;
         }
@@ -554,10 +554,10 @@ export function createChatRouter(
     const prefsNS = sessionPrefs.get(sid0);
     if (prefsNS && !finalMsgNonStream.startsWith('[请使用')) {
       if (prefsNS.skillId) {
-        const sr = await prisma.skill.findFirst({ where: { id: prefsNS.skillId } });
+        const sr = await prisma.toolSource.findFirst({ where: { type: 'skill', id: prefsNS.skillId } });
         if (sr) finalMsgNonStream = `[请优先使用 ${sr.name} skill]\n${finalMsgNonStream}`;
       } else if (prefsNS.mcpId) {
-        const mr = await prisma.mCPServer.findFirst({ where: { id: prefsNS.mcpId } });
+        const mr = await prisma.toolSource.findFirst({ where: { type: 'mcp', id: prefsNS.mcpId } });
         if (mr) finalMsgNonStream = `[请优先使用 ${mr.name} MCP 工具]\n${finalMsgNonStream}`;
       }
     }

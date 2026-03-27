@@ -3,38 +3,15 @@
  *
  * 将引擎 AgentStore 接口桥接到企业层 Prisma Agent 表。
  * Phase 5.1 在引擎层定义了 AgentStore 接口，此处为企业层实现。
+ *
+ * 类型来源: @octopus/engine/plugin-sdk (packages/engine/src/agents/store.ts)
  */
 
 import type { PrismaClient } from '@prisma/client';
+import type { AgentStore, AgentStoreEntry } from '@octopus/engine/plugin-sdk';
 import { createLogger } from '../utils/logger';
 
 const logger = createLogger('PrismaAgentStore');
-
-// ---- AgentStore 接口（内联定义，避免依赖引擎包） ----
-
-export interface AgentStoreEntry {
-  id: string;
-  name?: string;
-  model?: string;
-  provider?: string;
-  systemPrompt?: string;
-  tools?: { profile?: string; allow?: string[]; alsoAllow?: string[]; deny?: string[] };
-  skills?: string[];
-  heartbeat?: { every: string; prompt: string };
-  subagents?: { allowAgents?: string[] };
-  memoryScope?: string[];
-  sandbox?: { mode?: string };
-  workspace?: string;
-  [key: string]: unknown;
-}
-
-export interface AgentStore {
-  list(filter?: { tenantId?: string }): Promise<AgentStoreEntry[]>;
-  get(agentId: string): Promise<AgentStoreEntry | null>;
-  create(entry: AgentStoreEntry): Promise<void>;
-  update(agentId: string, patch: Partial<AgentStoreEntry>): Promise<void>;
-  delete(agentId: string): Promise<void>;
-}
 
 // ---- Prisma Agent record type (fields we use) ----
 
@@ -76,22 +53,37 @@ export class PrismaAgentStore implements AgentStore {
   }
 
   async create(entry: AgentStoreEntry): Promise<void> {
-    const data = this.toDbRecord(entry);
-    await this.prisma.agent.create({ data });
-    logger.info(`Agent created: ${entry.id}`);
+    try {
+      const data = this.toDbRecord(entry);
+      await this.prisma.agent.create({ data });
+      logger.info(`Agent created: ${entry.id}`);
+    } catch (err) {
+      logger.error(`Failed to create agent ${entry.id}: ${err}`);
+      throw new Error(`PrismaAgentStore.create failed for agent ${entry.id}`, { cause: err });
+    }
   }
 
   async update(agentId: string, patch: Partial<AgentStoreEntry>): Promise<void> {
-    const data = this.toDbRecord({ id: agentId, ...patch });
-    // id is the primary key — remove it from the update payload
-    delete (data as Record<string, unknown>).id;
-    await this.prisma.agent.update({ where: { id: agentId }, data });
-    logger.info(`Agent updated: ${agentId}`);
+    try {
+      const data = this.toDbRecord({ id: agentId, ...patch });
+      // id is the primary key — remove it from the update payload
+      delete (data as Record<string, unknown>).id;
+      await this.prisma.agent.update({ where: { id: agentId }, data });
+      logger.info(`Agent updated: ${agentId}`);
+    } catch (err) {
+      logger.error(`Failed to update agent ${agentId}: ${err}`);
+      throw new Error(`PrismaAgentStore.update failed for agent ${agentId}`, { cause: err });
+    }
   }
 
   async delete(agentId: string): Promise<void> {
-    await this.prisma.agent.delete({ where: { id: agentId } });
-    logger.info(`Agent deleted: ${agentId}`);
+    try {
+      await this.prisma.agent.delete({ where: { id: agentId } });
+      logger.info(`Agent deleted: ${agentId}`);
+    } catch (err) {
+      logger.error(`Failed to delete agent ${agentId}: ${err}`);
+      throw new Error(`PrismaAgentStore.delete failed for agent ${agentId}`, { cause: err });
+    }
   }
 
   // ---- DB record → AgentStoreEntry ----
@@ -153,9 +145,13 @@ export class PrismaAgentStore implements AgentStore {
       entry.description = record.description;
     }
 
-    // enabled / isDefault — 企业层额外字段
+    // enabled — 企业层额外字段
     entry.enabled = record.enabled;
-    entry.isDefault = record.isDefault;
+
+    // default — 引擎 AgentConfig 使用 'default' 字段名，DB 使用 'isDefault'
+    if (record.isDefault) {
+      entry.default = record.isDefault;
+    }
 
     return entry;
   }
@@ -176,10 +172,11 @@ export class PrismaAgentStore implements AgentStore {
     }
 
     // tools (嵌套) → 平铺字段
+    // 当 tools 被传入时，将未出现的子字段显式设为 null，避免 partial update 遗留旧值
     if (entry.tools !== undefined) {
-      if (entry.tools.profile !== undefined) data.toolsProfile = entry.tools.profile;
-      if (entry.tools.allow !== undefined) data.toolsAllow = entry.tools.allow;
-      if (entry.tools.deny !== undefined) data.toolsDeny = entry.tools.deny;
+      data.toolsProfile = entry.tools.profile ?? null;
+      data.toolsAllow = entry.tools.allow ?? null;
+      data.toolsDeny = entry.tools.deny ?? null;
     }
 
     // subagents — 直接写入 Json 字段
@@ -200,7 +197,7 @@ export class PrismaAgentStore implements AgentStore {
     if (entry.identity !== undefined) data.identity = entry.identity;
     if (entry.description !== undefined) data.description = entry.description;
     if (entry.enabled !== undefined) data.enabled = entry.enabled;
-    if (entry.isDefault !== undefined) data.isDefault = entry.isDefault;
+    if (entry.default !== undefined) data.isDefault = entry.default;
 
     return data;
   }

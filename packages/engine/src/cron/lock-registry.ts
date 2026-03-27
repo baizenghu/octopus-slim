@@ -39,6 +39,11 @@ export function registerCronLockProvider(provider: CronLockProvider): void {
  *   1. Explicitly registered provider (via registerCronLockProvider)
  *   2. Default LocalCronLockProvider (single-node, always grants)
  */
+let defaultLocal: LocalCronLockProvider | undefined;
+
 export function resolveCronLockProvider(): CronLockProvider {
-  return getCronLockRegistryState().provider ?? new LocalCronLockProvider();
+  const registered = getCronLockRegistryState().provider;
+  if (registered) return registered;
+  defaultLocal ??= new LocalCronLockProvider();
+  return defaultLocal;
 }

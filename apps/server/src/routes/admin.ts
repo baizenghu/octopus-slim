@@ -317,8 +317,7 @@ export function createAdminRouter(
       await prisma.agent.deleteMany({ where: { ownerId: id } }).catch(() => { });
       await prisma.scheduledTask.deleteMany({ where: { userId: id } }).catch(() => { });
       await prisma.databaseConnection.deleteMany({ where: { userId: id } }).catch(() => { });
-      await prisma.mCPServer.deleteMany({ where: { ownerId: id } }).catch(() => { });
-      await prisma.skill.deleteMany({ where: { ownerId: id } }).catch(() => { });
+      await prisma.toolSource.deleteMany({ where: { ownerId: id } }).catch(() => { });
       await prisma.generatedFile.deleteMany({ where: { userId: id } }).catch(() => { });
       await prisma.iMUserBinding.deleteMany({ where: { userId: id } }).catch(() => { });
       await prisma.mailLog.deleteMany({ where: { userId: id } }).catch(() => { });
@@ -415,10 +414,10 @@ export function createAdminRouter(
         prisma.user.count({ where: { status: 'active' } }),
         prisma.auditLog.count({ where: { createdAt: { gte: todayStart } } }),
         prisma.auditLog.count({ where: { createdAt: { gte: weekAgo } } }),
-        prisma.mCPServer.count().catch(() => 0),
-        prisma.mCPServer.count({ where: { enabled: true } }).catch(() => 0),
-        prisma.skill.count().catch(() => 0),
-        prisma.skill.count({ where: { enabled: true } }).catch(() => 0),
+        prisma.toolSource.count({ where: { type: 'mcp' } }).catch(() => 0),
+        prisma.toolSource.count({ where: { type: 'mcp', enabled: true } }).catch(() => 0),
+        prisma.toolSource.count({ where: { type: 'skill' } }).catch(() => 0),
+        prisma.toolSource.count({ where: { type: 'skill', enabled: true } }).catch(() => 0),
         prisma.agent.count().catch(() => 0),
         prisma.scheduledTask.count().catch(() => 0),
         prisma.scheduledTask.count({ where: { enabled: true } }).catch(() => 0),

@@ -17,7 +17,7 @@ export class RedisEventRelay {
   private publisher: Redis;
   private handlers = new Map<string, Set<EventHandler>>();
 
-  constructor(private redis: Redis) {
+  constructor(redis: Redis) {
     // subscriber 需要独立连接（进入 subscribe 模式后不能执行其他命令）
     this.subscriber = redis.duplicate();
     this.publisher = redis;
