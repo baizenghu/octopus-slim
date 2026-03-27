@@ -1,3 +1,3 @@
 // SLIM: removed
 export type assertExpectedResolvedSecretValue = any;
-export const assertExpectedResolvedSecretValue: any = undefined;
+export function assertExpectedResolvedSecretValue(..._args: any[]): any { return undefined; }

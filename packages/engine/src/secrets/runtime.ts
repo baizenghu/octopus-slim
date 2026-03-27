@@ -1,11 +1,14 @@
 // SLIM: removed
 export type activateSecretsRuntimeSnapshot = any;
-export const activateSecretsRuntimeSnapshot: any = undefined;
+export function activateSecretsRuntimeSnapshot(..._args: any[]): any { return undefined; }
 export type clearSecretsRuntimeSnapshot = any;
-export const clearSecretsRuntimeSnapshot: any = undefined;
+export function clearSecretsRuntimeSnapshot(..._args: any[]): any { return undefined; }
 export type getActiveSecretsRuntimeSnapshot = any;
-export const getActiveSecretsRuntimeSnapshot: any = undefined;
+export function getActiveSecretsRuntimeSnapshot(..._args: any[]): any { return undefined; }
 export type prepareSecretsRuntimeSnapshot = any;
-export const prepareSecretsRuntimeSnapshot: any = undefined;
+export async function prepareSecretsRuntimeSnapshot(..._args: any[]): Promise<any> {
+  const config = _args[0]?.config ?? {};
+  return { warnings: [], sourceConfig: config, config };
+}
 export type resolveCommandSecretsFromActiveRuntimeSnapshot = any;
-export const resolveCommandSecretsFromActiveRuntimeSnapshot: any = undefined;
+export function resolveCommandSecretsFromActiveRuntimeSnapshot(..._args: any[]): any { return undefined; }

@@ -1,3 +1,3 @@
 // SLIM: removed
 export type selectStyled = any;
-export const selectStyled: any = undefined;
+export function selectStyled(..._args: any[]): any { return undefined; }

@@ -1,3 +1,3 @@
 // SLIM: removed
 export type DiscordSendResult = any;
-export const DiscordSendResult: any = undefined;
+export const DiscordSendResult: any = {};

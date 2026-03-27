@@ -1,9 +1,9 @@
 // SLIM: removed
 export type SecretRefResolveCache = any;
-export const SecretRefResolveCache: any = undefined;
+export const SecretRefResolveCache: any = {};
 export type resolveSecretRefString = any;
-export const resolveSecretRefString: any = undefined;
+export function resolveSecretRefString(..._args: any[]): any { return undefined; }
 export type resolveSecretRefValue = any;
-export const resolveSecretRefValue: any = undefined;
+export function resolveSecretRefValue(..._args: any[]): any { return undefined; }
 export type resolveSecretRefValues = any;
-export const resolveSecretRefValues: any = undefined;
+export function resolveSecretRefValues(..._args: any[]): any { return undefined; }

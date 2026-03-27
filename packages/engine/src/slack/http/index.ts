@@ -1,3 +1,3 @@
 // SLIM: removed
 export type handleSlackHttpRequest = any;
-export const handleSlackHttpRequest: any = undefined;
+export function handleSlackHttpRequest(..._args: any[]): any { return undefined; }

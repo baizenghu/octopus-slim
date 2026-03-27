@@ -1,5 +1,5 @@
 // SLIM: removed
 export type canonicalizeBase64 = any;
-export const canonicalizeBase64: any = undefined;
+export function canonicalizeBase64(..._args: any[]): any { return undefined; }
 export type estimateBase64DecodedBytes = any;
-export const estimateBase64DecodedBytes: any = undefined;
+export function estimateBase64DecodedBytes(..._args: any[]): any { return undefined; }

@@ -1,7 +1,7 @@
 // SLIM: removed
 export type CommandSecretAssignment = any;
-export const CommandSecretAssignment: any = undefined;
+export const CommandSecretAssignment: any = {};
 export type UnresolvedCommandSecretAssignment = any;
-export const UnresolvedCommandSecretAssignment: any = undefined;
+export const UnresolvedCommandSecretAssignment: any = {};
 export type analyzeCommandSecretAssignmentsFromSnapshot = any;
-export const analyzeCommandSecretAssignmentsFromSnapshot: any = undefined;
+export function analyzeCommandSecretAssignmentsFromSnapshot(..._args: any[]): any { return undefined; }

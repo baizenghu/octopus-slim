@@ -1,5 +1,5 @@
 // SLIM: removed
 export type parseSlackTarget = any;
-export const parseSlackTarget: any = undefined;
+export function parseSlackTarget(..._args: any[]): any { return undefined; }
 export type resolveSlackChannelId = any;
-export const resolveSlackChannelId: any = undefined;
+export function resolveSlackChannelId(..._args: any[]): any { return undefined; }

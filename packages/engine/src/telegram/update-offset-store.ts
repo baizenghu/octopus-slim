@@ -1,3 +1,3 @@
 // SLIM: removed
 export type deleteTelegramUpdateOffset = any;
-export const deleteTelegramUpdateOffset: any = undefined;
+export function deleteTelegramUpdateOffset(..._args: any[]): any { return undefined; }

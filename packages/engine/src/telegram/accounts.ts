@@ -1,13 +1,13 @@
 // SLIM: removed
 export type ResolvedTelegramAccount = any;
-export const ResolvedTelegramAccount: any = undefined;
+export const ResolvedTelegramAccount: any = {};
 export type listEnabledTelegramAccounts = any;
-export const listEnabledTelegramAccounts: any = undefined;
+export function listEnabledTelegramAccounts(..._args: any[]): any { return []; }
 export type listTelegramAccountIds = any;
-export const listTelegramAccountIds: any = undefined;
+export function listTelegramAccountIds(..._args: any[]): any { return []; }
 export type resolveDefaultTelegramAccountId = any;
-export const resolveDefaultTelegramAccountId: any = undefined;
+export function resolveDefaultTelegramAccountId(..._args: any[]): any { return undefined; }
 export type resolveTelegramAccount = any;
-export const resolveTelegramAccount: any = undefined;
-export const createTelegramActionGate: any = undefined;
-export const resolveTelegramPollActionGateState: any = undefined;
+export function resolveTelegramAccount(..._args: any[]): any { return undefined; }
+export function createTelegramActionGate(..._args: any[]): any { return undefined; }
+export function resolveTelegramPollActionGateState(..._args: any[]): any { return undefined; }

@@ -1,12 +1,12 @@
 // SLIM: removed
 export type ResolvedDiscordAccount = any;
-export const ResolvedDiscordAccount: any = undefined;
+export const ResolvedDiscordAccount: any = {};
 export type listDiscordAccountIds = any;
-export const listDiscordAccountIds: any = undefined;
+export function listDiscordAccountIds(..._args: any[]): any { return []; }
 export type listEnabledDiscordAccounts = any;
-export const listEnabledDiscordAccounts: any = undefined;
+export function listEnabledDiscordAccounts(..._args: any[]): any { return []; }
 export type resolveDefaultDiscordAccountId = any;
-export const resolveDefaultDiscordAccountId: any = undefined;
+export function resolveDefaultDiscordAccountId(..._args: any[]): any { return undefined; }
 export type resolveDiscordAccount = any;
-export const resolveDiscordAccount: any = undefined;
-export const createDiscordActionGate: any = undefined;
+export function resolveDiscordAccount(..._args: any[]): any { return undefined; }
+export function createDiscordActionGate(..._args: any[]): any { return undefined; }

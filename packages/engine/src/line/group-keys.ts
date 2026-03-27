@@ -1,3 +1,3 @@
 // SLIM: removed
 export type resolveExactLineGroupConfigKey = any;
-export const resolveExactLineGroupConfigKey: any = undefined;
+export function resolveExactLineGroupConfigKey(..._args: any[]): any { return undefined; }

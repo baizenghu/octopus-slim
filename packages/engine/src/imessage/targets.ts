@@ -1,5 +1,5 @@
 // SLIM: removed
 export type normalizeIMessageHandle = any;
-export const normalizeIMessageHandle: any = undefined;
+export function normalizeIMessageHandle(..._args: any[]): any { return undefined; }
 export type parseIMessageTarget = any;
-export const parseIMessageTarget: any = undefined;
+export function parseIMessageTarget(..._args: any[]): any { return undefined; }

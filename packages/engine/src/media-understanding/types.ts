@@ -1,5 +1,5 @@
 // SLIM: removed
 export type MediaUnderstandingDecision = any;
-export const MediaUnderstandingDecision: any = undefined;
+export const MediaUnderstandingDecision: any = {};
 export type MediaUnderstandingOutput = any;
-export const MediaUnderstandingOutput: any = undefined;
+export const MediaUnderstandingOutput: any = {};

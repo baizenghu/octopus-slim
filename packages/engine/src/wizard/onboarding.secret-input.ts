@@ -1,3 +1,3 @@
 // SLIM: removed
 export type resolveOnboardingSecretInputString = any;
-export const resolveOnboardingSecretInputString: any = undefined;
+export function resolveOnboardingSecretInputString(..._args: any[]): any { return undefined; }

@@ -1,3 +1,3 @@
 // SLIM: removed
 export type formatRuntimeStatus = any;
-export const formatRuntimeStatus: any = undefined;
+export function formatRuntimeStatus(..._args: any[]): any { return ''; }

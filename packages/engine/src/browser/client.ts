@@ -6,13 +6,13 @@ export type BrowserResetProfileResult = any;
 export type BrowserStatus = any;
 export type BrowserTab = any;
 export type ProfileStatus = any;
-export const browserCloseTab: any = undefined;
-export const browserFocusTab: any = undefined;
-export const browserOpenTab: any = undefined;
-export const browserProfiles: any = undefined;
-export const browserScreenshotAction: any = undefined;
-export const browserStart: any = undefined;
-export const browserStatus: any = undefined;
-export const browserStop: any = undefined;
-export const browserSnapshot: any = undefined;
-export const browserTabs: any = undefined;
+export function browserCloseTab(..._args: any[]): any { return undefined; }
+export function browserFocusTab(..._args: any[]): any { return undefined; }
+export function browserOpenTab(..._args: any[]): any { return undefined; }
+export function browserProfiles(..._args: any[]): any { return undefined; }
+export function browserScreenshotAction(..._args: any[]): any { return undefined; }
+export function browserStart(..._args: any[]): any { return undefined; }
+export function browserStatus(..._args: any[]): any { return undefined; }
+export function browserStop(..._args: any[]): any { return undefined; }
+export function browserSnapshot(..._args: any[]): any { return undefined; }
+export function browserTabs(..._args: any[]): any { return undefined; }

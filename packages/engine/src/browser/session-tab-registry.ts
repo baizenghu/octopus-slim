@@ -1,4 +1,4 @@
 // SLIM: removed
-export const trackSessionBrowserTab: any = undefined;
-export const untrackSessionBrowserTab: any = undefined;
-export const closeTrackedBrowserTabsForSessions: any = undefined;
+export function trackSessionBrowserTab(..._args: any[]): any { return undefined; }
+export function untrackSessionBrowserTab(..._args: any[]): any { return undefined; }
+export function closeTrackedBrowserTabsForSessions(..._args: any[]): any { return undefined; }

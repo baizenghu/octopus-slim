@@ -1,3 +1,3 @@
 // SLIM: removed
 export type createClackPrompter = any;
-export const createClackPrompter: any = undefined;
+export function createClackPrompter(..._args: any[]): any { return undefined; }

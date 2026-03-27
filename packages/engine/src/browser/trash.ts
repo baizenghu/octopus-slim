@@ -1,2 +1,2 @@
 // SLIM: removed
-export const movePathToTrash: any = undefined;
+export function movePathToTrash(..._args: any[]): any { return undefined; }

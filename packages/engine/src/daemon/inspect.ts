@@ -1,9 +1,9 @@
 // SLIM: removed
 export type ExtraGatewayService = any;
-export const ExtraGatewayService: any = undefined;
+export const ExtraGatewayService: any = {};
 export type FindExtraGatewayServicesOptions = any;
-export const FindExtraGatewayServicesOptions: any = undefined;
+export const FindExtraGatewayServicesOptions: any = {};
 export type findExtraGatewayServices = any;
-export const findExtraGatewayServices: any = undefined;
+export function findExtraGatewayServices(..._args: any[]): any { return undefined; }
 export type renderGatewayServiceCleanupHints = any;
-export const renderGatewayServiceCleanupHints: any = undefined;
+export function renderGatewayServiceCleanupHints(..._args: any[]): any { return ''; }

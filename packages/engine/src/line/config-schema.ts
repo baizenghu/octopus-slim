@@ -1,2 +1,3 @@
 // SLIM: removed
-export function LineConfigSchema(..._args: unknown[]): any { throw new Error('SLIM: removed'); }
+export type LineConfigSchema = any;
+export const LineConfigSchema: any = {};

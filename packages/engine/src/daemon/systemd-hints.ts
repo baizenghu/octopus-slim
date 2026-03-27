@@ -1,5 +1,5 @@
 // SLIM: removed
 export type isSystemdUnavailableDetail = any;
-export const isSystemdUnavailableDetail: any = undefined;
+export function isSystemdUnavailableDetail(..._args: any[]): any { return false; }
 export type renderSystemdUnavailableHints = any;
-export const renderSystemdUnavailableHints: any = undefined;
+export function renderSystemdUnavailableHints(..._args: any[]): any { return ''; }

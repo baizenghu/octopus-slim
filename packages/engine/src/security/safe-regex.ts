@@ -1,5 +1,5 @@
 // SLIM: removed
 export type compileSafeRegex = any;
-export const compileSafeRegex: any = undefined;
+export function compileSafeRegex(..._args: any[]): any { return undefined; }
 export type testRegexWithBoundedInput = any;
-export const testRegexWithBoundedInput: any = undefined;
+export function testRegexWithBoundedInput(..._args: any[]): any { return undefined; }

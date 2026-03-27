@@ -1,3 +1,3 @@
 // SLIM: removed
 export type splitMediaFromOutput = any;
-export const splitMediaFromOutput: any = undefined;
+export function splitMediaFromOutput(..._args: any[]): any { return undefined; }

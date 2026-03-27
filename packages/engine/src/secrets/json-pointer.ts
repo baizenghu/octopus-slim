@@ -1,3 +1,3 @@
 // SLIM: removed
 export type encodeJsonPointerToken = any;
-export const encodeJsonPointerToken: any = undefined;
+export function encodeJsonPointerToken(..._args: any[]): any { return undefined; }

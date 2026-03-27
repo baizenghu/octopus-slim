@@ -1,3 +1,3 @@
 // SLIM: removed
-export const startBrowserControlServiceFromConfig: any = undefined;
-export const startBrowserControlServerFromConfig: any = undefined;
+export function startBrowserControlServiceFromConfig(..._args: any[]): any { return undefined; }
+export function startBrowserControlServerFromConfig(..._args: any[]): any { return undefined; }

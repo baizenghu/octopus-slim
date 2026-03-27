@@ -1,3 +1,3 @@
 // SLIM: removed
 export type styleHealthChannelLine = any;
-export const styleHealthChannelLine: any = undefined;
+export function styleHealthChannelLine(..._args: any[]): any { return undefined; }

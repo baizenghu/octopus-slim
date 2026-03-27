@@ -1,3 +1,3 @@
 // SLIM: removed
 export type normalizeExplicitDiscordSessionKey = any;
-export const normalizeExplicitDiscordSessionKey: any = undefined;
+export function normalizeExplicitDiscordSessionKey(..._args: any[]): any { return undefined; }

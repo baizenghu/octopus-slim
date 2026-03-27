@@ -1,7 +1,7 @@
 // SLIM: removed
 export type isValidFileSecretRefId = any;
-export const isValidFileSecretRefId: any = undefined;
+export function isValidFileSecretRefId(..._args: any[]): any { return false; }
 export type resolveDefaultSecretProviderAlias = any;
-export const resolveDefaultSecretProviderAlias: any = undefined;
+export function resolveDefaultSecretProviderAlias(..._args: any[]): any { return undefined; }
 export type secretRefKey = any;
-export const secretRefKey: any = undefined;
+export function secretRefKey(..._args: any[]): any { return undefined; }

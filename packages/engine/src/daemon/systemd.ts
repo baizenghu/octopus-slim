@@ -1,11 +1,11 @@
 // SLIM: removed
 export type enableSystemdUserLinger = any;
-export const enableSystemdUserLinger: any = undefined;
+export function enableSystemdUserLinger(..._args: any[]): any { return undefined; }
 export type isNonFatalSystemdInstallProbeError = any;
-export const isNonFatalSystemdInstallProbeError: any = undefined;
+export function isNonFatalSystemdInstallProbeError(..._args: any[]): any { return false; }
 export type isSystemdUserServiceAvailable = any;
-export const isSystemdUserServiceAvailable: any = undefined;
+export function isSystemdUserServiceAvailable(..._args: any[]): any { return false; }
 export type readSystemdUserLingerStatus = any;
-export const readSystemdUserLingerStatus: any = undefined;
+export function readSystemdUserLingerStatus(..._args: any[]): any { return undefined; }
 export type uninstallLegacySystemdUnits = any;
-export const uninstallLegacySystemdUnits: any = undefined;
+export function uninstallLegacySystemdUnits(..._args: any[]): any { return undefined; }

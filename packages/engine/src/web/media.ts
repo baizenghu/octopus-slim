@@ -1,9 +1,9 @@
 // SLIM: removed
 export type WebMediaResult = any;
-export const WebMediaResult: any = undefined;
+export const WebMediaResult: any = {};
 export type loadWebMedia = any;
-export const loadWebMedia: any = undefined;
+export function loadWebMedia(..._args: any[]): any { return undefined; }
 export type loadWebMediaRaw = any;
-export const loadWebMediaRaw: any = undefined;
-export const getDefaultLocalRoots: any = undefined;
-export const optimizeImageToJpeg: any = undefined;
+export function loadWebMediaRaw(..._args: any[]): any { return undefined; }
+export function getDefaultLocalRoots(..._args: any[]): any { return undefined; }
+export function optimizeImageToJpeg(..._args: any[]): any { return undefined; }

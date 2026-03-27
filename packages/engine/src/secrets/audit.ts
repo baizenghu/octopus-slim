@@ -1,5 +1,5 @@
 // SLIM: removed
 export type resolveSecretsAuditExitCode = any;
-export const resolveSecretsAuditExitCode: any = undefined;
+export function resolveSecretsAuditExitCode(..._args: any[]): any { return undefined; }
 export type runSecretsAudit = any;
-export const runSecretsAudit: any = undefined;
+export function runSecretsAudit(..._args: any[]): any { return undefined; }

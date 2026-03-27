@@ -1,2 +1,2 @@
 // SLIM: removed
-export const markdownToTelegramHtmlChunks: any = undefined;
+export function markdownToTelegramHtmlChunks(..._args: any[]): any { return undefined; }

@@ -1,3 +1,3 @@
 // SLIM: removed
 export type resolveSignalReactionLevel = any;
-export const resolveSignalReactionLevel: any = undefined;
+export function resolveSignalReactionLevel(..._args: any[]): any { return undefined; }

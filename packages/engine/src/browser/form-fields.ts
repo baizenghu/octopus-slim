@@ -1,3 +1,3 @@
 // SLIM: removed
-export const normalizeBrowserFormField: any = undefined;
-export const normalizeBrowserFormFieldValue: any = undefined;
+export function normalizeBrowserFormField(..._args: any[]): any { return undefined; }
+export function normalizeBrowserFormFieldValue(..._args: any[]): any { return undefined; }

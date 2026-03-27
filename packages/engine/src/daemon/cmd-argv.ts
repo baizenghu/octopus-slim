@@ -1,5 +1,5 @@
 // SLIM: removed
 export type parseCmdScriptCommandLine = any;
-export const parseCmdScriptCommandLine: any = undefined;
+export function parseCmdScriptCommandLine(..._args: any[]): any { return undefined; }
 export type quoteCmdScriptArg = any;
-export const quoteCmdScriptArg: any = undefined;
+export function quoteCmdScriptArg(..._args: any[]): any { return ''; }

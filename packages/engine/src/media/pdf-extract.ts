@@ -1,5 +1,5 @@
 // SLIM: removed
 export type PdfExtractedContent = any;
-export const PdfExtractedContent: any = undefined;
+export const PdfExtractedContent: any = {};
 export type extractPdfContent = any;
-export const extractPdfContent: any = undefined;
+export function extractPdfContent(..._args: any[]): any { return undefined; }

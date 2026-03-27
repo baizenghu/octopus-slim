@@ -1,3 +1,3 @@
 // SLIM: removed
 export type GatewayServiceRuntime = any;
-export const GatewayServiceRuntime: any = undefined;
+export const GatewayServiceRuntime: any = {};

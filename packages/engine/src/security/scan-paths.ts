@@ -1,7 +1,7 @@
 // SLIM: removed
 export type extensionUsesSkippedScannerPath = any;
-export const extensionUsesSkippedScannerPath: any = undefined;
+export function extensionUsesSkippedScannerPath(..._args: any[]): any { return undefined; }
 export type isPathInside = any;
-export const isPathInside: any = undefined;
+export function isPathInside(..._args: any[]): any { return false; }
 export type isPathInsideWithRealpath = any;
-export const isPathInsideWithRealpath: any = undefined;
+export function isPathInsideWithRealpath(..._args: any[]): any { return false; }

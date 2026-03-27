@@ -1,3 +1,3 @@
 // SLIM: removed
-export const DEFAULT_UPLOAD_DIR: any = undefined;
-export const resolveExistingPathsWithinRoot: any = undefined;
+export const DEFAULT_UPLOAD_DIR: any = '';
+export function resolveExistingPathsWithinRoot(..._args: any[]): any { return undefined; }

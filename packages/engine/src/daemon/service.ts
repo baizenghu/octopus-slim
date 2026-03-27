@@ -1,5 +1,5 @@
 // SLIM: removed
 export type GatewayService = any;
-export const GatewayService: any = undefined;
+export const GatewayService: any = {};
 export type resolveGatewayService = any;
-export const resolveGatewayService: any = undefined;
+export function resolveGatewayService(..._args: any[]): any { return undefined; }

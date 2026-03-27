@@ -1,5 +1,5 @@
 // SLIM: removed
 export type getPath = any;
-export const getPath: any = undefined;
+export function getPath(..._args: any[]): any { return undefined; }
 export type setPathExistingStrict = any;
-export const setPathExistingStrict: any = undefined;
+export function setPathExistingStrict(..._args: any[]): any { return undefined; }

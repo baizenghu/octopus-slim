@@ -1,3 +1,3 @@
 // SLIM: removed
 export type sanitizeTerminalText = any;
-export const sanitizeTerminalText: any = undefined;
+export function sanitizeTerminalText(..._args: any[]): any { return undefined; }

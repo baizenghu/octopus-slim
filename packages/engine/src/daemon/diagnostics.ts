@@ -1,3 +1,3 @@
 // SLIM: removed
 export type readLastGatewayErrorLine = any;
-export const readLastGatewayErrorLine: any = undefined;
+export function readLastGatewayErrorLine(..._args: any[]): any { return undefined; }

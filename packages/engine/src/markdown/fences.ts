@@ -1,9 +1,9 @@
 // SLIM: removed
 export type FenceSpan = any;
-export const FenceSpan: any = undefined;
+export const FenceSpan: any = {};
 export type findFenceSpanAt = any;
-export const findFenceSpanAt: any = undefined;
+export function findFenceSpanAt(..._args: any[]): any { return undefined; }
 export type isSafeFenceBreak = any;
-export const isSafeFenceBreak: any = undefined;
+export function isSafeFenceBreak(..._args: any[]): any { return false; }
 export type parseFenceSpans = any;
-export const parseFenceSpans: any = undefined;
+export function parseFenceSpans(..._args: any[]): any { return undefined; }

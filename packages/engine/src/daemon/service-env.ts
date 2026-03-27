@@ -1,5 +1,5 @@
 // SLIM: removed
 export type buildNodeServiceEnvironment = any;
-export const buildNodeServiceEnvironment: any = undefined;
+export function buildNodeServiceEnvironment(..._args: any[]): any { return undefined; }
 export type buildServiceEnvironment = any;
-export const buildServiceEnvironment: any = undefined;
+export function buildServiceEnvironment(..._args: any[]): any { return undefined; }

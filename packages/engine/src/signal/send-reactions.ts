@@ -1,5 +1,5 @@
 // SLIM: removed
 export type removeReactionSignal = any;
-export const removeReactionSignal: any = undefined;
+export function removeReactionSignal(..._args: any[]): any { return undefined; }
 export type sendReactionSignal = any;
-export const sendReactionSignal: any = undefined;
+export function sendReactionSignal(..._args: any[]): any { return undefined; }

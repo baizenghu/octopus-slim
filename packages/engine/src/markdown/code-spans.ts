@@ -1,7 +1,7 @@
 // SLIM: removed
 export type InlineCodeState = any;
-export const InlineCodeState: any = undefined;
+export const InlineCodeState: any = {};
 export type buildCodeSpanIndex = any;
-export const buildCodeSpanIndex: any = undefined;
+export function buildCodeSpanIndex(..._args: any[]): any { return undefined; }
 export type createInlineCodeState = any;
-export const createInlineCodeState: any = undefined;
+export function createInlineCodeState(..._args: any[]): any { return undefined; }

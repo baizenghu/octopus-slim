@@ -1,3 +1,3 @@
 // SLIM: removed
 export type collectEnabledInsecureOrDangerousFlags = any;
-export const collectEnabledInsecureOrDangerousFlags: any = undefined;
+export function collectEnabledInsecureOrDangerousFlags(..._args: any[]): any { return []; }

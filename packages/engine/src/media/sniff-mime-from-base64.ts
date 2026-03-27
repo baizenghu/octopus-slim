@@ -1,3 +1,3 @@
 // SLIM: removed
 export type sniffMimeFromBase64 = any;
-export const sniffMimeFromBase64: any = undefined;
+export function sniffMimeFromBase64(..._args: any[]): any { return undefined; }

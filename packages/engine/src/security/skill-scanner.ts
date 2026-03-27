@@ -1,3 +1,3 @@
 // SLIM: removed
 export type scanDirectoryWithSummary = any;
-export const scanDirectoryWithSummary: any = undefined;
+export function scanDirectoryWithSummary(..._args: any[]): any { return undefined; }

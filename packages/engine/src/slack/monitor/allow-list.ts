@@ -1,3 +1,3 @@
 // SLIM: removed
 export type normalizeAllowListLower = any;
-export const normalizeAllowListLower: any = undefined;
+export function normalizeAllowListLower(..._args: any[]): any { return undefined; }

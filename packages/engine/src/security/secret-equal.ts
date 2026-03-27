@@ -1,3 +1,3 @@
 // SLIM: removed
 export type safeEqualSecret = any;
-export const safeEqualSecret: any = undefined;
+export function safeEqualSecret(..._args: any[]): any { return undefined; }

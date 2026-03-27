@@ -1,8 +1,8 @@
 // SLIM: removed
 export type sendMessageDiscord = any;
-export const sendMessageDiscord: any = undefined;
+export function sendMessageDiscord(..._args: any[]): any { return undefined; }
 export type sendPollDiscord = any;
-export const sendPollDiscord: any = undefined;
+export function sendPollDiscord(..._args: any[]): any { return undefined; }
 export type sendWebhookMessageDiscord = any;
-export const sendWebhookMessageDiscord: any = undefined;
-export const fetchChannelPermissionsDiscord: any = undefined;
+export function sendWebhookMessageDiscord(..._args: any[]): any { return undefined; }
+export function fetchChannelPermissionsDiscord(..._args: any[]): any { return undefined; }

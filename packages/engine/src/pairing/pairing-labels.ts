@@ -1,3 +1,3 @@
 // SLIM: removed
 export type resolvePairingIdLabel = any;
-export const resolvePairingIdLabel: any = undefined;
+export function resolvePairingIdLabel(..._args: any[]): any { return undefined; }

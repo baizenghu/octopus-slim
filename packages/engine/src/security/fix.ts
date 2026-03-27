@@ -1,3 +1,3 @@
 // SLIM: removed
 export type fixSecurityFootguns = any;
-export const fixSecurityFootguns: any = undefined;
+export function fixSecurityFootguns(..._args: any[]): any { return undefined; }

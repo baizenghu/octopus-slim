@@ -1,5 +1,5 @@
 // SLIM: removed
 export type setTelegramThreadBindingIdleTimeoutBySessionKey = any;
-export const setTelegramThreadBindingIdleTimeoutBySessionKey: any = undefined;
+export function setTelegramThreadBindingIdleTimeoutBySessionKey(..._args: any[]): any { return undefined; }
 export type setTelegramThreadBindingMaxAgeBySessionKey = any;
-export const setTelegramThreadBindingMaxAgeBySessionKey: any = undefined;
+export function setTelegramThreadBindingMaxAgeBySessionKey(..._args: any[]): any { return undefined; }

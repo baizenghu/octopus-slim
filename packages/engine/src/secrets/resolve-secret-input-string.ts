@@ -1,3 +1,3 @@
 // SLIM: removed
 export type resolveSecretInputString = any;
-export const resolveSecretInputString: any = undefined;
+export function resolveSecretInputString(..._args: any[]): any { return undefined; }

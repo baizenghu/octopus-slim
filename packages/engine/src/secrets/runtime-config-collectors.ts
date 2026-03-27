@@ -1,3 +1,3 @@
 // SLIM: removed
 export type collectConfigAssignments = any;
-export const collectConfigAssignments: any = undefined;
+export function collectConfigAssignments(..._args: any[]): any { return []; }

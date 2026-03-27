@@ -1,4 +1,4 @@
 // SLIM: removed
 export type BrowserBridge = any;
-export const startBrowserBridgeServer: any = undefined;
-export const stopBrowserBridgeServer: any = undefined;
+export function startBrowserBridgeServer(..._args: any[]): any { return undefined; }
+export function stopBrowserBridgeServer(..._args: any[]): any { return undefined; }

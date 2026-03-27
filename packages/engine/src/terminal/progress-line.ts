@@ -1,7 +1,7 @@
 // SLIM: removed
 export type clearActiveProgressLine = any;
-export const clearActiveProgressLine: any = undefined;
+export function clearActiveProgressLine(..._args: any[]): any { return undefined; }
 export type registerActiveProgressLine = any;
-export const registerActiveProgressLine: any = undefined;
+export function registerActiveProgressLine(..._args: any[]): any { return undefined; }
 export type unregisterActiveProgressLine = any;
-export const unregisterActiveProgressLine: any = undefined;
+export function unregisterActiveProgressLine(..._args: any[]): any { return undefined; }

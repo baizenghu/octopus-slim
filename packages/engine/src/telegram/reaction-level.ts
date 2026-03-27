@@ -1,3 +1,3 @@
 // SLIM: removed
 export type resolveTelegramReactionLevel = any;
-export const resolveTelegramReactionLevel: any = undefined;
+export function resolveTelegramReactionLevel(..._args: any[]): any { return undefined; }

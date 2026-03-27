@@ -1,5 +1,5 @@
 // SLIM: removed
 export type buildPlatformRuntimeLogHints = any;
-export const buildPlatformRuntimeLogHints: any = undefined;
+export function buildPlatformRuntimeLogHints(..._args: any[]): any { return undefined; }
 export type buildPlatformServiceStartHints = any;
-export const buildPlatformServiceStartHints: any = undefined;
+export function buildPlatformServiceStartHints(..._args: any[]): any { return undefined; }

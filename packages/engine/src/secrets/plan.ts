@@ -1,5 +1,5 @@
 // SLIM: removed
 export type SecretsApplyPlan = any;
-export const SecretsApplyPlan: any = undefined;
+export const SecretsApplyPlan: any = {};
 export type isSecretsApplyPlan = any;
-export const isSecretsApplyPlan: any = undefined;
+export function isSecretsApplyPlan(..._args: any[]): any { return false; }

@@ -1,7 +1,7 @@
 // SLIM: removed
 export type isInboundPathAllowed = any;
-export const isInboundPathAllowed: any = undefined;
+export function isInboundPathAllowed(..._args: any[]): any { return false; }
 export type isValidInboundPathRootPattern = any;
-export const isValidInboundPathRootPattern: any = undefined;
+export function isValidInboundPathRootPattern(..._args: any[]): any { return false; }
 export type resolveIMessageRemoteAttachmentRoots = any;
-export const resolveIMessageRemoteAttachmentRoots: any = undefined;
+export function resolveIMessageRemoteAttachmentRoots(..._args: any[]): any { return undefined; }

@@ -1,5 +1,5 @@
 // SLIM: removed
 export type isBunRuntime = any;
-export const isBunRuntime: any = undefined;
+export function isBunRuntime(..._args: any[]): any { return false; }
 export type isNodeRuntime = any;
-export const isNodeRuntime: any = undefined;
+export function isNodeRuntime(..._args: any[]): any { return false; }

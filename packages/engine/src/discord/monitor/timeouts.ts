@@ -1,5 +1,5 @@
 // SLIM: removed
 export type DISCORD_DEFAULT_INBOUND_WORKER_TIMEOUT_MS = any;
-export const DISCORD_DEFAULT_INBOUND_WORKER_TIMEOUT_MS: any = undefined;
+export const DISCORD_DEFAULT_INBOUND_WORKER_TIMEOUT_MS: any = {};
 export type DISCORD_DEFAULT_LISTENER_TIMEOUT_MS = any;
-export const DISCORD_DEFAULT_LISTENER_TIMEOUT_MS: any = undefined;
+export const DISCORD_DEFAULT_LISTENER_TIMEOUT_MS: any = {};

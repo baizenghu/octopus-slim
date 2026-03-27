@@ -1,3 +1,3 @@
 // SLIM: removed
 export type runNodeHost = any;
-export const runNodeHost: any = undefined;
+export function runNodeHost(..._args: any[]): any { return undefined; }

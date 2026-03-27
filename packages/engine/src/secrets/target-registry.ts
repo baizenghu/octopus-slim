@@ -1,9 +1,9 @@
 // SLIM: removed
 export type DiscoveredConfigSecretTarget = any;
-export const DiscoveredConfigSecretTarget: any = undefined;
+export const DiscoveredConfigSecretTarget: any = {};
 export type discoverConfigSecretTargetsByIds = any;
-export const discoverConfigSecretTargetsByIds: any = undefined;
+export function discoverConfigSecretTargetsByIds(..._args: any[]): any { return undefined; }
 export type isKnownSecretTargetId = any;
-export const isKnownSecretTargetId: any = undefined;
+export function isKnownSecretTargetId(..._args: any[]): any { return false; }
 export type listSecretTargetRegistryEntries = any;
-export const listSecretTargetRegistryEntries: any = undefined;
+export function listSecretTargetRegistryEntries(..._args: any[]): any { return []; }

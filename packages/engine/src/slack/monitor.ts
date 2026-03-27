@@ -1,2 +1,2 @@
 // SLIM: removed
-export const monitorSlackProvider: any = undefined;
+export function monitorSlackProvider(..._args: any[]): any { return undefined; }

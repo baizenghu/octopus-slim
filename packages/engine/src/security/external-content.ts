@@ -1,13 +1,13 @@
 // SLIM: removed
 export type buildSafeExternalPrompt = any;
-export const buildSafeExternalPrompt: any = undefined;
+export function buildSafeExternalPrompt(..._args: any[]): any { return undefined; }
 export type detectSuspiciousPatterns = any;
-export const detectSuspiciousPatterns: any = undefined;
+export function detectSuspiciousPatterns(..._args: any[]): any { return undefined; }
 export type getHookType = any;
-export const getHookType: any = undefined;
+export function getHookType(..._args: any[]): any { return undefined; }
 export type isExternalHookSession = any;
-export const isExternalHookSession: any = undefined;
+export function isExternalHookSession(..._args: any[]): any { return false; }
 export type wrapExternalContent = any;
-export const wrapExternalContent: any = undefined;
+export function wrapExternalContent(..._args: any[]): any { return undefined; }
 export type wrapWebContent = any;
-export const wrapWebContent: any = undefined;
+export function wrapWebContent(..._args: any[]): any { return undefined; }

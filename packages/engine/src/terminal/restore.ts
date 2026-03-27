@@ -1,3 +1,3 @@
 // SLIM: removed
 export type restoreTerminalState = any;
-export const restoreTerminalState: any = undefined;
+export function restoreTerminalState(..._args: any[]): any { return undefined; }

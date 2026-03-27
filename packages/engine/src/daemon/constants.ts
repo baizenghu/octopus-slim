@@ -1,15 +1,15 @@
 // SLIM: removed
 export type formatNodeServiceDescription = any;
-export const formatNodeServiceDescription: any = undefined;
+export function formatNodeServiceDescription(..._args: any[]): any { return ''; }
 export type resolveGatewayLaunchAgentLabel = any;
-export const resolveGatewayLaunchAgentLabel: any = undefined;
+export function resolveGatewayLaunchAgentLabel(..._args: any[]): any { return undefined; }
 export type resolveGatewaySystemdServiceName = any;
-export const resolveGatewaySystemdServiceName: any = undefined;
+export function resolveGatewaySystemdServiceName(..._args: any[]): any { return undefined; }
 export type resolveGatewayWindowsTaskName = any;
-export const resolveGatewayWindowsTaskName: any = undefined;
+export function resolveGatewayWindowsTaskName(..._args: any[]): any { return undefined; }
 export type resolveNodeLaunchAgentLabel = any;
-export const resolveNodeLaunchAgentLabel: any = undefined;
+export function resolveNodeLaunchAgentLabel(..._args: any[]): any { return undefined; }
 export type resolveNodeSystemdServiceName = any;
-export const resolveNodeSystemdServiceName: any = undefined;
+export function resolveNodeSystemdServiceName(..._args: any[]): any { return undefined; }
 export type resolveNodeWindowsTaskName = any;
-export const resolveNodeWindowsTaskName: any = undefined;
+export function resolveNodeWindowsTaskName(..._args: any[]): any { return undefined; }

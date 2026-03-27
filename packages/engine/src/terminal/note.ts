@@ -1,3 +1,3 @@
 // SLIM: removed
 export type note = any;
-export const note: any = undefined;
+export function note(..._args: any[]): any { return undefined; }

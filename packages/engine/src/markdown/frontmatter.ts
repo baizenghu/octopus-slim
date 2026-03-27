@@ -1,3 +1,3 @@
 // SLIM: removed
 export type parseFrontmatterBlock = any;
-export const parseFrontmatterBlock: any = undefined;
+export function parseFrontmatterBlock(..._args: any[]): any { return undefined; }

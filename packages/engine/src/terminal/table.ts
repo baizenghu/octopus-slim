@@ -1,3 +1,3 @@
 // SLIM: removed
 export type renderTable = any;
-export const renderTable: any = undefined;
+export function renderTable(..._args: any[]): any { return ''; }

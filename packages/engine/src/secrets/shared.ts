@@ -1,3 +1,3 @@
 // SLIM: removed
 export type describeUnknownError = any;
-export const describeUnknownError: any = undefined;
+export function describeUnknownError(..._args: any[]): any { return undefined; }

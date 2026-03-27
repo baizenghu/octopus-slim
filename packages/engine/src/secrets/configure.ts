@@ -1,3 +1,3 @@
 // SLIM: removed
 export type runSecretsConfigureInteractive = any;
-export const runSecretsConfigureInteractive: any = undefined;
+export function runSecretsConfigureInteractive(..._args: any[]): any { return undefined; }

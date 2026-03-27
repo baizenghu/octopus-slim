@@ -1,12 +1,12 @@
 // SLIM: removed
 export type ResolvedWhatsAppAccount = any;
-export const ResolvedWhatsAppAccount: any = undefined;
+export const ResolvedWhatsAppAccount: any = {};
 export type listWhatsAppAccountIds = any;
-export const listWhatsAppAccountIds: any = undefined;
+export function listWhatsAppAccountIds(..._args: any[]): any { return []; }
 export type resolveDefaultWhatsAppAccountId = any;
-export const resolveDefaultWhatsAppAccountId: any = undefined;
+export function resolveDefaultWhatsAppAccountId(..._args: any[]): any { return undefined; }
 export type resolveWhatsAppAccount = any;
-export const resolveWhatsAppAccount: any = undefined;
+export function resolveWhatsAppAccount(..._args: any[]): any { return undefined; }
 export type resolveWhatsAppAuthDir = any;
-export const resolveWhatsAppAuthDir: any = undefined;
-export const hasAnyWhatsAppAuth: any = undefined;
+export function resolveWhatsAppAuthDir(..._args: any[]): any { return undefined; }
+export function hasAnyWhatsAppAuth(..._args: any[]): any { return false; }

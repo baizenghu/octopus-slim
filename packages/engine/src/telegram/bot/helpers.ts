@@ -1,3 +1,3 @@
 // SLIM: removed
 export type buildTelegramGroupPeerId = any;
-export const buildTelegramGroupPeerId: any = undefined;
+export function buildTelegramGroupPeerId(..._args: any[]): any { return undefined; }

@@ -1,7 +1,7 @@
 // SLIM: removed
 export type stylePromptHint = any;
-export const stylePromptHint: any = undefined;
+export function stylePromptHint(..._args: any[]): any { return undefined; }
 export type stylePromptMessage = any;
-export const stylePromptMessage: any = undefined;
+export function stylePromptMessage(..._args: any[]): any { return undefined; }
 export type stylePromptTitle = any;
-export const stylePromptTitle: any = undefined;
+export function stylePromptTitle(..._args: any[]): any { return undefined; }

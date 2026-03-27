@@ -1,7 +1,7 @@
 // SLIM: removed
 export type isTelegramInlineButtonsEnabled = any;
-export const isTelegramInlineButtonsEnabled: any = undefined;
+export function isTelegramInlineButtonsEnabled(..._args: any[]): any { return false; }
 export type resolveTelegramInlineButtonsScope = any;
-export const resolveTelegramInlineButtonsScope: any = undefined;
+export function resolveTelegramInlineButtonsScope(..._args: any[]): any { return undefined; }
 export type resolveTelegramTargetChatType = any;
-export const resolveTelegramTargetChatType: any = undefined;
+export function resolveTelegramTargetChatType(..._args: any[]): any { return undefined; }

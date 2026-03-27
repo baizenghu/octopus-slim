@@ -1,5 +1,5 @@
 // SLIM: removed
 export type encodePngRgba = any;
-export const encodePngRgba: any = undefined;
+export function encodePngRgba(..._args: any[]): any { return undefined; }
 export type fillPixel = any;
-export const fillPixel: any = undefined;
+export function fillPixel(..._args: any[]): any { return undefined; }

@@ -1,13 +1,13 @@
 // SLIM: removed
 export type SERVICE_AUDIT_CODES = any;
-export const SERVICE_AUDIT_CODES: any = undefined;
+export const SERVICE_AUDIT_CODES: any = {};
 export type ServiceConfigAudit = any;
-export const ServiceConfigAudit: any = undefined;
+export const ServiceConfigAudit: any = {};
 export type auditGatewayServiceConfig = any;
-export const auditGatewayServiceConfig: any = undefined;
+export function auditGatewayServiceConfig(..._args: any[]): any { return undefined; }
 export type checkTokenDrift = any;
-export const checkTokenDrift: any = undefined;
+export function checkTokenDrift(..._args: any[]): any { return undefined; }
 export type needsNodeRuntimeMigration = any;
-export const needsNodeRuntimeMigration: any = undefined;
+export function needsNodeRuntimeMigration(..._args: any[]): any { return false; }
 export type readEmbeddedGatewayToken = any;
-export const readEmbeddedGatewayToken: any = undefined;
+export function readEmbeddedGatewayToken(..._args: any[]): any { return undefined; }

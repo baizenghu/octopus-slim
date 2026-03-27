@@ -1,5 +1,5 @@
 // SLIM: removed
 export type stripAnsi = any;
-export const stripAnsi: any = undefined;
-export const sanitizeForLog: any = undefined;
-export const visibleWidth: any = undefined;
+export function stripAnsi(..._args: any[]): any { return undefined; }
+export function sanitizeForLog(..._args: any[]): any { return undefined; }
+export function visibleWidth(..._args: any[]): any { return undefined; }

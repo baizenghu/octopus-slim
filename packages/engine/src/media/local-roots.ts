@@ -1,3 +1,3 @@
 // SLIM: removed
 export type getAgentScopedMediaLocalRoots = any;
-export const getAgentScopedMediaLocalRoots: any = undefined;
+export function getAgentScopedMediaLocalRoots(..._args: any[]): any { return undefined; }

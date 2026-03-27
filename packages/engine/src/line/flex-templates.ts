@@ -1,22 +1,22 @@
 // SLIM: removed
 export type CardAction = any;
-export const CardAction: any = undefined;
+export const CardAction: any = {};
 export type ListItem = any;
-export const ListItem: any = undefined;
+export const ListItem: any = {};
 export type createActionCard = any;
-export const createActionCard: any = undefined;
+export function createActionCard(..._args: any[]): any { return undefined; }
 export type createAgendaCard = any;
-export const createAgendaCard: any = undefined;
+export function createAgendaCard(..._args: any[]): any { return undefined; }
 export type createEventCard = any;
-export const createEventCard: any = undefined;
+export function createEventCard(..._args: any[]): any { return undefined; }
 export type createImageCard = any;
-export const createImageCard: any = undefined;
+export function createImageCard(..._args: any[]): any { return undefined; }
 export type createInfoCard = any;
-export const createInfoCard: any = undefined;
+export function createInfoCard(..._args: any[]): any { return undefined; }
 export type createListCard = any;
-export const createListCard: any = undefined;
+export function createListCard(..._args: any[]): any { return undefined; }
 export type createReceiptCard = any;
-export const createReceiptCard: any = undefined;
-export const createMediaPlayerCard: any = undefined;
-export const createDeviceControlCard: any = undefined;
-export const createAppleTvRemoteCard: any = undefined;
+export function createReceiptCard(..._args: any[]): any { return undefined; }
+export function createMediaPlayerCard(..._args: any[]): any { return undefined; }
+export function createDeviceControlCard(..._args: any[]): any { return undefined; }
+export function createAppleTvRemoteCard(..._args: any[]): any { return undefined; }

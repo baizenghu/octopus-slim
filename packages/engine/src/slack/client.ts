@@ -1,3 +1,3 @@
 // SLIM: removed
 export type createSlackWebClient = any;
-export const createSlackWebClient: any = undefined;
+export function createSlackWebClient(..._args: any[]): any { return undefined; }

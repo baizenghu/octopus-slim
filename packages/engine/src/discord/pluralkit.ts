@@ -1,3 +1,3 @@
 // SLIM: removed
 export type DiscordPluralKitConfig = any;
-export const DiscordPluralKitConfig: any = undefined;
+export const DiscordPluralKitConfig: any = {};

@@ -1,3 +1,3 @@
 // SLIM: removed
 export type runOnboardingWizard = any;
-export const runOnboardingWizard: any = undefined;
+export function runOnboardingWizard(..._args: any[]): any { return undefined; }

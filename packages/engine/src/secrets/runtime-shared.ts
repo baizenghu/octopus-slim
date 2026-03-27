@@ -1,3 +1,3 @@
 // SLIM: removed
 export type createResolverContext = any;
-export const createResolverContext: any = undefined;
+export function createResolverContext(..._args: any[]): any { return undefined; }

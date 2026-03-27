@@ -1,2 +1,2 @@
 // SLIM: removed
-export const createBrowserRouteDispatcher: any = undefined;
+export function createBrowserRouteDispatcher(..._args: any[]): any { return undefined; }

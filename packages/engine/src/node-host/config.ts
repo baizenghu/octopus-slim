@@ -1,3 +1,3 @@
 // SLIM: removed
 export type loadNodeHostConfig = any;
-export const loadNodeHostConfig: any = undefined;
+export function loadNodeHostConfig(..._args: any[]): any { return undefined; }

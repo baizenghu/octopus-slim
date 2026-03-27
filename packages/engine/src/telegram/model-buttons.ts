@@ -1,13 +1,13 @@
 // SLIM: removed
 export type ProviderInfo = any;
-export const ProviderInfo: any = undefined;
+export const ProviderInfo: any = {};
 export type buildBrowseProvidersButton = any;
-export const buildBrowseProvidersButton: any = undefined;
+export function buildBrowseProvidersButton(..._args: any[]): any { return undefined; }
 export type buildModelsKeyboard = any;
-export const buildModelsKeyboard: any = undefined;
+export function buildModelsKeyboard(..._args: any[]): any { return undefined; }
 export type buildProviderKeyboard = any;
-export const buildProviderKeyboard: any = undefined;
+export function buildProviderKeyboard(..._args: any[]): any { return undefined; }
 export type calculateTotalPages = any;
-export const calculateTotalPages: any = undefined;
+export function calculateTotalPages(..._args: any[]): any { return undefined; }
 export type getModelsPageSize = any;
-export const getModelsPageSize: any = undefined;
+export function getModelsPageSize(..._args: any[]): any { return undefined; }

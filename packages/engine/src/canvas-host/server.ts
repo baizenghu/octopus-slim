@@ -1,7 +1,7 @@
 // SLIM: removed
 export type CanvasHostHandler = any;
-export const CanvasHostHandler: any = undefined;
+export const CanvasHostHandler: any = {};
 export type CanvasHostServer = any;
-export const CanvasHostServer: any = undefined;
+export const CanvasHostServer: any = {};
 export type createCanvasHostHandler = any;
-export const createCanvasHostHandler: any = undefined;
+export function createCanvasHostHandler(..._args: any[]): any { return undefined; }

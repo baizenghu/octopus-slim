@@ -1,8 +1,8 @@
 // SLIM: removed
-export const browserAct: any = undefined;
-export const browserConsoleMessages: any = undefined;
-export const browserArmDialog: any = undefined;
-export const browserArmFileChooser: any = undefined;
-export const browserNavigate: any = undefined;
-export const browserPdfSave: any = undefined;
-export const browserScreenshotAction: any = undefined;
+export function browserAct(..._args: any[]): any { return undefined; }
+export function browserConsoleMessages(..._args: any[]): any { return undefined; }
+export function browserArmDialog(..._args: any[]): any { return undefined; }
+export function browserArmFileChooser(..._args: any[]): any { return undefined; }
+export function browserNavigate(..._args: any[]): any { return undefined; }
+export function browserPdfSave(..._args: any[]): any { return undefined; }
+export function browserScreenshotAction(..._args: any[]): any { return undefined; }

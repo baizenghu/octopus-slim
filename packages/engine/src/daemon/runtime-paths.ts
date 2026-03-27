@@ -1,7 +1,7 @@
 // SLIM: removed
 export type renderSystemNodeWarning = any;
-export const renderSystemNodeWarning: any = undefined;
+export function renderSystemNodeWarning(..._args: any[]): any { return ''; }
 export type resolvePreferredNodePath = any;
-export const resolvePreferredNodePath: any = undefined;
+export function resolvePreferredNodePath(..._args: any[]): any { return undefined; }
 export type resolveSystemNodeInfo = any;
-export const resolveSystemNodeInfo: any = undefined;
+export function resolveSystemNodeInfo(..._args: any[]): any { return undefined; }

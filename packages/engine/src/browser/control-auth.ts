@@ -1,3 +1,3 @@
 // SLIM: removed
-export const ensureBrowserControlAuth: any = undefined;
-export const resolveBrowserControlAuth: any = undefined;
+export function ensureBrowserControlAuth(..._args: any[]): any { return undefined; }
+export function resolveBrowserControlAuth(..._args: any[]): any { return undefined; }

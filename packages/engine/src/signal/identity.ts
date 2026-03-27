@@ -1,9 +1,9 @@
 // SLIM: removed
 export type looksLikeUuid = any;
-export const looksLikeUuid: any = undefined;
+export function looksLikeUuid(..._args: any[]): any { return undefined; }
 export type resolveSignalPeerId = any;
-export const resolveSignalPeerId: any = undefined;
+export function resolveSignalPeerId(..._args: any[]): any { return undefined; }
 export type resolveSignalRecipient = any;
-export const resolveSignalRecipient: any = undefined;
+export function resolveSignalRecipient(..._args: any[]): any { return undefined; }
 export type resolveSignalSender = any;
-export const resolveSignalSender: any = undefined;
+export function resolveSignalSender(..._args: any[]): any { return undefined; }

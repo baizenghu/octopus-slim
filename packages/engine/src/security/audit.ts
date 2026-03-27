@@ -1,3 +1,3 @@
 // SLIM: removed
 export type runSecurityAudit = any;
-export const runSecurityAudit: any = undefined;
+export function runSecurityAudit(..._args: any[]): any { return undefined; }

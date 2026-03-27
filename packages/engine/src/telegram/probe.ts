@@ -1,3 +1,3 @@
 // SLIM: removed
-export function probeTelegram(..._args: unknown[]): any { throw new Error('SLIM: removed'); }
+export function probeTelegram(..._args: unknown[]): any { return undefined; }
 export type TelegramProbe = any;
