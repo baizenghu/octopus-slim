@@ -74,24 +74,36 @@ model UserSession {
   @@map("user_sessions")
 }
 
-/// 技能表
-model Skill {
-  id          String   @id @map("skill_id") @db.VarChar(64)
-  name        String   @db.VarChar(255)
-  description String?  @db.Text
-  scope       String   @db.VarChar(20) /// 'enterprise' | 'personal'
+/// 工具源表（统一 MCP + Skill）
+model ToolSource {
+  id          String   @id @default(uuid()) @map("source_id") @db.VarChar(64)
+  name        String   @unique @db.VarChar(255)
+  type        String   @db.VarChar(20) /// "mcp" | "skill"
+  enabled     Boolean  @default(true)
+  scope       String   @default("enterprise") @db.VarChar(20) /// "enterprise" | "personal"
   ownerId     String?  @map("owner_id") @db.VarChar(64)
-  version     String?  @db.VarChar(20)
-  status      String   @default("pending") @db.VarChar(20) /// 'pending'|'approved'|'rejected'
-  scriptPath  String?  @map("script_path") @db.VarChar(512) /// 入口脚本相对路径
-  command     String?  @db.VarChar(255) /// 执行命令 (python3/node/bash)
-  scanReport  Json?    @map("scan_report")
-  enabled     Boolean  @default(false)
-  createdAt   DateTime @default(now()) @map("created_at")
 
-  @@index([scope])
-  @@index([ownerId])
-  @@map("skills")
+  // MCP 配置
+  transport   String?  @db.VarChar(20) /// "stdio" | "http"
+  command     String?  @db.VarChar(512)
+  args        Json?
+  url         String?  @db.VarChar(512)
+  env         Json?
+
+  // Skill 配置
+  scriptPath  String?  @map("script_path") @db.VarChar(512)
+  runtime     String?  @db.VarChar(20) /// "python" | "node"
+
+  // 通用
+  description String?  @db.Text
+  tools       Json?    /// 工具列表缓存
+  config      Json?    /// 额外配置
+
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([ownerId, scope])
+  @@map("tool_sources")
 }
 
 /// Agent 表（个人级多 Agent）
@@ -103,9 +115,23 @@ model Agent {
   model        String?  @db.VarChar(128)   /// 覆盖全局默认模型
   systemPrompt String?  @map("system_prompt") @db.Text /// 自定义系统提示（追加到基础提示后）
   identity     Json?    /// { name?: string, emoji?: string, avatar?: string }
-  skillsFilter Json?    @map("skills_filter") /// string[] | null (null=全部可用)
-  mcpFilter    Json?    @map("mcp_filter")    /// string[] | null (null=全部可用)
-  toolsFilter  Json?    @map("tools_filter")  /// string[] | null (null=全部, "read","write","exec")
+
+  // — 新增：统一工具源白名单 —
+  allowedToolSources Json? @map("allowed_tool_sources") /// string[] ToolSource name 白名单, null=全部可用
+
+  // — 从 octopus.json 迁入的引擎配置 —
+  toolsProfile String?  @map("tools_profile") @db.VarChar(64)  /// "default" | "coder" | "readonly" 等
+  toolsDeny    Json?    @map("tools_deny")    /// string[] 工具黑名单
+  toolsAllow   Json?    @map("tools_allow")   /// string[] 工具白名单
+  subagents    Json?    /// 子 agent 配置
+  memoryScope  Json?    @map("memory_scope")  /// 记忆隔离配置
+  sandboxMode  String?  @map("sandbox_mode") @db.VarChar(20) /// "host" | "sandbox"
+
+  // — deprecated: 保留兼容，后续移除 —
+  skillsFilter Json?    @map("skills_filter") /// @deprecated 使用 allowedToolSources
+  mcpFilter    Json?    @map("mcp_filter")    /// @deprecated 使用 allowedToolSources
+  toolsFilter  Json?    @map("tools_filter")  /// @deprecated 使用 toolsProfile + toolsAllow/toolsDeny
+
   allowedConnections Json? @map("allowed_connections") /// string[] | null (null=不限制, 数组=允许的数据库连接名白名单)
   enabled      Boolean  @default(true)
   isDefault    Boolean  @default(false) @map("is_default")
@@ -114,25 +140,6 @@ model Agent {
 
   @@index([ownerId])
   @@map("agents")
-}
-
-/// MCP 服务表
-model MCPServer {
-  id          String   @id @map("server_id") @db.VarChar(64)
-  name        String   @db.VarChar(255)
-  description String?  @db.VarChar(512)
-  scope       String   @db.VarChar(20) /// 'enterprise' | 'personal'
-  ownerId     String?  @map("owner_id") @db.VarChar(64)
-  transport   String   @db.VarChar(20) /// 'stdio' | 'http'
-  command     String?  @db.VarChar(512)
-  url         String?  @db.VarChar(512)
-  args        Json?
-  env         Json?
-  enabled     Boolean  @default(true)
-  createdAt   DateTime @default(now()) @map("created_at")
-
-  @@index([scope])
-  @@map("mcp_servers")
 }
 
 /// IM 通道表

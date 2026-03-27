@@ -23,6 +23,7 @@ import { createAdminRouter } from '../routes/admin';
 import { createFilesRouter } from '../routes/files';
 import { createMcpRouter } from '../routes/mcp';
 import { createSkillsRouter } from '../routes/skills';
+import { createToolSourcesRouter } from '../routes/tool-sources';
 import { createAgentsRouter } from '../routes/agents';
 import { createSchedulerRouter } from '../routes/scheduler';
 import { createDbConnectionsRouter } from '../routes/db-connections';
@@ -159,6 +160,7 @@ export async function initRoutes(params: {
     app.use('/api/mcp', createMcpRouter(authService, prismaClient, mcpRegistry, mcpExecutor, config.workspace.dataRoot));
   }
   app.use('/api/skills', createSkillsRouter(authService, prismaClient!, config.workspace.dataRoot, bridge));
+  app.use('/api/tool-sources', createToolSourcesRouter(authService, prismaClient!, mcpRegistry, mcpExecutor, config.workspace.dataRoot, bridge));
   app.use('/api/agents', createAgentsRouter(authService, prismaClient!, workspaceManager, bridge, config.workspace.dataRoot));
   app.use('/api/scheduler', createSchedulerRouter(authService, prismaClient!, bridge, imService));
   app.use('/api/user/db-connections', createDbConnectionsRouter(authService, prismaClient));
