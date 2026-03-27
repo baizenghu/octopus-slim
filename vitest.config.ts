@@ -46,7 +46,6 @@ export default defineConfig({
       '@octopus/auth': path.resolve(__dirname, 'packages/auth/src'),
       '@octopus/workspace': path.resolve(__dirname, 'packages/workspace/src'),
       '@octopus/audit': path.resolve(__dirname, 'packages/audit/src'),
-      '@octopus/quota': path.resolve(__dirname, 'packages/quota/src'),
       '@octopus/database': path.resolve(__dirname, 'packages/database/src'),
       '@octopus/engine': path.resolve(__dirname, 'packages/engine/src'),
     },

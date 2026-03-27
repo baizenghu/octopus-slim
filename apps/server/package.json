@@ -16,7 +16,6 @@
     "@octopus/auth": "workspace:*",
     "@octopus/database": "workspace:*",
     "@octopus/mcp": "workspace:*",
-    "@octopus/quota": "workspace:*",
     "@octopus/skills": "workspace:*",
     "@octopus/workspace": "workspace:*",
     "adm-zip": "^0.5.16",
