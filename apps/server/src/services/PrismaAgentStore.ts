@@ -54,7 +54,23 @@ export class PrismaAgentStore implements AgentStore {
 
   async create(entry: AgentStoreEntry): Promise<void> {
     try {
+      // 检查是否已存在（企业层先创建的）— 如果已存在则跳过
+      const existing = await this.prisma.agent.findUnique({ where: { id: entry.id } });
+      if (existing) {
+        logger.info(`Agent already exists in DB, skipping create: ${entry.id}`);
+        return;
+      }
+
       const data = this.toDbRecord(entry);
+      // 确保必需字段 — 引擎 agents.create 只传 id/name/workspace，
+      // 需要从 agentId 提取 ownerId（格式：ent_{userId}_{agentName}）
+      if (!data.ownerId && entry.id) {
+        const match = entry.id.match(/^ent_(user-[^_]+)_/);
+        if (match) data.ownerId = match[1];
+        else data.ownerId = 'system';
+      }
+      if (!data.name) data.name = entry.name ?? entry.id;
+
       await this.prisma.agent.create({ data });
       logger.info(`Agent created: ${entry.id}`);
     } catch (err) {

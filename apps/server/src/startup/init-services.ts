@@ -169,11 +169,10 @@ export async function initServices(config: AppConfig): Promise<Services> {
       // ── 注册 PrismaAgentStore（agent 配置存 DB，不再双写 octopus.json）──
       if (prismaClient) {
         const { PrismaAgentStore } = await import('../services/PrismaAgentStore');
-        const { registerAgentStore } = await import('@octopus/engine/plugin-sdk');
+        const { registerAgentStore } = await import('../../../../packages/engine/src/agents/store-registry');
+        const { refreshAgentStoreCache } = await import('../../../../packages/engine/src/agents/agent-scope');
         const prismaStore = new PrismaAgentStore(prismaClient);
         registerAgentStore('prisma', prismaStore);
-        // 预加载 agent 缓存，让引擎运行时同步读取 DB 中的 agent 配置
-        const { refreshAgentStoreCache } = await import('@octopus/engine/plugin-sdk');
         await refreshAgentStoreCache();
         logger.info('AgentStore: PrismaAgentStore registered (DB-backed)');
       }

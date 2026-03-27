@@ -74,6 +74,7 @@ let defaultAgentWarned = false;
 export function listAgentEntries(cfg: OctopusConfig): AgentEntry[] {
   // 优先从 AgentStore 缓存读取（DB-backed agent 配置）
   if (_agentStoreCache && (Date.now() - _agentStoreCacheTs < AGENT_STORE_CACHE_TTL)) {
+
     return _agentStoreCache;
   }
   // 缓存过期时异步刷新（不阻塞当前调用）

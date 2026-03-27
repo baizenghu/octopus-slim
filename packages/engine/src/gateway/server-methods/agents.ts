@@ -27,6 +27,7 @@ import {
 } from "../../commands/agents.config.js";
 import { loadConfig, writeConfigFile } from "../../config/config.js";
 import { resolveAgentStore } from "../../agents/store-registry.js";
+import { invalidateAgentStoreCache, refreshAgentStoreCache } from "../../agents/agent-scope.js";
 import type { AgentStoreEntry } from "../../agents/store.js";
 import { resolveSessionTranscriptsDirForAgent } from "../../config/sessions/paths.js";
 import { sameFileIdentity } from "../../infra/file-identity.js";
@@ -548,6 +549,7 @@ export const agentsHandlers: GatewayRequestHandlers = {
       agentDir,
     };
     await store.create(entry);
+    await refreshAgentStoreCache().catch(() => {});
 
     // Always write Name to IDENTITY.md; optionally include emoji/avatar.
     const safeName = sanitizeIdentityLine(rawName);
@@ -647,6 +649,7 @@ export const agentsHandlers: GatewayRequestHandlers = {
     }
 
     await store.update(agentId, patch);
+    await refreshAgentStoreCache().catch(() => {});
 
     if (workspaceDir) {
       const cfg = loadConfig();
@@ -695,6 +698,7 @@ export const agentsHandlers: GatewayRequestHandlers = {
 
     // Delete from AgentStore
     await store.delete(agentId);
+    await refreshAgentStoreCache().catch(() => {});
 
     // Also prune related bindings/agentToAgent allow from config
     const pruneResult = pruneAgentConfig(cfg, agentId);
