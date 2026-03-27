@@ -4,6 +4,7 @@ import type { ChannelDock } from "../channels/dock.js";
 import type { ChannelPlugin } from "../channels/plugins/types.js";
 import { registerAgentStore } from "../agents/store-registry.js";
 import { registerContextEngine } from "../context-engine/registry.js";
+import { registerCronLockProvider } from "../cron/lock-registry.js";
 import type {
   GatewayRequestHandler,
   GatewayRequestHandlers,
@@ -603,6 +604,7 @@ export function createPluginRegistry(registryParams: PluginRegistryParams) {
       registerCommand: (command) => registerCommand(record, command),
       registerContextEngine: (id, factory) => registerContextEngine(id, factory),
       registerAgentStore: (id, store) => registerAgentStore(id, store),
+      registerCronLockProvider: (provider) => registerCronLockProvider(provider),
       resolvePath: (input: string) => resolveUserPath(input),
       on: (hookName, handler, opts) =>
         registerTypedHook(record, hookName, handler, opts, params.hookPolicy),

@@ -301,6 +301,10 @@ export type OctopusPluginApi = {
     id: string,
     store: import("../agents/store.js").AgentStore,
   ) => void;
+  /** Register a CronLockProvider for distributed cron execution (exclusive slot — only one active at a time). */
+  registerCronLockProvider: (
+    provider: import("../cron/lock-provider.js").CronLockProvider,
+  ) => void;
   resolvePath: (input: string) => string;
   /** Register a lifecycle hook handler */
   on: <K extends PluginHookName>(
