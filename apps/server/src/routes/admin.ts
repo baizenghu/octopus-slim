@@ -254,7 +254,7 @@ export function createAdminRouter(
           const cronItems = cronResult?.jobs || [];
           for (const item of cronItems) {
             if (item.id) {
-              await bridge.cronRemove(item.id).catch(() => { });
+              await bridge.call('cron.remove', { id: item.id }).catch(() => { });
             }
           }
         } catch (e: unknown) {
@@ -275,7 +275,7 @@ export function createAdminRouter(
         const nativeAgentId = tenant.agentId(agent.name);
         nativeAgentIds.push(nativeAgentId);
         if (bridge?.isConnected) {
-          bridge.agentsDelete(nativeAgentId).catch(() => { });
+          bridge.call('agents.delete', { agentId: nativeAgentId, deleteFiles: true }).catch(() => { });
         }
         // memory scope 无需清理：默认行为不依赖 agentAccess 配置
       }
@@ -283,7 +283,7 @@ export function createAdminRouter(
       const defaultNativeId = tenant.agentId('default');
       nativeAgentIds.push(defaultNativeId);
       if (bridge?.isConnected) {
-        bridge.agentsDelete(defaultNativeId).catch(() => { });
+        bridge.call('agents.delete', { agentId: defaultNativeId, deleteFiles: true }).catch(() => { });
       }
       // memory scope 无需清理
 

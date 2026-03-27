@@ -1,8 +1,8 @@
 /**
  * AgentConfigSync — 统一 agent 原生配置同步
  *
- * 合并 syncAllowAgents + syncAgentNativeConfig + 删除清理，
- * 只做 1 次 config read + 1 次 config write，减少竞态和 rate limit 风险。
+ * 通过引擎 RPC（agents.update / agents.delete）同步 agent 配置，
+ * 仅 memory scope 仍需 configTransaction（plugin 配置无专用 RPC）。
  *
  * ensureAndSyncNativeAgent — 统一 agent 原生引擎同步（创建 + 文件写入）
  * 合并 chat.ts ensureNativeAgent 与 agents.ts syncToNative 的共享逻辑。
@@ -15,16 +15,12 @@ import { TenantEngineAdapter } from './TenantEngineAdapter';
 import type { WorkspaceManager } from '@octopus/workspace';
 import { getSoulTemplate } from './SoulTemplate';
 import { createLogger } from '../utils/logger';
-import type { EngineConfig, EngineAgentListEntry, EngineAgentFileResponse } from '../types/engine';
+import type { EngineConfig, EngineAgentFileResponse } from '../types/engine';
 
 const logger = createLogger('AgentConfigSync');
 
 /**
  * 根据 toolsFilter（read/write/exec 三组）计算需要 deny 的文件/命令工具
- * - toolsFilter 不含 read → deny read, edit, apply_patch
- * - toolsFilter 不含 write → deny write
- * - toolsFilter 不含 exec → deny exec, process
- * - toolsFilter 为空/null → deny 全部
  */
 function computeToolsDeny(toolsFilter: string[] | null): string[] {
   const deny: string[] = [];
@@ -57,29 +53,63 @@ function computeMcpDenyTools(mcpFilter: string[] | null): string[] {
   const allTools = readMcpToolsCache();
   if (allTools.length === 0) return [];
   const allowSet = new Set(mcpFilter);
-  // mcpFilter 为空数组 = 全部禁用
   return allTools
     .filter(t => !allowSet.has(t.serverId))
     .map(t => t.nativeToolName);
 }
 
 /**
+ * 计算 tools RPC 参数（profile + alsoAllow + deny）
+ */
+function computeToolsUpdate(
+  agentName: string,
+  toolsFilter: string[] | null | undefined,
+  mcpFilter: string[] | null | undefined,
+  skillsFilter: string[] | undefined,
+  currentDeny: string[],
+): { profile: string; alsoAllow: string[]; deny?: string[] } {
+  const isDefault = agentName === 'default';
+  const newProfile = 'coding';
+  const newAlsoAllow = isDefault
+    ? ['group:plugins', 'agents_list']
+    : ['group:plugins'];
+
+  // 1. toolsFilter deny（read/write/exec 组）
+  const toolsDeny = computeToolsDeny(toolsFilter ?? null);
+
+  // 2. 专业 agent 限制
+  const specialistDeny = isDefault ? [] : ['sessions_spawn', 'subagents', 'agents_list', 'sessions_list', 'sessions_history', 'sessions_send'];
+
+  // 3. MCP deny
+  let mcpDeny: string[] = [];
+  if (mcpFilter !== undefined) {
+    mcpDeny = computeMcpDenyTools(mcpFilter);
+  } else {
+    mcpDeny = currentDeny.filter((t: string) => t.startsWith('mcp_'));
+  }
+
+  // 4. run_skill deny（由 skillsFilter 管理）
+  const hasSkills = Array.isArray(skillsFilter) && skillsFilter.length > 0;
+  const runSkillDeny = (hasSkills || skillsFilter === undefined)
+    ? []  // 有技能或未指定 → 不 deny
+    : ['run_skill'];  // 技能全部禁用 → deny
+
+  const newDeny = [...new Set([...toolsDeny, ...specialistDeny, ...mcpDeny, ...runSkillDeny])];
+
+  return {
+    profile: newProfile,
+    alsoAllow: newAlsoAllow,
+    ...(newDeny.length > 0 ? { deny: newDeny } : {}),
+  };
+}
+
+/**
  * 统一 agent 原生配置同步。
  *
- * 合并以下三个操作到 1 次 config read + 1 次 config write：
- * - syncAllowAgents: 更新 default agent 的 subagents.allowAgents
- * - syncAgentNativeConfig: 更新指定 agent 的 model + tools.allow
- * - 删除 agent entry: 从 agents.list 中移除
- *
- * @param bridge - EngineAdapter 实例
- * @param userId - 用户 ID
- * @param opts - 同步选项
- *   - agentName: 要更新 model/tools 的 agent 名称
- *   - model: 模型配置（"provider/modelId" 格式），null 表示清除
- *   - toolsFilter: 工具白名单（引擎原生名: read/write/exec），null 表示不改变
- *   - enabledAgentNames: 该用户所有 enabled 的 agent 名称列表（用于 allowAgents 同步）
- *   - deleteAgentName: 要从 agents.list 中删除的 agent 名称
- *   - skillsFilter: 技能白名单（空数组 = 禁用所有技能 → deny run_skill）
+ * 通过引擎 RPC 直接同步：
+ * - agents.update: model / tools / skills / subagents
+ * - agents.delete: 删除 agent
+ * 仅 memory scope 仍需 configTransaction（plugin 配置无专用 RPC）。
  */
 export async function syncAgentToEngine(
   bridge: EngineAdapter,
@@ -90,279 +120,163 @@ export async function syncAgentToEngine(
     toolsFilter?: string[] | null;
     enabledAgentNames?: string[];
     deleteAgentName?: string;
-    /** 技能白名单（空数组 = 禁用技能，有值 = 引擎原生 skills 白名单 + 移除 run_skill deny） */
     skillsFilter?: string[];
-    /** MCP 白名单（serverId 数组），变更时同步 tools.deny 隐藏未授权 MCP 工具 */
     mcpFilter?: string[] | null;
-    /** 心跳配置同步。传对象 = 创建/更新心跳，null = 删除心跳 */
-    heartbeat?: { every: string; prompt: string } | null;
   },
 ): Promise<void> {
   if (!bridge.isConnected) return;
 
   const tenant = TenantEngineAdapter.forUser(bridge, userId);
 
-  await bridge.configTransaction((config) => {
-  const engineCfg = config as EngineConfig;
-  const agentsList: EngineAgentListEntry[] = engineCfg.agents?.list ?? [];
-  let changed = false;
-
-  // 1. 删除 agent entry
+  // ── 1. 删除 agent ──
   if (opts.deleteAgentName) {
     const deleteId = tenant.agentId(opts.deleteAgentName);
-    const before = agentsList.length;
-    engineCfg.agents!.list = agentsList.filter((a) => a.id !== deleteId);
-    if ((engineCfg.agents!.list?.length ?? 0) !== before) {
-      changed = true;
-      logger.info(`deleted agent entry: ${deleteId}`);
+    try {
+      await bridge.call('agents.delete', { agentId: deleteId, deleteFiles: true });
+      logger.info(`deleted agent via RPC: ${deleteId}`);
+    } catch (e: unknown) {
+      const msg = (e as Error).message || '';
+      // agent 不存在不算错误
+      if (!msg.includes('not found')) {
+        logger.error(`agents.delete failed for ${deleteId}: ${msg}`);
+      }
     }
   }
 
-  // 当前 agents.list（可能已被步骤 1 修改）
-  const currentList: EngineAgentListEntry[] = engineCfg.agents?.list ?? [];
-
-  // 2. 更新 model + tools.allow
+  // ── 2. 更新 agent 配置（model / tools / skills）──
   if (opts.agentName && (opts.model !== undefined || opts.toolsFilter !== undefined || opts.mcpFilter !== undefined || opts.skillsFilter !== undefined)) {
     const targetId = tenant.agentId(opts.agentName);
-    const entry = currentList.find((a) => a.id === targetId);
-    if (entry) {
-      // model 同步
-      if (opts.model !== undefined) {
-        const oldModel = entry.model ?? null;
-        const newModel = opts.model || null;
-        if (JSON.stringify(oldModel) !== JSON.stringify(newModel)) {
-          if (newModel) {
-            entry.model = newModel;
-          } else {
-            delete entry.model;
-          }
-          changed = true;
-          logger.info(`model: ${targetId} → ${newModel || '(global default)'}`);
-        }
+
+    // 构建 agents.update 参数
+    const updateParams: Record<string, unknown> = { agentId: targetId };
+
+    // model
+    if (opts.model !== undefined) {
+      if (opts.model) {
+        updateParams.model = opts.model;
       }
+      // model 为 null/空字符串时，agents.update 不支持清除 model，
+      // 传空字符串不会通过 NonEmptyString 校验，此处跳过（保持引擎默认）
+      logger.info(`model: ${targetId} → ${opts.model || '(global default)'}`);
+    }
 
-      // toolsFilter + mcpFilter → profile + alsoAllow + deny
-      if (opts.toolsFilter !== undefined || opts.mcpFilter !== undefined) {
-        const isDefault = opts.agentName === 'default';
+    // tools（profile + alsoAllow + deny）
+    if (opts.toolsFilter !== undefined || opts.mcpFilter !== undefined) {
+      const currentDeny: string[] = [];
+      updateParams.tools = computeToolsUpdate(
+        opts.agentName, opts.toolsFilter, opts.mcpFilter, opts.skillsFilter, currentDeny,
+      );
+      logger.info(`tools: ${targetId} → ${JSON.stringify(updateParams.tools)}`);
+    }
 
-        // profile: coding 已包含 read/write/exec/memory/sessions/cron/image
-        const newProfile = 'coding';
-        // alsoAllow: group:plugins（MCP 工具）+ agents_list（仅 default）
-        const newAlsoAllow = isDefault
-          ? ['group:plugins', 'agents_list']
-          : ['group:plugins'];
+    // skills
+    if (opts.skillsFilter !== undefined) {
+      updateParams.skills = opts.skillsFilter;
+      logger.info(`skills: ${targetId} → [${opts.skillsFilter.join(', ')}]`);
+    }
 
-        // deny 合并三个来源：toolsFilter 关闭的工具组 + 专业 agent 限制 + MCP deny + skill deny
-        const currentDeny: string[] = entry.tools?.deny || [];
-
-        // 1. toolsFilter deny（read/write/exec 组）
-        const tf = opts.toolsFilter !== undefined ? opts.toolsFilter : null;
-        const toolsDeny = computeToolsDeny(tf ?? null);
-
-        // 2. 专业 agent 限制
-        const specialistDeny = isDefault ? [] : ['sessions_spawn', 'subagents', 'agents_list', 'sessions_list', 'sessions_history', 'sessions_send'];
-
-        // 3. MCP deny（保留已有非 MCP deny 项中的 run_skill 等）
-        let mcpDeny: string[] = [];
-        if (opts.mcpFilter !== undefined) {
-          mcpDeny = computeMcpDenyTools(opts.mcpFilter);
-        } else {
-          mcpDeny = currentDeny.filter((t: string) => t.startsWith('mcp_'));
-        }
-
-        // 4. 保留 run_skill deny（由 skillsFilter 逻辑管理）
-        const runSkillDeny = currentDeny.includes('run_skill') ? ['run_skill'] : [];
-
-        const newDeny = [...new Set([...toolsDeny, ...specialistDeny, ...mcpDeny, ...runSkillDeny])];
-
-        // 比较并更新
-        const oldTools = JSON.stringify({
-          profile: entry.tools?.profile,
-          alsoAllow: entry.tools?.alsoAllow,
-          allow: entry.tools?.allow,
-          deny: entry.tools?.deny,
-        });
-        const newTools: Record<string, unknown> = {
-          profile: newProfile,
-          alsoAllow: newAlsoAllow,
-          deny: newDeny.length > 0 ? newDeny : undefined,
-        };
-        // 清理 allow 字段（迁移到 profile 后不再需要）
-        const newToolsStr = JSON.stringify({
-          profile: newTools.profile,
-          alsoAllow: newTools.alsoAllow,
-          allow: undefined,
-          deny: newTools.deny,
-        });
-        if (oldTools !== newToolsStr) {
-          entry.tools = newTools;
-          if (!entry.tools.deny) delete entry.tools.deny;
-          changed = true;
-          logger.info(`tools: ${targetId} → profile=${newProfile}, alsoAllow=[${newAlsoAllow}], deny=[${newDeny.join(', ')}]`);
-        }
-      }
-
-      // skillsFilter → 引擎原生 skills 白名单 + tools.deny run_skill
-      if (opts.skillsFilter !== undefined) {
-        const hasSkills = Array.isArray(opts.skillsFilter) && opts.skillsFilter.length > 0;
-        const currentDeny: string[] = entry.tools?.deny || [];
-        const hasRunSkillDeny = currentDeny.includes('run_skill');
-
-        // 设置引擎原生 skills 白名单（引擎自动注入 <available_skills>）
-        const newSkills = hasSkills ? [...opts.skillsFilter] : [];
-        const currentSkills: string[] | undefined = entry.skills;
-        // Compare carefully: undefined (no filter = allow all) vs [] (empty = deny all)
-        if (currentSkills === undefined || JSON.stringify(newSkills) !== JSON.stringify(currentSkills)) {
-          entry.skills = newSkills;
-          changed = true;
-          logger.info(`skills: ${targetId} → [${newSkills.join(', ')}]`);
-        }
-
-        if (!hasSkills && !hasRunSkillDeny) {
-          // 技能全部禁用 → deny run_skill
-          entry.tools = { ...entry.tools, deny: [...currentDeny, 'run_skill'] };
-          changed = true;
-          logger.info(`skills disabled: ${targetId} → deny run_skill`);
-        } else if (hasSkills && hasRunSkillDeny) {
-          // 有技能权限 → 移除 deny（允许调用 run_skill）
-          const newDeny = currentDeny.filter(t => t !== 'run_skill');
-          entry.tools = { ...entry.tools, deny: newDeny.length > 0 ? newDeny : undefined };
-          if (!entry.tools.deny) delete entry.tools.deny;
-          changed = true;
-          logger.info(`skills enabled: ${targetId} → removed run_skill deny`);
-        }
-      }
+    try {
+      await bridge.call('agents.update', updateParams);
+    } catch (e: unknown) {
+      logger.error(`agents.update failed for ${targetId}: ${(e as Error).message}`);
     }
   }
 
-  // 2.5 更新心跳配置
-  if (opts.heartbeat !== undefined && opts.agentName) {
-    const targetId = tenant.agentId(opts.agentName);
-    const entry = currentList.find((a) => a.id === targetId);
-    if (entry) {
-      if (opts.heartbeat === null) {
-        // 删除心跳
-        if (entry.heartbeat) {
-          delete entry.heartbeat;
-          changed = true;
-          logger.info(`heartbeat deleted: ${targetId}`);
-        }
-      } else {
-        const oldHb = JSON.stringify(entry.heartbeat);
-        entry.heartbeat = opts.heartbeat;
-        if (oldHb !== JSON.stringify(entry.heartbeat)) {
-          changed = true;
-          logger.info(`heartbeat updated: ${targetId} → every=${opts.heartbeat.every}`);
-        }
-      }
-    }
-  }
-
-  // 3. 更新 allowAgents（default agent 可 spawn 专业 agent，专业 agent 不可 spawn 子 agent）
+  // ── 3. 更新 allowAgents（每个 agent 独立 RPC 调用）──
   if (opts.enabledAgentNames) {
     const defaultId = tenant.agentId('default');
     const specialistIds = opts.enabledAgentNames
       .filter(n => n !== 'default')
       .map(n => tenant.agentId(n));
 
-    for (const entry of currentList) {
-      if (entry.id === defaultId) {
-        // default agent: allowAgents = 专业 agent ID 列表
-        const newAllow = specialistIds.length > 0 ? specialistIds : undefined;
-        const oldAllow = entry.subagents?.allowAgents;
-        if (JSON.stringify(oldAllow) !== JSON.stringify(newAllow)) {
-          entry.subagents = { ...entry.subagents, allowAgents: newAllow };
-          changed = true;
-        }
-      } else if (specialistIds.includes(entry.id)) {
-        // 专业 agent: 不可 spawn 子 agent（与现有行为一致）
-        const oldAllow = entry.subagents?.allowAgents;
-        if (JSON.stringify(oldAllow) !== JSON.stringify([])) {
-          entry.subagents = { ...entry.subagents, allowAgents: [] };
-          changed = true;
-        }
+    // default agent: allowAgents = 专业 agent ID 列表
+    try {
+      await bridge.call('agents.update', {
+        agentId: defaultId,
+        subagents: { allowAgents: specialistIds.length > 0 ? specialistIds : [] },
+      });
+    } catch (e: unknown) {
+      // default agent 可能不存在（首次启动）
+      logger.warn(`agents.update subagents failed for ${defaultId}: ${(e as Error).message}`);
+    }
+
+    // 专业 agent: 不可 spawn 子 agent
+    for (const sid of specialistIds) {
+      try {
+        await bridge.call('agents.update', {
+          agentId: sid,
+          subagents: { allowAgents: [] },
+        });
+      } catch {
+        // 专业 agent 可能尚未创建，忽略
       }
     }
 
-    if (changed) {
-      logger.info(`allowAgents updated for user ${userId}, specialists: [${specialistIds.join(', ')}]`);
-    }
+    logger.info(`allowAgents updated for user ${userId}, specialists: [${specialistIds.join(', ')}]`);
   }
 
-  // 4. 同步 memory-lancedb-pro agentAccess（记忆隔离）
-  if (opts.enabledAgentNames) {
-    const memoryPlugin = engineCfg.plugins?.entries?.['memory-lancedb-pro'];
-    if (memoryPlugin?.config?.scopes) {
-      const scopes = memoryPlugin.config.scopes;
-      const defaultId = tenant.agentId('default');
-      const specialistIds = opts.enabledAgentNames
-        .filter((n) => n !== 'default')
-        .map((n) => tenant.agentId(n));
-
-      const allUserAgentIds = [defaultId, ...specialistIds];
-      scopes.agentAccess = scopes.agentAccess || {};
-
-      // default agent 可访问所有该用户 agent 的记忆
-      const oldDefault = JSON.stringify(scopes.agentAccess[defaultId]);
-      scopes.agentAccess[defaultId] = allUserAgentIds;
-      if (JSON.stringify(scopes.agentAccess[defaultId]) !== oldDefault) changed = true;
-
-      // 每个专业 agent 只能访问自己和 default 的记忆
-      for (const sid of specialistIds) {
-        const oldSpec = JSON.stringify(scopes.agentAccess[sid]);
-        scopes.agentAccess[sid] = [sid, defaultId];
-        if (JSON.stringify(scopes.agentAccess[sid]) !== oldSpec) changed = true;
-      }
-    }
-  }
-
-  // 删除 agent 时清理 agentAccess
-  if (opts.deleteAgentName) {
-    const deleteId = tenant.agentId(opts.deleteAgentName);
-    const memoryPlugin = engineCfg.plugins?.entries?.['memory-lancedb-pro'];
-    if (memoryPlugin?.config?.scopes?.agentAccess?.[deleteId]) {
-      delete memoryPlugin.config.scopes.agentAccess[deleteId];
-      changed = true;
-    }
-  }
-
-  if (!changed) {
-    logger.info(`no changes needed for user ${userId}`);
-    return null; // configTransaction: 无变更，跳过写入
-  }
-
-  // 增量 patch：只传变更的部分
-  const patch: Record<string, unknown> = {};
-
-  // agents.list 是数组，deep merge 会整体替换，所以传完整 list
-  patch.agents = { list: engineCfg.agents?.list ?? [] };
-
-  // 如果涉及 memory-lancedb-pro plugin 变更，只传 plugin patch
+  // ── 4. memory scope 同步（仍需 configTransaction — plugin 配置无专用 RPC）──
   if (opts.enabledAgentNames || opts.deleteAgentName) {
-    const memoryPlugin = engineCfg.plugins?.entries?.['memory-lancedb-pro'];
-    if (memoryPlugin) {
-      patch.plugins = {
-        entries: {
-          'memory-lancedb-pro': {
-            config: {
-              scopes: {
-                agentAccess: memoryPlugin.config?.scopes?.agentAccess || {},
+    await bridge.configTransaction((config) => {
+      const engineCfg = config as EngineConfig;
+      const memoryPlugin = engineCfg.plugins?.entries?.['memory-lancedb-pro'];
+      if (!memoryPlugin?.config?.scopes) return null;
+
+      const scopes = memoryPlugin.config.scopes;
+      let changed = false;
+
+      if (opts.enabledAgentNames) {
+        const defaultId = tenant.agentId('default');
+        const specialistIds = opts.enabledAgentNames
+          .filter((n) => n !== 'default')
+          .map((n) => tenant.agentId(n));
+        const allUserAgentIds = [defaultId, ...specialistIds];
+        scopes.agentAccess = scopes.agentAccess || {};
+
+        // default agent 可访问所有该用户 agent 的记忆
+        const oldDefault = JSON.stringify(scopes.agentAccess[defaultId]);
+        scopes.agentAccess[defaultId] = allUserAgentIds;
+        if (JSON.stringify(scopes.agentAccess[defaultId]) !== oldDefault) changed = true;
+
+        // 每个专业 agent 只能访问自己和 default 的记忆
+        for (const sid of specialistIds) {
+          const oldSpec = JSON.stringify(scopes.agentAccess[sid]);
+          scopes.agentAccess[sid] = [sid, defaultId];
+          if (JSON.stringify(scopes.agentAccess[sid]) !== oldSpec) changed = true;
+        }
+      }
+
+      // 删除 agent 时清理 agentAccess
+      if (opts.deleteAgentName) {
+        const deleteId = tenant.agentId(opts.deleteAgentName);
+        if (scopes.agentAccess?.[deleteId]) {
+          delete scopes.agentAccess[deleteId];
+          changed = true;
+        }
+      }
+
+      if (!changed) return null;
+
+      return {
+        plugins: {
+          entries: {
+            'memory-lancedb-pro': {
+              config: {
+                scopes: {
+                  agentAccess: scopes.agentAccess || {},
+                },
               },
             },
           },
         },
       };
-    }
+    });
   }
-
-  logger.info(`config applied (transaction) for user ${userId}`);
-  return patch; // configTransaction: 返回 patch 进行写入
-  }); // end configTransaction
 }
 
 // ─── ensureAndSyncNativeAgent ───────────────────────────────────────────────
 
-/** agentFilesSet 带重试：原生 gateway 创建 agent 后异步初始化 workspace，立即调用会 "unknown agent id" */
+/** agents.files.set 带重试：原生 gateway 创建 agent 后异步初始化 workspace，立即调用会 "unknown agent id" */
 async function setFileWithRetry(
   bridge: EngineAdapter,
   nativeAgentId: string,
@@ -371,13 +285,13 @@ async function setFileWithRetry(
   logPrefix: string,
 ): Promise<void> {
   try {
-    await bridge.agentFilesSet(nativeAgentId, fileName, content);
+    await bridge.call('agents.files.set', { agentId: nativeAgentId, name: fileName, content });
   } catch (e: unknown) {
     if (logPrefix === '[agents]') {
       logger.warn(`${logPrefix} agentFilesSet ${fileName} failed for ${nativeAgentId}, retrying in 1.5s:`, { message: (e as Error).message });
     }
     await new Promise(r => setTimeout(r, 1500));
-    await bridge.agentFilesSet(nativeAgentId, fileName, content);
+    await bridge.call('agents.files.set', { agentId: nativeAgentId, name: fileName, content });
   }
 }
 
@@ -387,12 +301,6 @@ async function setFileWithRetry(
  * 合并 chat.ts ensureNativeAgent 与 agents.ts syncToNative 的共享逻辑。
  * - chat.ts 调用：useCache=true, 不写 IDENTITY, 轻量级
  * - agents.ts 调用：useCache=false, 写完整文件, 初始化工作空间
- *
- * @param bridge - EngineAdapter 实例
- * @param workspaceManager - WorkspaceManager 实例
- * @param userId - 用户 ID
- * @param agentName - agent 名称
- * @param options - 同步选项
  */
 export async function ensureAndSyncNativeAgent(
   bridge: EngineAdapter,
@@ -400,19 +308,12 @@ export async function ensureAndSyncNativeAgent(
   userId: string,
   agentName: string,
   options?: {
-    /** 启用缓存（chat.ts 模式），默认 true */
     useCache?: boolean;
-    /** 初始化工作空间目录（agents.ts 模式），默认 false */
     initWorkspace?: boolean;
-    /** IDENTITY.md 内容：name, emoji, vibe 等 */
     identity?: { name?: string; emoji?: string; vibe?: string } | null;
-    /** SOUL.md 自定义内容，null 表示使用模板 */
     systemPrompt?: string | null;
-    /** agent 描述（用于 IDENTITY.md creature 字段） */
     description?: string | null;
-    /** 是否为更新操作（更新时不覆盖 SOUL.md 模板和 MEMORY.md），默认 false */
     isUpdate?: boolean;
-    /** dataRoot 路径（用于 SOUL/MEMORY 模板），默认 '' */
     dataRoot?: string;
   },
 ): Promise<void> {
@@ -427,33 +328,26 @@ export async function ensureAndSyncNativeAgent(
   } = options || {};
 
   const logPrefix = useCache ? '[chat]' : '[agents]';
-
   const nativeAgentId = TenantEngineAdapter.forUser(bridge, userId).agentId(agentName);
 
-  // ── 1. 缓存检查（仅 chat.ts 模式） ──
-  // 利用 agentsCreate 幂等性：直接尝试创建，catch "already exists" 即可
-  // 无需维护 knownNativeAgents 缓存或轮询 agents.list
-
-  // ── 2. 获取 workspace 路径 ──
+  // ── 1. 获取 workspace 路径 ──
   let workspacePath: string;
   if (initWorkspace) {
-    // agents.ts 模式：初始化工作空间目录（创建目录结构）
     workspacePath = await workspaceManager.initAgentWorkspace(userId, agentName);
   } else {
-    // chat.ts 模式：仅获取路径，不创建目录
     workspacePath = agentName === 'default'
       ? workspaceManager.getSubPath(userId, 'WORKSPACE')
       : workspaceManager.getAgentWorkspacePath(userId, agentName);
   }
 
-  // ── 3. 创建 agent ──
+  // ── 2. 创建 agent ──
   let agentReady = false;
   let isNewAgent = false;
 
   if (useCache) {
     // chat.ts 模式：单次尝试，catch "already exists" = 已就绪
     try {
-      await bridge.agentsCreate({ name: nativeAgentId, workspace: workspacePath });
+      await bridge.call('agents.create', { name: nativeAgentId, workspace: workspacePath });
       isNewAgent = true;
       agentReady = true;
     } catch (createErr: unknown) {
@@ -461,14 +355,14 @@ export async function ensureAndSyncNativeAgent(
       if (msg.includes('already exists')) {
         agentReady = true;
       } else {
-        logger.error(`${logPrefix} agentsCreate failed for ${nativeAgentId}: ${msg}`);
+        logger.error(`${logPrefix} agents.create failed for ${nativeAgentId}: ${msg}`);
       }
     }
   } else {
     // agents.ts 模式：3 次重试，已存在时更新 workspace
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
-        await bridge.agentsCreate({ name: nativeAgentId, workspace: workspacePath });
+        await bridge.call('agents.create', { name: nativeAgentId, workspace: workspacePath });
         isNewAgent = true;
         agentReady = true;
         break;
@@ -476,12 +370,12 @@ export async function ensureAndSyncNativeAgent(
         const msg = (createErr as Error).message || '';
         if (msg.includes('already exists')) {
           try {
-            await bridge.agentsUpdate({ agentId: nativeAgentId, workspace: workspacePath });
+            await bridge.call('agents.update', { agentId: nativeAgentId, workspace: workspacePath });
           } catch { /* ignore */ }
           agentReady = true;
           break;
         }
-        logger.warn(`${logPrefix} agentsCreate attempt ${attempt + 1} failed for ${nativeAgentId}: ${msg}`);
+        logger.warn(`${logPrefix} agents.create attempt ${attempt + 1} failed for ${nativeAgentId}: ${msg}`);
         if (attempt < 2) await new Promise(r => setTimeout(r, 2000));
       }
     }
@@ -491,18 +385,15 @@ export async function ensureAndSyncNativeAgent(
     }
   }
 
-  // ── 4. 写文件 ──
+  // ── 3. 写文件 ──
   if (!agentReady) return;
 
   if (useCache && isNewAgent) {
-    // chat.ts 模式：新建时无条件写 SOUL.md（不写 IDENTITY.md，不写 MEMORY.md — 由 lancedb-pro 管理记忆）
     await setFileWithRetry(bridge, nativeAgentId, 'SOUL.md', getSoulTemplate(dataRoot, agentName), logPrefix).catch((e: unknown) => {
       logger.error(`${logPrefix} agentFilesSet SOUL.md failed for ${nativeAgentId}:`, { message: (e as Error).message });
     });
   } else if (!useCache) {
-    // agents.ts 模式：条件写 IDENTITY.md + SOUL.md + MEMORY.md
-
-    // IDENTITY.md：name, emoji, creature（来自 description）, vibe
+    // IDENTITY.md
     const identityParts = [
       identity?.name ? `name: ${identity.name}` : '',
       identity?.emoji ? `emoji: ${identity.emoji}` : '',
@@ -519,28 +410,24 @@ export async function ensureAndSyncNativeAgent(
       });
     }
 
-    // SOUL.md：有明确的 systemPrompt 时写入；否则仅在文件不存在时用模板填充
+    // SOUL.md
     if (systemPrompt) {
       await setFileWithRetry(bridge, nativeAgentId, 'SOUL.md', systemPrompt, logPrefix).catch((e: unknown) => {
         logger.error(`${logPrefix} agentFilesSet SOUL.md ultimately failed for ${nativeAgentId}:`, { message: (e as Error).message });
       });
     } else if (!isUpdate) {
       try {
-        const existing = await bridge.agentFilesGet(nativeAgentId, 'SOUL.md') as EngineAgentFileResponse;
+        const existing = await bridge.call<EngineAgentFileResponse>('agents.files.get', { agentId: nativeAgentId, name: 'SOUL.md' });
         if (!existing?.content) {
           await setFileWithRetry(bridge, nativeAgentId, 'SOUL.md', getSoulTemplate(dataRoot, agentName), logPrefix).catch((e: unknown) => {
             logger.error(`${logPrefix} agentFilesSet SOUL.md ultimately failed for ${nativeAgentId}:`, { message: (e as Error).message });
           });
         }
       } catch {
-        // 文件不存在，用模板填充
         await setFileWithRetry(bridge, nativeAgentId, 'SOUL.md', getSoulTemplate(dataRoot, agentName), logPrefix).catch((e: unknown) => {
           logger.error(`${logPrefix} agentFilesSet SOUL.md ultimately failed for ${nativeAgentId}:`, { message: (e as Error).message });
         });
       }
     }
-
-    // MEMORY.md：不再创建（企业 agent 使用 lancedb-pro 向量记忆，不依赖本地文件记忆）
   }
-  // memory-lancedb-pro 默认行为已提供 scope 隔离，无需显式注册
 }

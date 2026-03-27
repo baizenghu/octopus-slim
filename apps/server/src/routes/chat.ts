@@ -331,7 +331,7 @@ export function createChatRouter(
       if (!streamDone) {
         streamDone = true;
         // 客户端断开连接，通知引擎终止生成
-        bridge?.chatAbort(sessionKey).catch(() => {});
+        bridge?.call('chat.abort', { sessionKey }).catch(() => {});
       }
       clearInterval(heartbeat);
     });

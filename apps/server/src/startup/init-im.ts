@@ -39,7 +39,7 @@ export async function initIM(params: {
         ? path.join(config.workspace.dataRoot, 'users', userId, 'workspace')
         : path.join(config.workspace.dataRoot, 'users', userId, 'agents', agentName, 'workspace');
       try {
-        await bridge.agentsCreate({ name: nativeAgentId, workspace: workspacePath });
+        await bridge.call('agents.create', { name: nativeAgentId, workspace: workspacePath });
         // 原生 gateway 异步初始化 workspace，等待就绪
         await new Promise(r => setTimeout(r, getRuntimeConfig().engine.agentInitTimeoutMs));
       } catch { /* 已存在则忽略 */ }

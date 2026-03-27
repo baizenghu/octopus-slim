@@ -6,7 +6,7 @@
  */
 
 import { EngineAdapter } from './EngineAdapter';
-import type { EngineAgentListEntry, EngineSessionsListResponse, EngineCronListResponse } from '../types/engine';
+import type { EngineAgentsListResponse, EngineAgentListEntry, EngineSessionsListResponse, EngineCronListResponse } from '../types/engine';
 
 export class TenantEngineAdapter {
   readonly engine: EngineAdapter;
@@ -35,7 +35,7 @@ export class TenantEngineAdapter {
 
   /** 列出当前用户的 agents（admin 不过滤） */
   async listMyAgents(): Promise<EngineAgentListEntry[]> {
-    const result = await this.engine.agentsList();
+    const result = await this.engine.call<EngineAgentsListResponse>('agents.list', {});
     const agents: EngineAgentListEntry[] = result?.agents || [];
     if (this.admin) return agents;
     const prefix = `ent_${this.userId}_`;
@@ -44,7 +44,7 @@ export class TenantEngineAdapter {
 
   /** 列出当前用户的 sessions（admin 不过滤），可按原生 agentId 精确查询 */
   async listMySessions(agentId?: string): Promise<EngineSessionsListResponse> {
-    const result = await this.engine.sessionsList(agentId);
+    const result = await this.engine.call<EngineSessionsListResponse>('sessions.list', { agentId });
     if (this.admin) return result;
     const sessions = result?.sessions || [];
     const prefix = `agent:ent_${this.userId}_`;
@@ -54,7 +54,7 @@ export class TenantEngineAdapter {
 
   /** 列出当前用户的 cron 任务（admin 不过滤） */
   async listMyCrons(includeDisabled = false): Promise<EngineCronListResponse> {
-    const result = await this.engine.cronList(includeDisabled);
+    const result = await this.engine.call<EngineCronListResponse>('cron.list', { includeDisabled });
     if (this.admin) return result;
     const jobs = result?.jobs || [];
     const prefix = `ent_${this.userId}_`;

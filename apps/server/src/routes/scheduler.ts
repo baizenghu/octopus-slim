@@ -74,7 +74,7 @@ async function verifyTaskOwnership(
   userIsAdmin = false,
 ): Promise<{ ok: boolean; status: number; error?: string }> {
   try {
-    const result = (await bridge.cronList(true)) as EngineCronListResponse;
+    const result = await bridge.call<EngineCronListResponse>('cron.list', { includeDisabled: true });
     const allJobs: EngineCronJob[] = result?.jobs ?? [];
     const job = allJobs.find((j) => j.id === taskId);
     if (!job) {
@@ -183,13 +183,13 @@ export function createSchedulerRouter(
 
         // 通过引擎原生 cron 创建周期任务
         const prompt = buildHeartbeatRunPrompt(content);
-        const cronJob = await bridge.cronAdd({
+        const cronJob = await bridge.call<{ id?: string }>('cron.add', { job: {
           name: `heartbeat:${name.trim()}`,
           agentId: nativeAgentId,
           schedule: { kind: 'every' as const, everyMs: parseEveryToMs(every) },
           sessionTarget: 'isolated',
           payload: { kind: 'agentTurn', message: prompt },
-        }) as { id?: string };
+        } });
 
         // 写入 DB（记录元数据 + cronJobId 关联）
         const taskId = randomUUID().replace(/-/g, '').slice(0, 16);
@@ -217,13 +217,13 @@ export function createSchedulerRouter(
           ? { kind: 'cron' as const, expr: cronExpr }
           : { kind: 'at' as const, at: taskConfig?.at || new Date(Date.now() + getRuntimeConfig().scheduler.defaultHeartbeatDelayMs).toISOString() };
 
-        const job = await bridge.cronAdd({
+        const job = await bridge.call('cron.add', { job: {
           name: name.trim(),
           agentId: nativeAgentId,
           schedule,
           sessionTarget: 'isolated',
           payload: { kind: 'agentTurn', message },
-        });
+        } });
         res.json({ task: job });
       } else {
         // fallback: DB only
@@ -302,20 +302,20 @@ export function createSchedulerRouter(
         // 删除旧 cron job，重新创建（引擎不支持 patch）
         let newCronJobId = oldCronJobId;
         if (oldCronJobId) {
-          await bridge.cronRemove(oldCronJobId).catch(err =>
+          await bridge.call('cron.remove', { id: oldCronJobId }).catch(err =>
             logger.warn(`[scheduler] 删除旧 cron 心跳任务失败 ${oldCronJobId}`, { error: err?.message || String(err) }),
           );
         }
 
         if (!isDisabled) {
           const prompt = buildHeartbeatRunPrompt(effectiveContent);
-          const cronJob = await bridge.cronAdd({
+          const cronJob = await bridge.call<{ id?: string }>('cron.add', { job: {
             name: `heartbeat:${(name || dbTask.name).trim()}`,
             agentId: nativeAgentId,
             schedule: { kind: 'every' as const, everyMs: parseEveryToMs(effectiveEvery) },
             sessionTarget: 'isolated',
             payload: { kind: 'agentTurn', message: prompt },
-          }) as { id?: string };
+          } });
           newCronJobId = cronJob?.id;
         } else {
           newCronJobId = undefined;
@@ -345,16 +345,16 @@ export function createSchedulerRouter(
           res.status(ownership.status).json({ error: ownership.error });
           return;
         }
-        await bridge.cronRemove(id).catch(err => logger.warn(`[scheduler] 删除旧 cron 任务失败 ${id}`, { error: err?.message || String(err) }));
+        await bridge.call('cron.remove', { id }).catch(err => logger.warn(`[scheduler] 删除旧 cron 任务失败 ${id}`, { error: err?.message || String(err) }));
         const { name, cron: cronExpr, taskConfig } = req.body;
         const nativeAgentId = req.tenantBridge!.agentId('default');
-        const job = await bridge.cronAdd({
+        const job = await bridge.call('cron.add', { job: {
           name: name?.trim() || id,
           agentId: nativeAgentId,
           schedule: cronExpr ? { kind: 'cron' as const, expr: cronExpr } : { kind: 'at' as const, at: new Date(Date.now() + getRuntimeConfig().scheduler.defaultHeartbeatDelayMs).toISOString() },
           sessionTarget: 'isolated',
           payload: { kind: 'agentTurn', message: taskConfig?.message || `执行定时任务: ${name}` },
-        });
+        } });
         res.json({ task: job });
       } else {
         if (!dbTask) { res.status(404).json({ error: 'Task not found' }); return; }
@@ -395,7 +395,7 @@ export function createSchedulerRouter(
 
         // 删除引擎 cron job
         if (cronJobId) {
-          await bridge.cronRemove(cronJobId).catch((e: unknown) => {
+          await bridge.call('cron.remove', { id: cronJobId }).catch((e: unknown) => {
             logger.warn(`[scheduler] cronRemove failed for ${cronJobId}: ${e instanceof Error ? e.message : String(e)}`);
           });
         }
@@ -413,7 +413,7 @@ export function createSchedulerRouter(
           res.status(ownership.status).json({ error: ownership.error });
           return;
         }
-        await bridge.cronRemove(id);
+        await bridge.call('cron.remove', { id });
         res.json({ ok: true });
       } else {
         if (!dbTask) { res.status(404).json({ error: 'Task not found' }); return; }
@@ -448,7 +448,7 @@ export function createSchedulerRouter(
           return;
         }
 
-        await bridge.cronRun(cronJobId, 'force');
+        await bridge.call('cron.run', { id: cronJobId, mode: 'force' });
 
         await prisma.scheduledTask.update({
           where: { id: dbTask.id },
@@ -465,7 +465,7 @@ export function createSchedulerRouter(
           res.status(ownership.status).json({ error: ownership.error });
           return;
         }
-        await bridge.cronRun(req.params.id, 'force');
+        await bridge.call('cron.run', { id: req.params.id, mode: 'force' });
         res.json({ ok: true, message: '任务已触发' });
       } else {
         res.status(503).json({ error: 'Native gateway not connected' });
@@ -485,7 +485,7 @@ export function createSchedulerRouter(
         res.json({ reminders: [] });
         return;
       }
-      const result = (await bridge.cronList(true)) as EngineCronListResponse;
+      const result = await bridge.call<EngineCronListResponse>('cron.list', { includeDisabled: true });
       const allJobs: EngineCronJob[] = result?.jobs ?? [];
       const prefix = `ent-reminder:${user.id}:`;
       const now = Date.now();
@@ -519,7 +519,7 @@ export function createSchedulerRouter(
           res.status(ownership.status).json({ error: ownership.error });
           return;
         }
-        await bridge.cronRemove(req.params.id);
+        await bridge.call('cron.remove', { id: req.params.id });
       }
       res.json({ ok: true });
     } catch (err: unknown) {

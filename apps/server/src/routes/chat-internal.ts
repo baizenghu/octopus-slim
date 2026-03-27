@@ -77,7 +77,7 @@ export function createChatInternalRouter(
       });
 
       // 查找最近活跃的 session
-      const result = await bridge.sessionsList(nativeAgentId);
+      const result = await bridge.call<{ sessions?: Array<{ key: string; sessionKey: string; updatedAt?: string }> }>('sessions.list', { agentId: nativeAgentId });
       const sessions = (result?.sessions || [])
         .filter((s) => (s.key || s.sessionKey || '').startsWith(`agent:${nativeAgentId}:session:`))
         .sort((a, b) => {

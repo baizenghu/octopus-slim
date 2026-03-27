@@ -159,12 +159,12 @@ export function createAgentsRouter(
 
       const nativeCount = toolsFilter?.length || 0;
       if (nativeCount === 0 && mcpToolCount === 0) {
-        await bridge.agentFilesSet(nativeAgentId, 'TOOLS.md', '# 可用工具\n\n当前未配置任何工具。\n');
+        await bridge.call('agents.files.set', { agentId: nativeAgentId, name: 'TOOLS.md', content: '# 可用工具\n\n当前未配置任何工具。\n' });
         logger.info(`[agents] TOOLS.md cleared for ${nativeAgentId} (no tools)`);
         return;
       }
 
-      await bridge.agentFilesSet(nativeAgentId, 'TOOLS.md', lines.join('\n'));
+      await bridge.call('agents.files.set', { agentId: nativeAgentId, name: 'TOOLS.md', content: lines.join('\n') });
       logger.info(`[agents] TOOLS.md synced for ${nativeAgentId} (native: ${nativeCount}, mcp: ${mcpToolCount})`);
     } catch (e: unknown) {
       logger.error(`[agents] syncToolsMd failed for ${agentName}:`, { error: e instanceof Error ? e.message : String(e) });
@@ -417,7 +417,7 @@ export function createAgentsRouter(
       // 从原生 Gateway 删除（deleteFiles: true 清理 sessions 等 state 数据），清理 memory scope 配置 + 工作空间
       if (bridge?.isConnected) {
         const nativeAgentId = req.tenantBridge!.agentId(existing.name);
-        await bridge.agentsDelete(nativeAgentId).catch(() => { });
+        await bridge.call('agents.delete', { agentId: nativeAgentId, deleteFiles: true }).catch(() => { });
         // 清理残留的 state 目录（原生 gateway deleteFiles 清内容但可能留空目录/sessions）
         // process.cwd() 是 apps/gateway/，需要向上两级到项目根目录
         const projectRoot = path.resolve(process.cwd(), '..', '..');
@@ -495,7 +495,7 @@ export function createAgentsRouter(
       const files = await Promise.all(
         filesToLoad.map(async (fileName) => {
           try {
-            const result = await bridge.agentFilesGet(nativeAgentId, fileName) as EngineAgentFileResponse;
+            const result = await bridge.call('agents.files.get', { agentId: nativeAgentId, name: fileName }) as EngineAgentFileResponse;
             // RPC 返回 { agentId, workspace, file: { name, path, content, ... } }
             let text = '';
             if (typeof result === 'string') {
@@ -553,7 +553,7 @@ export function createAgentsRouter(
       }
 
       const nativeAgentId = req.tenantBridge!.agentId(existing.name);
-      await bridge.agentFilesSet(nativeAgentId, fileName, content);
+      await bridge.call('agents.files.set', { agentId: nativeAgentId, name: fileName, content });
 
       // SOUL.md 同步更新 DB 中的 systemPrompt 字段（保持一致性）
       if (fileName === 'SOUL.md') {
@@ -675,7 +675,7 @@ export function createAgentsRouter(
               // 读取现有 IDENTITY.md 内容
               let identityContent = '';
               try {
-                const result = await bridge.agentFilesGet(nativeAgentId, 'IDENTITY.md') as EngineAgentFileResponse;
+                const result = await bridge.call('agents.files.get', { agentId: nativeAgentId, name: 'IDENTITY.md' }) as EngineAgentFileResponse;
                 if (typeof result === 'string') {
                   identityContent = result;
                 } else if (result?.file) {
@@ -688,7 +688,7 @@ export function createAgentsRouter(
               // 更新或添加 avatar 行
               const lines = identityContent.split('\n').filter((l: string) => !l.startsWith('avatar:'));
               lines.push(`avatar: ${avatarUrl}`);
-              await bridge.agentFilesSet(nativeAgentId, 'IDENTITY.md', lines.join('\n'));
+              await bridge.call('agents.files.set', { agentId: nativeAgentId, name: 'IDENTITY.md', content: lines.join('\n') });
             } catch (e: unknown) {
               logger.error('[agents] avatar IDENTITY.md sync failed:', { error: e instanceof Error ? e.message : String(e) });
             }

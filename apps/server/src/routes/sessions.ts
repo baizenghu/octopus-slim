@@ -53,7 +53,7 @@ export async function autoGenerateTitle(bridge: EngineAdapter, sessionId: string
     // 从 sessionKey 解析 agentId 用于服务端过滤
     const agentIdMatch = sessionId.match(/^agent:([^:]+):session:/);
     const titleAgentId = agentIdMatch ? agentIdMatch[1] : undefined;
-    const result = await bridge.sessionsList(titleAgentId) as EngineSessionsListResponse;
+    const result = await bridge.call<EngineSessionsListResponse>('sessions.list', { agentId: titleAgentId });
     const sessions: EngineSessionItem[] = result?.sessions ?? [];
     const session = sessions.find((s) => (s.key || s.sessionKey) === sessionId);
 
@@ -63,7 +63,7 @@ export async function autoGenerateTitle(bridge: EngineAdapter, sessionId: string
     }
 
     // 2. 获取历史记录取首条消息
-    const history = await bridge.chatHistory(sessionId) as EngineChatHistoryResponse;
+    const history = await bridge.call<EngineChatHistoryResponse>('chat.history', { sessionKey: sessionId });
     const messages: EngineMessage[] = history?.messages ?? history?.history ?? [];
 
     const firstUser = messages.find((m) => m.role === 'user');
@@ -90,7 +90,7 @@ export async function autoGenerateTitle(bridge: EngineAdapter, sessionId: string
       let finalTitle = title;
       for (let attempt = 0; attempt < 3; attempt++) {
         try {
-          await bridge.sessionsPatch(sessionId, { label: finalTitle });
+          await bridge.call('sessions.patch', { key: sessionId, label: finalTitle });
           return finalTitle;
         } catch (patchErr: unknown) {
           const msg = patchErr instanceof Error ? patchErr.message : String(patchErr ?? '');
@@ -154,7 +154,7 @@ export function createSessionsRouter(
       return;
     }
     try {
-      const result = await bridge.modelsList() as EngineModelsListResponse;
+      const result = await bridge.call<EngineModelsListResponse>('models.list', {});
       const allModels: EngineModelItem[] = result?.models ?? [];
 
       // 从 octopus.json 读取已配置的 providers，只返回这些 provider 的模型
@@ -238,7 +238,7 @@ export function createSessionsRouter(
       }
 
       // 传入 agentId 让 Native Gateway 服务端过滤，减少全量数据暴露
-      const result = await bridge.sessionsList(nativeAgentId) as EngineSessionsListResponse;
+      const result = await bridge.call<EngineSessionsListResponse>('sessions.list', { agentId: nativeAgentId });
       // 保留客户端 filter 作为二次防御
       const rawSessions: EngineSessionItem[] = (result?.sessions ?? [])
         .filter((s) => {
@@ -305,7 +305,7 @@ export function createSessionsRouter(
       return;
     }
     try {
-      const history = await bridge.chatHistory(sessionId) as EngineChatHistoryResponse;
+      const history = await bridge.call<EngineChatHistoryResponse>('chat.history', { sessionKey: sessionId });
       // native gateway 的 content 字段是 [{type:'text', text:'...'}] 数组，转成字符串
       type ToolCallInfo = { name: string; toolCallId?: string; args?: string; result?: string };
       type HistoryMsg = { role: 'user' | 'assistant'; content: string; thinking?: string; ts?: string; toolCalls?: ToolCallInfo[] };
@@ -409,7 +409,7 @@ export function createSessionsRouter(
       return;
     }
     try {
-      await bridge.sessionsDelete(sessionId);
+      await bridge.call('sessions.delete', { key: sessionId, deleteTranscript: true });
       res.json({ message: 'Session deleted' });
     } catch (err) {
       next(err);
@@ -437,7 +437,7 @@ export function createSessionsRouter(
       return;
     }
     try {
-      await bridge.sessionsPatch(sessionId, { label: title.trim() });
+      await bridge.call('sessions.patch', { key: sessionId, label: title.trim() });
       res.json({ message: 'Session renamed', sessionId, title: title.trim() });
     } catch (err) {
       next(err);
@@ -491,7 +491,7 @@ export function createSessionsRouter(
       return;
     }
     try {
-      const history = await bridge.chatHistory(sessionId) as EngineChatHistoryResponse;
+      const history = await bridge.call<EngineChatHistoryResponse>('chat.history', { sessionKey: sessionId });
       const messages: EngineMessage[] = history?.messages ?? history?.history ?? [];
       const userAssistantMsgs = messages.filter((m) => m.role === 'user' || m.role === 'assistant');
       const lastMsg = userAssistantMsgs[userAssistantMsgs.length - 1];
@@ -517,7 +517,7 @@ export function createSessionsRouter(
       return;
     }
     try {
-      const usage = await bridge.sessionsUsage({ key: sessionId });
+      const usage = await bridge.call('sessions.usage', { key: sessionId });
       res.json(usage);
     } catch (err) {
       next(err);
@@ -539,7 +539,7 @@ export function createSessionsRouter(
       return;
     }
     try {
-      const result = await bridge.sessionsCompact(sessionId, req.body.maxLines);
+      const result = await bridge.call('sessions.compact', { key: sessionId, ...(req.body.maxLines ? { maxLines: req.body.maxLines } : {}) });
       res.json(result);
     } catch (err) {
       next(err);
@@ -569,7 +569,7 @@ export function createSessionsRouter(
         return;
       }
       logger.info('abort request', { sessionId, sessionKey });
-      const result = await bridge.chatAbort(sessionKey);
+      const result = await bridge.call('chat.abort', { sessionKey });
       logger.info('abort result', { result });
       res.json({ success: true, result });
     } catch (err) {
@@ -589,7 +589,7 @@ export function createSessionsRouter(
     try {
       const agentName = (req.query.agentName as string) || 'default';
       const nativeAgentId = req.tenantBridge!.agentId(agentName);
-      const catalog = await bridge.toolsCatalog(nativeAgentId);
+      const catalog = await bridge.call('tools.catalog', { ...(nativeAgentId ? { agentId: nativeAgentId } : {}), includePlugins: true });
       res.json(catalog);
     } catch (err) {
       next(err);

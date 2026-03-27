@@ -1,9 +1,9 @@
 /**
- * EngineAdapter — 引擎适配层（替代 OctopusBridge 的 WebSocket RPC）
+ * EngineAdapter — 引擎适配层
  *
  * 单进程架构下，通过进程内函数调用替代 WebSocket RPC。
- * 保持与 OctopusBridge 完全相同的 public 方法签名，
- * 路由文件只需替换类名即可完成迁移。
+ * 纯转发方法已移除，路由直接调用 bridge.call('rpc.method', params)。
+ * 保留：callAgent（复杂事件处理）、config*（重试/锁逻辑）、命名空间工具。
  */
 
 import { createHash, randomUUID } from 'crypto';
@@ -14,7 +14,7 @@ import { deepMerge } from '../utils/deep-merge';
 import { ConfigBatcher } from '../utils/config-batcher';
 import { getRuntimeConfig } from '../config';
 import { createLogger } from '../utils/logger';
-import type { EngineRawEvent, EngineAgentsListResponse, EngineSessionsListResponse, EngineCronListResponse, EngineModelsListResponse } from '../types/engine';
+import type { EngineRawEvent } from '../types/engine';
 
 const logger = createLogger('EngineAdapter');
 
@@ -162,7 +162,7 @@ export class EngineAdapter extends EventEmitter {
     return this.initialized;
   }
 
-  // ---- 通用 RPC 调用 ----
+  // ---- 通用 RPC 调用（public，路由可直接调用）----
 
   async call<T = unknown>(method: string, params?: unknown): Promise<T> {
     if (!this.initialized) {
@@ -396,118 +396,53 @@ export class EngineAdapter extends EventEmitter {
     }
   }
 
-  // ---- Sessions ----
+  // ---- Config（含重试逻辑）----
 
-  async sessionsList(agentId?: string) {
-    return this.call<EngineSessionsListResponse>('sessions.list', { agentId });
-  }
-
-  async sessionsDelete(key: string) {
-    return this.call('sessions.delete', { key, deleteTranscript: true });
-  }
-
-  async sessionsReset(key: string) {
-    return this.call('sessions.reset', { key, reason: 'reset' });
-  }
-
-  async sessionsPatch(key: string, patch: Record<string, unknown>) {
-    return this.call('sessions.patch', { key, ...patch });
-  }
-
-  async chatHistory(sessionKey: string) {
-    return this.call('chat.history', { sessionKey });
-  }
-
-  async chatAbort(sessionKey: string) {
-    return this.call('chat.abort', { sessionKey });
-  }
-
-  // ---- Agents CRUD ----
-
-  async agentsList() {
-    return this.call<EngineAgentsListResponse>('agents.list', {});
-  }
-
-  async agentsCreate(params: { name: string; workspace: string; emoji?: string }) {
-    return this.call('agents.create', params);
-  }
-
-  async agentsUpdate(params: { agentId: string; name?: string; model?: string; workspace?: string }) {
-    return this.call('agents.update', params);
-  }
-
-  async agentsDelete(agentId: string) {
-    return this.call('agents.delete', { agentId, deleteFiles: true });
-  }
-
-  // ---- Agent Files ----
-
-  async agentFilesSet(agentId: string, fileName: string, content: string) {
-    return this.call('agents.files.set', { agentId, name: fileName, content });
-  }
-
-  async agentFilesGet(agentId: string, fileName: string) {
-    return this.call('agents.files.get', { agentId, name: fileName });
-  }
-
-  // ---- Cron ----
-
-  async cronList(includeDisabled = false) {
-    return this.call<EngineCronListResponse>('cron.list', { includeDisabled });
-  }
-
-  async cronAdd(job: {
-    name: string;
-    schedule: { kind: 'at'; at: string } | { kind: 'every'; everyMs: number } | { kind: 'cron'; expr: string; tz?: string };
-    sessionTarget: 'main' | 'isolated';
-    payload: { kind: 'systemEvent'; text: string } | { kind: 'agentTurn'; message: string };
-    agentId?: string;
-    deleteAfterRun?: boolean;
-    delivery?: { mode: string; channel?: string; to?: string };
-  }) {
-    return this.call('cron.add', { job });
-  }
-
-  async cronRemove(id: string) {
-    return this.call('cron.remove', { id });
-  }
-
-  async cronRun(id: string, mode: 'due' | 'force' = 'force') {
-    return this.call('cron.run', { id, mode });
-  }
-
-  // ---- Config ----
-
-  async configGet() {
-    return this.call('config.get', {});
-  }
-
-  async configApplyFull(fullConfig: Record<string, unknown>): Promise<void> {
+  /**
+   * 通用 config 重试循环：读取当前 config → 回调生成新 config → 写入，冲突自动重试。
+   * @param label 日志标识
+   * @param buildMerged 回调接收 (currentConfig, baseHash)，返回最终要写入的 JSON 对象或 null（跳过写入）
+   */
+  private async configRetryLoop(
+    label: string,
+    buildMerged: (config: Record<string, unknown>, baseHash: string) => Promise<Record<string, unknown> | null> | Record<string, unknown> | null,
+  ): Promise<void> {
     return this.configMutex.runExclusive(async () => {
       const maxRetries = getRuntimeConfig().engine.maxConfigRetries;
       for (let attempt = 0; attempt < maxRetries; attempt++) {
-        const { config: latest, hash: baseHash } = await this.configGetParsed();
+        const { config, hash: baseHash } = await this.configGetParsed();
         if (!baseHash) throw new Error('config.get did not return hash');
-        const merged = { ...fullConfig };
-        const typedLatest = latest as { messages?: unknown; meta?: unknown };
-        if (typedLatest.messages) merged['messages'] = typedLatest.messages;
-        if (typedLatest.meta) merged['meta'] = typedLatest.meta;
+        const merged = await buildMerged(config, baseHash);
+        if (!merged) return;
         try {
           await this.call('config.set', { raw: JSON.stringify(merged), baseHash });
           return;
         } catch (e: unknown) {
           const msg = e instanceof Error ? e.message : String(e);
+          if (msg.includes('invalid config')) {
+            logger.error(`${label}: config.set rejected as invalid`);
+          }
           if (attempt < maxRetries - 1 && (msg.includes('config changed since last load') || msg.includes('rate limit'))) {
             const delay = msg.includes('rate limit')
               ? (parseInt(msg.match(/retry after (\d+)s/)?.[1] || '10', 10) * 1000 + 1000)
               : (500 * (attempt + 1));
-            logger.warn(`configApplyFull attempt ${attempt + 1} failed: ${msg}, retrying in ${delay}ms`);
+            logger.warn(`${label} attempt ${attempt + 1} failed: ${msg}, retrying in ${delay}ms`);
             await new Promise(r => setTimeout(r, delay));
             continue;
           }
           throw e;
         }
       }
+    });
+  }
+
+  async configApplyFull(fullConfig: Record<string, unknown>): Promise<void> {
+    return this.configRetryLoop('configApplyFull', (latest) => {
+      const merged = { ...fullConfig };
+      const typedLatest = latest as { messages?: unknown; meta?: unknown };
+      if (typedLatest.messages) merged['messages'] = typedLatest.messages;
+      if (typedLatest.meta) merged['meta'] = typedLatest.meta;
+      return merged;
     });
   }
 
@@ -518,60 +453,16 @@ export class EngineAdapter extends EventEmitter {
   async configTransaction(
     fn: (config: Record<string, unknown>) => Promise<Record<string, unknown> | null> | Record<string, unknown> | null,
   ): Promise<void> {
-    return this.configMutex.runExclusive(async () => {
-      const maxRetries = getRuntimeConfig().engine.maxConfigRetries;
-      for (let attempt = 0; attempt < maxRetries; attempt++) {
-        const { config, hash: baseHash } = await this.configGetParsed();
-        if (!baseHash) throw new Error('config.get did not return hash');
-        const patch = await fn(config);
-        if (!patch) return;
-        const merged = deepMerge(config, patch);
-        try {
-          const result = await this.call('config.set', { raw: JSON.stringify(merged), baseHash });
-          return;
-        } catch (e: unknown) {
-          const msg = e instanceof Error ? e.message : String(e);
-          const detail = (e as any)?.data?.details ?? (e as any)?.details ?? '';
-          if (msg.includes('invalid config')) {
-            logger.error(`configTransaction: config.set rejected as invalid`);
-          }
-          if (attempt < maxRetries - 1 && (msg.includes('config changed since last load') || msg.includes('rate limit'))) {
-            const delay = msg.includes('rate limit')
-              ? (parseInt(msg.match(/retry after (\d+)s/)?.[1] || '10', 10) * 1000 + 1000)
-              : (500 * (attempt + 1));
-            logger.warn(`configTransaction attempt ${attempt + 1} failed: ${msg}, retrying in ${delay}ms`);
-            await new Promise(r => setTimeout(r, delay));
-            continue;
-          }
-          throw e;
-        }
-      }
+    return this.configRetryLoop('configTransaction', async (config) => {
+      const patch = await fn(config);
+      if (!patch) return null;
+      return deepMerge(config, patch);
     });
   }
 
   async configApply(patch: Record<string, unknown>): Promise<void> {
-    return this.configMutex.runExclusive(async () => {
-      const maxRetries = getRuntimeConfig().engine.maxConfigRetries;
-      for (let attempt = 0; attempt < maxRetries; attempt++) {
-        const { config, hash: baseHash } = await this.configGetParsed();
-        if (!baseHash) throw new Error('config.get did not return hash');
-        const merged = deepMerge(config, patch);
-        try {
-          await this.call('config.set', { raw: JSON.stringify(merged), baseHash });
-          return;
-        } catch (e: unknown) {
-          const msg = e instanceof Error ? e.message : String(e);
-          if (attempt < maxRetries - 1 && (msg.includes('config changed since last load') || msg.includes('rate limit'))) {
-            const delay = msg.includes('rate limit')
-              ? (parseInt(msg.match(/retry after (\d+)s/)?.[1] || '10', 10) * 1000 + 1000)
-              : (500 * (attempt + 1));
-            logger.warn(`configApply attempt ${attempt + 1} failed: ${msg}, retrying in ${delay}ms`);
-            await new Promise(r => setTimeout(r, delay));
-            continue;
-          }
-          throw e;
-        }
-      }
+    return this.configRetryLoop('configApply', (config) => {
+      return deepMerge(config, patch);
     });
   }
 
@@ -591,28 +482,6 @@ export class EngineAdapter extends EventEmitter {
 
   async configApplyBatched(patch: Record<string, unknown>): Promise<void> {
     return this.configBatcher.apply(patch);
-  }
-
-  // ---- Sessions Usage & Compact ----
-
-  async sessionsUsage(params?: { key?: string; startDate?: string; endDate?: string; limit?: number }) {
-    return this.call('sessions.usage', params || {});
-  }
-
-  async sessionsCompact(key: string, maxLines?: number) {
-    return this.call('sessions.compact', { key, ...(maxLines ? { maxLines } : {}) });
-  }
-
-  // ---- Tools ----
-
-  async toolsCatalog(agentId?: string) {
-    return this.call('tools.catalog', { ...(agentId ? { agentId } : {}), includePlugins: true });
-  }
-
-  // ---- Models ----
-
-  async modelsList() {
-    return this.call<EngineModelsListResponse>('models.list', {});
   }
 
   // ---- Health ----

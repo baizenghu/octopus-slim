@@ -195,7 +195,7 @@ export async function initServices(config: AppConfig): Promise<Services> {
               const nativeId = TenantEngineAdapter.forUser(bridge!, agent.ownerId).agentId(agent.name);
               const workspacePath = workspaceManager.getAgentWorkspacePath(agent.ownerId, agent.name);
               try {
-                await bridge!.agentsCreate({ name: nativeId, workspace: workspacePath });
+                await bridge!.call('agents.create', { name: nativeId, workspace: workspacePath });
               } catch { /* 已存在则忽略 */ }
             })
           );
@@ -224,7 +224,7 @@ export async function initServices(config: AppConfig): Promise<Services> {
           // 清理 octopus.json 中的孤儿 agent（DB 已删除但 config 残留）
           try {
             const validIds = new Set(agents.map(a => TenantEngineAdapter.forUser(bridge!, a.ownerId).agentId(a.name)));
-            const engineCfg = await bridge!.configGet();
+            const engineCfg = await bridge!.call('config.get', {});
             const engineAgents: { name?: string; id?: string }[] = (engineCfg as any)?.agents?.list ?? [];
             const orphans = engineAgents.filter(a => {
               const id = a.name || a.id || '';
@@ -264,13 +264,13 @@ export async function initServices(config: AppConfig): Promise<Services> {
                 const nativeAgentId = TenantEngineAdapter.forUser(bridge!, agent.ownerId).agentId(agent.name);
 
                 const prompt = buildHeartbeatRunPrompt(cfg.content);
-                const cronJob = await bridge!.cronAdd({
+                const cronJob = await bridge!.call<{ id?: string }>('cron.add', { job: {
                   name: `heartbeat:${task.name}`,
                   agentId: nativeAgentId,
                   schedule: { kind: 'every' as const, everyMs: parseEveryToMs(cfg.every) },
                   sessionTarget: 'isolated',
                   payload: { kind: 'agentTurn', message: prompt },
-                }) as { id?: string };
+                } });
 
                 // 更新 DB 中的 cronJobId
                 if (cronJob?.id && cronJob.id !== cfg.cronJobId) {

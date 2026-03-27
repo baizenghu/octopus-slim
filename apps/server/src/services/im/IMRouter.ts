@@ -337,7 +337,7 @@ export class IMRouter {
     }
     run.aborted = true;
     try {
-      await this.bridge.chatAbort(run.sessionKey);
+      await this.bridge.call('chat.abort', { sessionKey: run.sessionKey });
     } catch (e: unknown) {
       logger.warn(`[im-router] chatAbort failed for ${run.sessionKey}:`, { error: e instanceof Error ? e.message : String(e), stack: e instanceof Error ? e.stack : undefined });
     }
@@ -579,7 +579,7 @@ export class IMRouter {
       const prevRun = this.activeRuns.get(imKey);
       if (prevRun && !prevRun.aborted) {
         prevRun.aborted = true;
-        this.bridge.chatAbort(prevRun.sessionKey).catch(err => logger.warn('[im-router] 取消前一个 agent 调用失败', { error: err?.message || String(err) }));
+        this.bridge.call('chat.abort', { sessionKey: prevRun.sessionKey }).catch(err => logger.warn('[im-router] 取消前一个 agent 调用失败', { error: err?.message || String(err) }));
       }
 
       const runState = { sessionKey, aborted: false };
@@ -589,7 +589,7 @@ export class IMRouter {
       timeoutTimer = setTimeout(() => {
         if (!runState.aborted) {
           runState.aborted = true;
-          this.bridge.chatAbort(sessionKey).catch(() => {});
+          this.bridge.call('chat.abort', { sessionKey }).catch(() => {});
           this.activeRuns.delete(imKey);
           adapter.sendText(msg.imUserId, '任务执行超时（30分钟），已自动取消。').catch(err => logger.warn('[im-router] 发送超时通知失败', { error: err?.message || String(err) }));
         }
