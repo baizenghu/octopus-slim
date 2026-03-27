@@ -463,7 +463,7 @@ export default function SkillsSettingsPage() {
                 <div className="flex gap-2"><span className="text-muted-foreground w-16">名称</span><span className="font-medium">{reportSkill.name}</span></div>
                 {reportSkill.description && <div className="flex gap-2"><span className="text-muted-foreground w-16">描述</span><span>{reportSkill.description}</span></div>}
                 <div className="flex gap-2"><span className="text-muted-foreground w-16">范围</span><Badge variant="outline" className="text-xs">{reportSkill.scope === 'enterprise' ? '企业' : '个人'}</Badge></div>
-                <div className="flex gap-2"><span className="text-muted-foreground w-16">状态</span><Badge variant={reportSkill.status === 'approved' || reportSkill.status === 'active' ? 'default' : 'secondary'} className="text-xs">{reportSkill.status}</Badge></div>
+                <div className="flex gap-2"><span className="text-muted-foreground w-16">状态</span><Badge variant={reportSkill.status === 'approved' || reportSkill.status === 'active' ? 'default' : 'secondary'} className="text-xs">{statusText[reportSkill.status] || reportSkill.status}</Badge></div>
                 {(reportSkill.scanReport as any)?.depsType && <div className="flex gap-2"><span className="text-muted-foreground w-16">依赖</span><span>{(reportSkill.scanReport as any).depsInfo || (reportSkill.scanReport as any).depsType}</span></div>}
               </div>
             </div>
