@@ -1,6 +1,8 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
 generator client {
   provider = "prisma-client-js"
-  output   = "../node_modules/.prisma/client"
 }
 
 datasource db {
@@ -8,50 +10,202 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model MCPServer {
-  id          String   @id @map("server_id") @db.VarChar(64)
-  name        String   @db.VarChar(255)
-  description String?  @db.VarChar(512)
-  scope       String   @db.VarChar(20)
+/// 用户表
+model User {
+  userId      String    @id @map("user_id") @db.VarChar(64)
+  username    String    @unique @db.VarChar(255)
+  email       String    @unique @db.VarChar(255)
+  displayName String?   @map("display_name") @db.VarChar(255)
+  department  String?   @db.VarChar(255)
+  roles       Json      /// 角色列表 ["ADMIN","USER"]
+  quotas      Json      /// 配额设置
+  passwordHash String?  @map("password_hash") @db.VarChar(255) /// MockLDAP 模式下存储密码哈希
+  avatarPath  String?   @map("avatar_path") @db.VarChar(512) /// 用户头像文件路径
+  status      String    @default("active") @db.VarChar(20)
+  ldapDn      String?   @map("ldap_dn") @db.VarChar(512)
+  lastLoginAt DateTime? @map("last_login_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  auditLogs AuditLog[]
+  sessions  UserSession[]
+
+  @@index([department])
+  @@index([status])
+  @@map("users")
+}
+
+/// 审计日志表
+model AuditLog {
+  logId        BigInt   @id @default(autoincrement()) @map("log_id")
+  userId       String?  @map("user_id") @db.VarChar(64)
+  action       String   @db.VarChar(255)
+  resource     String?  @db.VarChar(512)
+  details      Json?
+  ipAddress    String?  @map("ip_address") @db.VarChar(45)
+  userAgent    String?  @map("user_agent") @db.VarChar(512)
+  success      Boolean  @default(true)
+  errorMessage String?  @map("error_message") @db.Text
+  durationMs   Int?     @map("duration_ms")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [userId], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+  @@index([userId, action, createdAt])
+  @@map("audit_logs")
+}
+
+/// 用户会话表
+model UserSession {
+  sessionId String   @id @map("session_id") @db.VarChar(128)
+  userId    String   @map("user_id") @db.VarChar(64)
+  tokenHash String   @map("token_hash") @db.VarChar(128)
+  ipAddress String?  @map("ip_address") @db.VarChar(45)
+  userAgent String?  @map("user_agent") @db.VarChar(512)
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [userId], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("user_sessions")
+}
+
+/// 工具源表（统一 MCP + Skill）
+model ToolSource {
+  id          String   @id @default(uuid()) @map("source_id") @db.VarChar(64)
+  name        String   @unique @db.VarChar(255)
+  type        String   @db.VarChar(20) /// "mcp" | "skill"
+  enabled     Boolean  @default(true)
+  scope       String   @default("enterprise") @db.VarChar(20) /// "enterprise" | "personal"
   ownerId     String?  @map("owner_id") @db.VarChar(64)
-  transport   String   @db.VarChar(20)
+
+  // MCP 配置
+  transport   String?  @db.VarChar(20) /// "stdio" | "http"
   command     String?  @db.VarChar(512)
-  url         String?  @db.VarChar(512)
   args        Json?
+  url         String?  @db.VarChar(512)
   env         Json?
+
+  // Skill 配置
+  scriptPath  String?  @map("script_path") @db.VarChar(512)
+  runtime     String?  @db.VarChar(20) /// "python" | "node"
+
+  // 通用
+  description String?  @db.Text
+  tools       Json?    /// 工具列表缓存
+  config      Json?    /// 额外配置
+
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([ownerId, scope])
+  @@map("tool_sources")
+}
+
+/// Agent 表（个人级多 Agent）
+model Agent {
+  id           String   @id @map("agent_id") @db.VarChar(64)
+  name         String   @db.VarChar(255)
+  description  String?  @db.VarChar(1024)
+  ownerId      String   @map("owner_id") @db.VarChar(64)
+  model        String?  @db.VarChar(128)   /// 覆盖全局默认模型
+  systemPrompt String?  @map("system_prompt") @db.Text /// 自定义系统提示（追加到基础提示后）
+  identity     Json?    /// { name?: string, emoji?: string, avatar?: string }
+
+  // — 新增：统一工具源白名单 —
+  allowedToolSources Json? @map("allowed_tool_sources") /// string[] ToolSource name 白名单, null=全部可用
+
+  // — 从 octopus.json 迁入的引擎配置 —
+  toolsProfile String?  @map("tools_profile") @db.VarChar(64)  /// "default" | "coder" | "readonly" 等
+  toolsDeny    Json?    @map("tools_deny")    /// string[] 工具黑名单
+  toolsAllow   Json?    @map("tools_allow")   /// string[] 工具白名单
+  subagents    Json?    /// 子 agent 配置
+  memoryScope  Json?    @map("memory_scope")  /// 记忆隔离配置
+  sandboxMode  String?  @map("sandbox_mode") @db.VarChar(20) /// "host" | "sandbox"
+
+  // — deprecated: 保留兼容，后续移除 —
+  skillsFilter Json?    @map("skills_filter") /// @deprecated 使用 allowedToolSources
+  mcpFilter    Json?    @map("mcp_filter")    /// @deprecated 使用 allowedToolSources
+  toolsFilter  Json?    @map("tools_filter")  /// @deprecated 使用 toolsProfile + toolsAllow/toolsDeny
+
+  allowedConnections Json? @map("allowed_connections") /// string[] | null (null=不限制, 数组=允许的数据库连接名白名单)
+  enabled      Boolean  @default(true)
+  isDefault    Boolean  @default(false) @map("is_default")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@index([ownerId])
+  @@map("agents")
+}
+
+/// IM 通道表
+model IMChannel {
+  id          String   @id @map("channel_id") @db.VarChar(64)
+  name        String   @db.VarChar(255)
+  type        String   @db.VarChar(20) /// 'igw' | 'wxt'
+  webhookUrl  String?  @map("webhook_url") @db.VarChar(512)
+  botToken    String?  @map("bot_token") @db.VarChar(512)
+  config      Json?
   enabled     Boolean  @default(true)
   createdAt   DateTime @default(now()) @map("created_at")
 
-  @@index([scope])
-  @@map("mcp_servers")
+  @@map("im_channels")
 }
 
-/// 技能表
-model Skill {
-  id          String   @id @map("skill_id") @db.VarChar(64)
-  name        String   @db.VarChar(255)
-  description String?  @db.Text
-  scope       String   @db.VarChar(20) /// 'enterprise' | 'personal'
-  ownerId     String?  @map("owner_id") @db.VarChar(64)
-  version     String?  @db.VarChar(20)
-  status      String   @default("pending") @db.VarChar(20)
-  scriptPath  String?  @map("script_path") @db.VarChar(512)
-  command     String?  @db.VarChar(255)
-  scanReport  Json?    @map("scan_report")
-  enabled     Boolean  @default(false)
+/// IM 用户绑定表
+model IMUserBinding {
+  id          String   @id @map("binding_id") @db.VarChar(64)
+  userId      String   @map("user_id") @db.VarChar(64)
+  channel     String   @db.VarChar(20)
+  imUserId    String   @map("im_user_id") @db.VarChar(255)
   createdAt   DateTime @default(now()) @map("created_at")
 
-  @@index([scope])
-  @@index([ownerId])
-  @@map("skills")
+  @@unique([channel, imUserId])
+  @@index([userId])
+  @@map("im_user_bindings")
 }
 
-/// 数据库连接表
+/// 定时任务表
+model ScheduledTask {
+  id          String   @id @map("task_id") @db.VarChar(64)
+  name        String   @db.VarChar(255)
+  userId      String   @map("user_id") @db.VarChar(64)
+  cron        String   @db.VarChar(64)
+  taskType    String   @map("task_type") @db.VarChar(20) /// 'skill'|'mcp'|'report'|'mail'
+  taskConfig  Json     @map("task_config")
+  enabled     Boolean  @default(true)
+  lastRunAt   DateTime? @map("last_run_at")
+  nextRunAt   DateTime? @map("next_run_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@map("scheduled_tasks")
+}
+
+/// 邮件日志表
+model MailLog {
+  id          String   @id @map("log_id") @db.VarChar(64)
+  userId      String   @map("user_id") @db.VarChar(64)
+  to          String   @db.Text
+  subject     String   @db.VarChar(255)
+  status      String   @db.VarChar(20) /// 'sent' | 'failed'
+  error       String?  @db.Text
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@map("mail_logs")
+}
+
+/// 数据库连接配置表
 model DatabaseConnection {
   id          String   @id @map("connection_id") @db.VarChar(64)
   userId      String   @map("user_id") @db.VarChar(64)
-  name        String   @db.VarChar(255)
-  dbType      String   @map("db_type") @db.VarChar(20)
+  name        String   @db.VarChar(255)  /// 连接名称，用于生成 DB_{name}_xxx 环境变量
+  dbType      String   @map("db_type") @db.VarChar(20) /// 'mysql' | 'postgres' | 'sqlite'
   host        String   @db.VarChar(255)
   port        Int
   dbUser      String   @map("db_user") @db.VarChar(255)
