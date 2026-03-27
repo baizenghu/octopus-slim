@@ -129,7 +129,6 @@ export function handleMessageUpdate(
 
   const delta = typeof assistantRecord?.delta === "string" ? assistantRecord.delta : "";
   const content = typeof assistantRecord?.content === "string" ? assistantRecord.content : "";
-
   appendRawStream({
     ts: Date.now(),
     event: "assistant_text_stream",

@@ -1,3 +1,2 @@
-// SLIM: removed
-export type splitMediaFromOutput = any;
-export function splitMediaFromOutput(..._args: any[]): any { return undefined; }
+// SLIM: removed — must return {text: input} because callers access .text on result
+export function splitMediaFromOutput(raw: any): any { return { text: raw ?? '', mediaUrls: [] }; }

@@ -1,7 +1,4 @@
-// SLIM: removed
+// SLIM: removed — callers access .inlineState and .spans on result
 export type InlineCodeState = any;
-export const InlineCodeState: any = {};
-export type buildCodeSpanIndex = any;
-export function buildCodeSpanIndex(..._args: any[]): any { return undefined; }
-export type createInlineCodeState = any;
-export function createInlineCodeState(..._args: any[]): any { return undefined; }
+export function buildCodeSpanIndex(..._args: any[]): any { return { spans: [], inlineState: _args[1] ?? {} }; }
+export function createInlineCodeState(): any { return { inBacktick: false, count: 0 }; }
