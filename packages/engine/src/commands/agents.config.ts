@@ -132,6 +132,16 @@ export function applyAgentConfig(
     workspace?: string;
     agentDir?: string;
     model?: string;
+    tools?: {
+      profile?: "minimal" | "coding" | "messaging" | "full";
+      allow?: string[];
+      alsoAllow?: string[];
+      deny?: string[];
+    };
+    skills?: string[];
+    subagents?: {
+      allowAgents?: string[];
+    };
   },
 ): OctopusConfig {
   const agentId = normalizeAgentId(params.agentId);
@@ -139,6 +149,7 @@ export function applyAgentConfig(
   const list = listAgentEntries(cfg);
   const index = findAgentEntryIndex(list, agentId);
   const base = index >= 0 ? list[index] : { id: agentId };
+
   const nextEntry: AgentEntry = {
     ...base,
     ...(name ? { name } : {}),
@@ -146,6 +157,38 @@ export function applyAgentConfig(
     ...(params.agentDir ? { agentDir: params.agentDir } : {}),
     ...(params.model ? { model: params.model } : {}),
   };
+
+  // Merge tools: only overwrite provided fields, preserve existing
+  if (params.tools) {
+    const mergedTools = { ...nextEntry.tools };
+    if (params.tools.profile !== undefined) {
+      mergedTools.profile = params.tools.profile;
+    }
+    if (params.tools.allow !== undefined) {
+      mergedTools.allow = params.tools.allow;
+    }
+    if (params.tools.alsoAllow !== undefined) {
+      mergedTools.alsoAllow = params.tools.alsoAllow;
+    }
+    if (params.tools.deny !== undefined) {
+      mergedTools.deny = params.tools.deny;
+    }
+    nextEntry.tools = mergedTools;
+  }
+
+  // Set skills (replace entire array)
+  if (params.skills !== undefined) {
+    nextEntry.skills = params.skills;
+  }
+
+  // Merge subagents: only overwrite provided fields, preserve existing
+  if (params.subagents) {
+    const mergedSubagents = { ...nextEntry.subagents };
+    if (params.subagents.allowAgents !== undefined) {
+      mergedSubagents.allowAgents = params.subagents.allowAgents;
+    }
+    nextEntry.subagents = mergedSubagents;
+  }
   const nextList = [...list];
   if (index >= 0) {
     nextList[index] = nextEntry;

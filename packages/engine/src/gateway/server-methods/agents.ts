@@ -566,6 +566,24 @@ export const agentsHandlers: GatewayRequestHandlers = {
     const model = resolveOptionalStringParam(params.model);
     const avatar = resolveOptionalStringParam(params.avatar);
 
+    // Resolve optional tools/skills/subagents params
+    const toolsParam =
+      params.tools && typeof params.tools === "object" && !Array.isArray(params.tools)
+        ? (params.tools as {
+            profile?: "minimal" | "coding" | "messaging" | "full";
+            allow?: string[];
+            alsoAllow?: string[];
+            deny?: string[];
+          })
+        : undefined;
+    const skillsParam = Array.isArray(params.skills)
+      ? (params.skills as string[])
+      : undefined;
+    const subagentsParam =
+      params.subagents && typeof params.subagents === "object" && !Array.isArray(params.subagents)
+        ? (params.subagents as { allowAgents?: string[] })
+        : undefined;
+
     const nextConfig = applyAgentConfig(cfg, {
       agentId,
       ...(typeof params.name === "string" && params.name.trim()
@@ -573,6 +591,9 @@ export const agentsHandlers: GatewayRequestHandlers = {
         : {}),
       ...(workspaceDir ? { workspace: workspaceDir } : {}),
       ...(model ? { model } : {}),
+      ...(toolsParam ? { tools: toolsParam } : {}),
+      ...(skillsParam !== undefined ? { skills: skillsParam } : {}),
+      ...(subagentsParam ? { subagents: subagentsParam } : {}),
     });
 
     await writeConfigFile(nextConfig);
