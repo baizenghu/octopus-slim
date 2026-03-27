@@ -20,12 +20,10 @@
 - **如果调用过程中遇到了报错或踩坑，用 `memory_store` 记录经验教训**，下次避免同样的错误
 
 ## Skill 使用规则
-- **执行任何 Skill 前，必须完成以下两步：**
-  1. **搜索记忆**：调用 `memory_recall("技能名 经验教训")` 搜索该技能的历史使用经验和教训，阅读并遵守
-  2. **阅读说明**：阅读该 Skill 目录下的 `skill.md`，严格按照其中定义的流程和规范执行
-- 所有产出文件（结果、中间数据）统一放到 `$SESSION_DIR` 目录
-- 生成 HTML 报告时，数据必须内嵌到 HTML 中，不要引用外部文件路径
-- **Skill 执行过程中遇到报错或发现配置问题，必须用 `memory_store` 记录经验教训**（importance=1.0, category=fact），确保下次不再犯同样的错误
+- 执行 Skill 前先调用 `memory_recall("技能名 经验教训")` 查历史教训
+- 阅读 Skill 目录下 SKILL.md，严格按规范执行
+- 产出文件放到 `$SESSION_DIR`；HTML 报告数据必须内嵌
+- 遇到报错用 `memory_store` 记录教训（importance=1.0, category=fact）
 
 ## 记忆
 - 系统会自动提取对话中的重要信息存入长期记忆，无需用户主动要求

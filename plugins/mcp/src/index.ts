@@ -701,15 +701,28 @@ export default function enterpriseMcpPlugin(api: any) {
             } catch { /* DB 查询失败不阻塞，降级放行 */ }
           }
 
-          // 3. 解析技能目录路径（优先用 name 目录名，fallback 到 id）
-          const resolveSkillPath = (base: string) => {
-            const byName = path.resolve(base, skill.name);
-            if (fs.existsSync(byName)) return byName;
-            return path.resolve(base, skill.id);
-          };
-          const skillPath = skill.scope === 'enterprise'
-            ? resolveSkillPath(path.resolve(_dataRoot, 'skills'))
-            : resolveSkillPath(path.resolve(_dataRoot, 'users', skill.ownerId || userId, 'workspace', 'skills'));
+          // 3. 解析技能目录路径（统一目录：data/skills/{scope}_{skillId}/）
+          const skillsBase = path.resolve(_dataRoot, 'skills');
+          const scopePrefix = skill.scope === 'personal' && skill.ownerId
+            ? `usr_${skill.ownerId}_${skill.id}`
+            : `ent_${skill.id}`;
+          let skillPath = path.resolve(skillsBase, scopePrefix);
+
+          // 兼容旧目录：按 name、按 id、按旧个人路径
+          if (!fs.existsSync(skillPath)) {
+            const candidates = [
+              path.resolve(skillsBase, skill.name),
+              path.resolve(skillsBase, skill.id),
+            ];
+            if (skill.scope === 'personal') {
+              candidates.push(
+                path.resolve(_dataRoot, 'users', skill.ownerId || userId, 'workspace', 'skills', skill.id),
+                path.resolve(_dataRoot, 'users', skill.ownerId || userId, 'workspace', 'skills', skill.name),
+              );
+            }
+            const found = candidates.find(p => fs.existsSync(p));
+            if (found) skillPath = found;
+          }
 
           if (!fs.existsSync(skillPath)) {
             return {

@@ -23,21 +23,23 @@ import { syncAgentToEngine, ensureAndSyncNativeAgent } from '../services/AgentCo
 import { invalidatePromptCache } from '../services/SystemPromptBuilder';
 import { createAvatarUpload, mimeToExt } from '../utils/avatar';
 import { createLogger } from '../utils/logger';
+import { skillMdName } from '../utils/skill-naming';
 
 import type { AppPrismaClient } from '../types/prisma';
 import type { EngineAgentFileResponse } from '../types/engine';
 
 const logger = createLogger('agents');
 
-/** 过滤 skillsFilter：只保留 DB 中 enabled=true 的 skill */
+/** 过滤 skillsFilter：只保留 DB 中 enabled=true 的 skill，返回引擎可识别的 skillMdName */
 async function filterEnabledSkills(prisma: AppPrismaClient, skillsFilter: string[]): Promise<string[]> {
   if (!skillsFilter.length) return [];
-  const enabled = await prisma.skill.findMany({
+  const skills = await prisma.skill.findMany({
     where: { enabled: true, name: { in: skillsFilter } },
-    select: { name: true },
+    select: { name: true, scope: true, ownerId: true },
   });
-  const enabledSet = new Set(enabled.map((s: { name: string }) => s.name));
-  return skillsFilter.filter(name => enabledSet.has(name));
+  return skills.map((s: { name: string; scope: string; ownerId: string | null }) =>
+    skillMdName(s.scope, s.name, s.ownerId),
+  );
 }
 import { resolve as pathResolve } from 'path';
 import { readFile, rm } from 'fs/promises';

@@ -34,6 +34,8 @@ import { getRuntimeConfig } from '../config';
 import { Prisma } from '@prisma/client';
 import type { AppPrismaClient } from '../types/prisma';
 import { createLogger } from '../utils/logger';
+import { skillDirName, skillMdName } from '../utils/skill-naming';
+import { mergeSkillMd, generateSkillMd } from '../utils/skill-md-generator';
 
 const logger = createLogger('skills');
 
@@ -61,13 +63,13 @@ export function createSkillsRouter(
    * 将 Skill 启用/禁用状态同步到引擎 skills.entries
    * 引擎原生支持 skills.entries[skillName].enabled，写入后 agent 立即生效
    */
-  async function syncSkillEnabledToEngine(skillId: string, enabled: boolean) {
+  async function syncSkillEnabledToEngine(skillKey: string, enabled: boolean) {
     if (!bridge) return;
     try {
-      await bridge.configApply({ skills: { entries: { [skillId]: { enabled } } } });
-      logger.info('Synced to engine', { skillId, enabled });
+      await bridge.configApply({ skills: { entries: { [skillKey]: { enabled } } } });
+      logger.info('Synced skill to engine', { skillKey, enabled });
     } catch (e: unknown) {
-      logger.warn('Failed to sync to engine', { skillId, error: (e as Error).message });
+      logger.warn('Failed to sync skill to engine', { skillKey, error: (e as Error).message });
     }
   }
 
@@ -227,9 +229,10 @@ export function createSkillsRouter(
       // 从 body 获取补充信息
       const { name: bodyName, description: bodyDesc, command: bodyCommand, scriptPath: bodyScriptPath } = req.body;
 
-      // 生成 ID 和目标目录
+      // 生成 ID 和目标目录（统一存储到 data/skills/ent_{id}/）
       const skillId = `skill-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-      skillDir = path.join(enterpriseSkillsBase, skillId);
+      const dirName = skillDirName('enterprise', skillId, null);
+      skillDir = path.join(enterpriseSkillsBase, dirName);
 
       // 解压
       await extractZip(tmpFile, skillDir);
@@ -256,6 +259,33 @@ export function createSkillsRouter(
       const finalCommand = bodyCommand || meta.command || null;
       const finalScriptPath = bodyScriptPath || meta.scriptPath || null;
       const finalVersion = meta.version || '1.0.0';
+
+      // 确保 SKILL.md 包含引擎兼容 frontmatter（command-dispatch: tool）
+      const skillMdPath = path.join(skillDir, 'SKILL.md');
+      if (fs.existsSync(skillMdPath)) {
+        const existingMd = fs.readFileSync(skillMdPath, 'utf-8');
+        const mergedMd = mergeSkillMd(existingMd, {
+          name: finalName,
+          description: finalDesc || '',
+          scope: 'enterprise',
+          ownerId: null,
+          command: finalCommand,
+          scriptPath: finalScriptPath,
+          version: finalVersion,
+        });
+        fs.writeFileSync(skillMdPath, mergedMd, 'utf-8');
+      } else {
+        const newMd = generateSkillMd({
+          name: finalName,
+          description: finalDesc || '',
+          scope: 'enterprise',
+          ownerId: null,
+          command: finalCommand,
+          scriptPath: finalScriptPath,
+          version: finalVersion,
+        });
+        fs.writeFileSync(skillMdPath, newMd, 'utf-8');
+      }
 
       // 依赖检测
       const deps = detectDeps(skillDir);
@@ -395,11 +425,22 @@ export function createSkillsRouter(
       // 删除数据库记录
       await prisma.skill.delete({ where: { id } });
 
-      // 清理文件目录
-      const skillDir = existing.scope === 'enterprise'
-        ? path.join(enterpriseSkillsBase, id)
-        : path.join(usersBase, existing.ownerId || '', 'workspace', 'skills', id);
-      rmDir(skillDir);
+      // 清理文件目录（统一路径 + legacy fallback）
+      const dirName = skillDirName(existing.scope, id, existing.ownerId);
+      const skillDir = path.resolve(enterpriseSkillsBase, dirName);
+      const legacyDirs = [
+        path.join(enterpriseSkillsBase, id),
+        path.join(enterpriseSkillsBase, existing.name),
+      ];
+      if (existing.scope === 'personal' && existing.ownerId) {
+        legacyDirs.push(path.join(usersBase, existing.ownerId, 'workspace', 'skills', id));
+      }
+      const targetDir = fs.existsSync(skillDir) ? skillDir : (legacyDirs.find(d => fs.existsSync(d)) || skillDir);
+      rmDir(targetDir);
+
+      // 同步引擎：移除 skill entry
+      const mdName = skillMdName(existing.scope, existing.name, existing.ownerId);
+      await syncSkillEnabledToEngine(mdName, false);
 
       res.json({ message: '技能已删除' });
     } catch (err: unknown) {
@@ -471,7 +512,7 @@ export function createSkillsRouter(
         data: { status: 'approved', enabled: true },
       });
 
-      syncSkillEnabledToEngine(id, true);
+      syncSkillEnabledToEngine(skillMdName(existing.scope, existing.name, existing.ownerId), true);
       res.json({ message: '技能已审批通过', skill });
     } catch (err) {
       next(err);
@@ -505,7 +546,7 @@ export function createSkillsRouter(
         },
       });
 
-      syncSkillEnabledToEngine(id, false);
+      syncSkillEnabledToEngine(skillMdName(existing.scope, existing.name, existing.ownerId), false);
       res.json({ message: '技能已拒绝', skill });
     } catch (err) {
       next(err);
@@ -530,7 +571,7 @@ export function createSkillsRouter(
         data: { enabled },
       });
 
-      syncSkillEnabledToEngine(id, enabled);
+      syncSkillEnabledToEngine(skillMdName(skill.scope, skill.name, skill.ownerId), enabled);
       res.json({ message: enabled ? '技能已启用' : '技能已禁用', skill });
     } catch (err: unknown) {
       if ((err as { code?: string }).code === 'P2025') {
@@ -577,13 +618,9 @@ export function createSkillsRouter(
       const { name: bodyName, description: bodyDesc, command: bodyCommand, scriptPath: bodyScriptPath } = req.body;
 
       const skillId = `skill-personal-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-      const userSkillsBase = path.join(usersBase, user.id, 'workspace', 'skills');
-      skillDir = path.join(userSkillsBase, skillId);
-
-      // 确保用户 skills 目录存在
-      if (!fs.existsSync(userSkillsBase)) {
-        fs.mkdirSync(userSkillsBase, { recursive: true });
-      }
+      // 统一存储到 data/skills/usr_{ownerId}_{id}/
+      const dirName = skillDirName('personal', skillId, user.id);
+      skillDir = path.join(enterpriseSkillsBase, dirName);
 
       // 解压
       await extractZip(tmpFile, skillDir);
@@ -609,6 +646,33 @@ export function createSkillsRouter(
       const finalCommand = bodyCommand || meta.command || null;
       const finalScriptPath = bodyScriptPath || meta.scriptPath || null;
       const finalVersion = meta.version || '1.0.0';
+
+      // 确保 SKILL.md 包含引擎兼容 frontmatter（personal scope + 用户标识）
+      const skillMdPath = path.join(skillDir, 'SKILL.md');
+      if (fs.existsSync(skillMdPath)) {
+        const existingMd = fs.readFileSync(skillMdPath, 'utf-8');
+        const mergedMd = mergeSkillMd(existingMd, {
+          name: finalName,
+          description: finalDesc || '',
+          scope: 'personal',
+          ownerId: user.id,
+          command: finalCommand,
+          scriptPath: finalScriptPath,
+          version: finalVersion,
+        });
+        fs.writeFileSync(skillMdPath, mergedMd, 'utf-8');
+      } else {
+        const newMd = generateSkillMd({
+          name: finalName,
+          description: finalDesc || '',
+          scope: 'personal',
+          ownerId: user.id,
+          command: finalCommand,
+          scriptPath: finalScriptPath,
+          version: finalVersion,
+        });
+        fs.writeFileSync(skillMdPath, newMd, 'utf-8');
+      }
 
       // 依赖检测
       const deps = detectDeps(skillDir);
@@ -724,9 +788,12 @@ export function createSkillsRouter(
 
       await prisma.skill.delete({ where: { id } });
 
-      // 清理文件
-      const skillDir = path.join(usersBase, user.id, 'workspace', 'skills', id);
-      rmDir(skillDir);
+      // 清理文件（统一路径 + legacy fallback）
+      const dirName = skillDirName('personal', id, user.id);
+      const skillDir = path.resolve(enterpriseSkillsBase, dirName);
+      const legacyDir = path.join(usersBase, user.id, 'workspace', 'skills', id);
+      const targetDir = fs.existsSync(skillDir) ? skillDir : legacyDir;
+      rmDir(targetDir);
 
       res.json({ message: '个人技能已删除' });
     } catch (err) {
