@@ -202,19 +202,7 @@ const coreEntries: CoreCliEntry[] = [
       mod.registerStatusHealthSessionsCommands(program);
     },
   },
-  {
-    commands: [
-      {
-        name: "browser",
-        description: "Manage Octopus's dedicated browser (Chrome/Chromium)",
-        hasSubcommands: true,
-      },
-    ],
-    register: async ({ program }) => {
-      const mod = await import("../browser-cli.js");
-      mod.registerBrowserCli(program);
-    },
-  },
+  // SLIM: removed browser CLI
 ];
 
 function collectCoreCliCommandNames(predicate?: (command: CoreCliCommandDescriptor) => boolean) {
