@@ -26,6 +26,8 @@ import {
   pruneAgentConfig,
 } from "../../commands/agents.config.js";
 import { loadConfig, writeConfigFile } from "../../config/config.js";
+import { resolveAgentStore } from "../../agents/store-registry.js";
+import type { AgentStoreEntry } from "../../agents/store.js";
 import { resolveSessionTranscriptsDirForAgent } from "../../config/sessions/paths.js";
 import { sameFileIdentity } from "../../infra/file-identity.js";
 import { SafeOpenError, readLocalFileSafely, writeFileWithinRoot } from "../../infra/fs-safe.js";
@@ -456,7 +458,7 @@ function respondWorkspaceFileMissing(params: {
 }
 
 export const agentsHandlers: GatewayRequestHandlers = {
-  "agents.list": ({ params, respond }) => {
+  "agents.list": async ({ params, respond }) => {
     if (!validateAgentsListParams(params)) {
       respond(
         false,
@@ -469,8 +471,17 @@ export const agentsHandlers: GatewayRequestHandlers = {
       return;
     }
 
+    const store = resolveAgentStore();
+    const entries = await store.list();
+
+    // Build a synthetic config with store entries so listAgentsForGateway
+    // can resolve identity/avatar/session info consistently.
     const cfg = loadConfig();
-    const result = listAgentsForGateway(cfg);
+    const cfgWithStoreAgents: typeof cfg = {
+      ...cfg,
+      agents: { ...cfg.agents, list: entries },
+    };
+    const result = listAgentsForGateway(cfgWithStoreAgents);
     respond(true, result, undefined);
   },
   "agents.create": async ({ params, respond }) => {
@@ -500,7 +511,10 @@ export const agentsHandlers: GatewayRequestHandlers = {
       return;
     }
 
-    if (findAgentEntryIndex(listAgentEntries(cfg), agentId) >= 0) {
+    // Check existence via AgentStore
+    const store = resolveAgentStore();
+    const existing = await store.get(agentId);
+    if (existing) {
       respond(
         false,
         undefined,
@@ -511,23 +525,29 @@ export const agentsHandlers: GatewayRequestHandlers = {
 
     const workspaceDir = resolveUserPath(String(params.workspace ?? "").trim());
 
-    // Resolve agentDir against the config we're about to persist (vs the pre-write config),
-    // so subsequent resolutions can't disagree about the agent's directory.
-    let nextConfig = applyAgentConfig(cfg, {
+    // Resolve agentDir: build a temporary config to compute the canonical agentDir,
+    // then persist the entry through the AgentStore.
+    const tempConfig = applyAgentConfig(cfg, {
       agentId,
       name: rawName,
       workspace: workspaceDir,
     });
-    const agentDir = resolveAgentDir(nextConfig, agentId);
-    nextConfig = applyAgentConfig(nextConfig, { agentId, agentDir });
+    const agentDir = resolveAgentDir(tempConfig, agentId);
 
     // Ensure workspace & transcripts exist BEFORE writing config so a failure
     // here does not leave a broken config entry behind.
-    const skipBootstrap = Boolean(nextConfig.agents?.defaults?.skipBootstrap);
+    const skipBootstrap = Boolean(cfg.agents?.defaults?.skipBootstrap);
     await ensureAgentWorkspace({ dir: workspaceDir, ensureBootstrapFiles: !skipBootstrap });
     await fs.mkdir(resolveSessionTranscriptsDirForAgent(agentId), { recursive: true });
 
-    await writeConfigFile(nextConfig);
+    // Persist via AgentStore
+    const entry: AgentStoreEntry = {
+      id: agentId,
+      name: rawName,
+      workspace: workspaceDir,
+      agentDir,
+    };
+    await store.create(entry);
 
     // Always write Name to IDENTITY.md; optionally include emoji/avatar.
     const safeName = sanitizeIdentityLine(rawName);
@@ -551,9 +571,12 @@ export const agentsHandlers: GatewayRequestHandlers = {
       return;
     }
 
-    const cfg = loadConfig();
     const agentId = normalizeAgentId(String(params.agentId ?? ""));
-    if (!isConfiguredAgent(cfg, agentId)) {
+
+    // Check existence via AgentStore
+    const store = resolveAgentStore();
+    const existingEntry = await store.get(agentId);
+    if (!existingEntry) {
       respondAgentNotFound(respond, agentId);
       return;
     }
@@ -584,27 +607,55 @@ export const agentsHandlers: GatewayRequestHandlers = {
         ? (params.subagents as { allowAgents?: string[] })
         : undefined;
 
-    const nextConfig = applyAgentConfig(cfg, {
-      agentId,
-      ...(typeof params.name === "string" && params.name.trim()
-        ? { name: params.name.trim() }
-        : {}),
-      ...(workspaceDir ? { workspace: workspaceDir } : {}),
-      ...(model ? { model } : {}),
-      ...(toolsParam ? { tools: toolsParam } : {}),
-      ...(skillsParam !== undefined ? { skills: skillsParam } : {}),
-      ...(subagentsParam ? { subagents: subagentsParam } : {}),
-    });
+    // Build patch for AgentStore update
+    const patch: Partial<AgentStoreEntry> = {};
+    if (typeof params.name === "string" && params.name.trim()) {
+      patch.name = params.name.trim();
+    }
+    if (workspaceDir) {
+      patch.workspace = workspaceDir;
+    }
+    if (model) {
+      patch.model = model;
+    }
+    if (toolsParam) {
+      // Merge tools: only overwrite provided fields, preserve existing
+      const mergedTools = { ...existingEntry.tools };
+      if (toolsParam.profile !== undefined) {
+        mergedTools.profile = toolsParam.profile;
+      }
+      if (toolsParam.allow !== undefined) {
+        mergedTools.allow = toolsParam.allow;
+      }
+      if (toolsParam.alsoAllow !== undefined) {
+        mergedTools.alsoAllow = toolsParam.alsoAllow;
+      }
+      if (toolsParam.deny !== undefined) {
+        mergedTools.deny = toolsParam.deny;
+      }
+      patch.tools = mergedTools;
+    }
+    if (skillsParam !== undefined) {
+      patch.skills = skillsParam;
+    }
+    if (subagentsParam) {
+      const mergedSubagents = { ...existingEntry.subagents };
+      if (subagentsParam.allowAgents !== undefined) {
+        mergedSubagents.allowAgents = subagentsParam.allowAgents;
+      }
+      patch.subagents = mergedSubagents;
+    }
 
-    await writeConfigFile(nextConfig);
+    await store.update(agentId, patch);
 
     if (workspaceDir) {
-      const skipBootstrap = Boolean(nextConfig.agents?.defaults?.skipBootstrap);
+      const cfg = loadConfig();
+      const skipBootstrap = Boolean(cfg.agents?.defaults?.skipBootstrap);
       await ensureAgentWorkspace({ dir: workspaceDir, ensureBootstrapFiles: !skipBootstrap });
     }
 
     if (avatar) {
-      const workspace = workspaceDir ?? resolveAgentWorkspaceDir(nextConfig, agentId);
+      const workspace = workspaceDir ?? existingEntry.workspace ?? resolveAgentWorkspaceDir(loadConfig(), agentId);
       await fs.mkdir(workspace, { recursive: true });
       const identityPath = path.join(workspace, DEFAULT_IDENTITY_FILENAME);
       await fs.appendFile(identityPath, `\n- Avatar: ${sanitizeIdentityLine(avatar)}\n`, "utf-8");
@@ -618,7 +669,6 @@ export const agentsHandlers: GatewayRequestHandlers = {
       return;
     }
 
-    const cfg = loadConfig();
     const agentId = normalizeAgentId(String(params.agentId ?? ""));
     if (agentId === DEFAULT_AGENT_ID) {
       respond(
@@ -628,18 +678,27 @@ export const agentsHandlers: GatewayRequestHandlers = {
       );
       return;
     }
-    if (!isConfiguredAgent(cfg, agentId)) {
+
+    // Check existence via AgentStore
+    const store = resolveAgentStore();
+    const existingEntry = await store.get(agentId);
+    if (!existingEntry) {
       respondAgentNotFound(respond, agentId);
       return;
     }
 
+    const cfg = loadConfig();
     const deleteFiles = typeof params.deleteFiles === "boolean" ? params.deleteFiles : true;
-    const workspaceDir = resolveAgentWorkspaceDir(cfg, agentId);
-    const agentDir = resolveAgentDir(cfg, agentId);
+    const workspaceDir = existingEntry.workspace ?? resolveAgentWorkspaceDir(cfg, agentId);
+    const agentDir = existingEntry.agentDir ?? resolveAgentDir(cfg, agentId);
     const sessionsDir = resolveSessionTranscriptsDirForAgent(agentId);
 
-    const result = pruneAgentConfig(cfg, agentId);
-    await writeConfigFile(result.config);
+    // Delete from AgentStore
+    await store.delete(agentId);
+
+    // Also prune related bindings/agentToAgent allow from config
+    const pruneResult = pruneAgentConfig(cfg, agentId);
+    await writeConfigFile(pruneResult.config);
 
     if (deleteFiles) {
       await Promise.all([
@@ -649,7 +708,7 @@ export const agentsHandlers: GatewayRequestHandlers = {
       ]);
     }
 
-    respond(true, { ok: true, agentId, removedBindings: result.removedBindings }, undefined);
+    respond(true, { ok: true, agentId, removedBindings: pruneResult.removedBindings }, undefined);
   },
   "agents.files.list": async ({ params, respond }) => {
     if (!validateAgentsFilesListParams(params)) {

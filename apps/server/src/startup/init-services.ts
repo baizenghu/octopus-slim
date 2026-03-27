@@ -166,6 +166,15 @@ export async function initServices(config: AppConfig): Promise<Services> {
       await bridge.initialize(19791);
       logger.info('Engine: initialized (single-process)');
 
+      // ── 注册 PrismaAgentStore（agent 配置存 DB，不再双写 octopus.json）──
+      if (prismaClient) {
+        const { PrismaAgentStore } = await import('../services/PrismaAgentStore');
+        const { registerAgentStore } = await import('@octopus/engine/plugin-sdk');
+        const prismaStore = new PrismaAgentStore(prismaClient);
+        registerAgentStore('prisma', prismaStore);
+        logger.info('AgentStore: PrismaAgentStore registered (DB-backed)');
+      }
+
       // 从独立的 enterprise.json 读取运行时配置（不放 octopus.json 避免引擎校验失败）
       try {
         const stateDir = process.env.OCTOPUS_STATE_DIR!;
