@@ -186,11 +186,13 @@ export async function initServices(config: AppConfig): Promise<Services> {
         initRuntimeConfig();
       }
 
-      // 启动时将数据库中所有已启用的 Agent 并发同步到原生 Gateway
+      // 启动时同步 memory scope（引擎现在通过 PrismaAgentStore 从 DB 读 agent，
+      // 不再需要创建 native agents 或同步 tools config 到 octopus.json。
+      // 唯一需要同步的是 memory-lancedb-pro plugin 的 agentAccess scope，
+      // 因为 plugin 配置仍然在 octopus.json 中。）
       if (prismaClient) {
         try {
           const agents = await prismaClient.agent.findMany({ where: { enabled: true } });
-          // 按 ownerId 分组，计算每个用户的 enabledAgentNames
           const enabledByOwner = new Map<string, string[]>();
           for (const agent of agents) {
             const list = enabledByOwner.get(agent.ownerId) ?? [];
@@ -198,62 +200,19 @@ export async function initServices(config: AppConfig): Promise<Services> {
             enabledByOwner.set(agent.ownerId, list);
           }
 
-          // 并发创建 native agents
-          await Promise.allSettled(
-            agents.map(async (agent) => {
-              const nativeId = TenantEngineAdapter.forUser(bridge!, agent.ownerId).agentId(agent.name);
-              const workspacePath = workspaceManager.getAgentWorkspacePath(agent.ownerId, agent.name);
-              try {
-                await bridge!.call('agents.create', { name: nativeId, workspace: workspacePath });
-              } catch { /* 已存在则忽略 */ }
-            })
-          );
-
-          // 串行同步配置（使用 configTransaction 保证原子性）
-          let syncOk = 0;
-          for (const agent of agents) {
+          // 只同步 memory scope（plugin 配置在 octopus.json）
+          const ownerIds = [...enabledByOwner.keys()];
+          for (const ownerId of ownerIds) {
             try {
-              await syncAgentToEngine(bridge!, agent.ownerId, {
-                agentName: agent.name,
-                model: agent.model as string | null,
-                toolsFilter: agent.toolsFilter as string[] | null,
-                skillsFilter: agent.skillsFilter as string[] ?? [],
-                mcpFilter: agent.mcpFilter as string[] | null,
-                enabledAgentNames: enabledByOwner.get(agent.ownerId) ?? [],
+              await syncAgentToEngine(bridge!, ownerId, {
+                enabledAgentNames: enabledByOwner.get(ownerId) ?? [],
               });
-              syncOk++;
-            } catch (configErr: unknown) {
-              logger.warn('Agent config sync warning', { agent: agent.name, error: (configErr as Error).message });
+            } catch (e: unknown) {
+              logger.warn('Memory scope sync warning', { ownerId, error: (e as Error).message });
             }
           }
-          if (agents.length > 0) {
-            logger.info(`Native Gateway: synced ${syncOk}/${agents.length} agents`);
-          }
-
-          // 清理 octopus.json 中的孤儿 agent（DB 已删除但 config 残留）
-          try {
-            const validIds = new Set(agents.map(a => TenantEngineAdapter.forUser(bridge!, a.ownerId).agentId(a.name)));
-            const engineCfg = await bridge!.call('config.get', {});
-            const engineAgents: { name?: string; id?: string }[] = (engineCfg as any)?.agents?.list ?? [];
-            const orphans = engineAgents.filter(a => {
-              const id = a.name || a.id || '';
-              return id.startsWith('ent_') && !validIds.has(id);
-            });
-            if (orphans.length > 0) {
-              for (const orphan of orphans) {
-                const orphanId = orphan.name || orphan.id || '';
-                const nameMatch = orphanId.match(/^ent_(user-[^_]+)_(.+)$/);
-                if (nameMatch) {
-                  await syncAgentToEngine(bridge!, nameMatch[1], {
-                    deleteAgentName: nameMatch[2],
-                    enabledAgentNames: agents.filter(a => a.ownerId === nameMatch[1]).map(a => a.name),
-                  }).catch(() => {});
-                }
-              }
-              logger.info(`Orphan cleanup: removed ${orphans.length} stale agent(s) from octopus.json`);
-            }
-          } catch (cleanupErr: any) {
-            logger.warn('Orphan agent cleanup warning', { error: cleanupErr.message });
+          if (ownerIds.length > 0) {
+            logger.info(`Startup: synced memory scope for ${ownerIds.length} user(s), ${agents.length} agent(s)`);
           }
 
           // 恢复心跳 cron job（重启后引擎 cron 是空的，需要从 DB 重新注册）
@@ -299,8 +258,8 @@ export async function initServices(config: AppConfig): Promise<Services> {
           } catch (hbSyncErr: any) {
             logger.warn('Heartbeat restore warning', { error: hbSyncErr.message });
           }
-        } catch (syncErr: any) {
-          logger.warn('Native Gateway agent sync warning', { error: syncErr.message });
+        } catch (startupSyncErr: any) {
+          logger.warn('Startup sync failed', { error: startupSyncErr.message });
         }
       }
     } catch (err: any) {
