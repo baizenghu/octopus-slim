@@ -249,12 +249,19 @@ export async function syncAgentToEngine(
         }
       }
 
-      // 删除 agent 时清理 agentAccess
+      // 删除 agent 时清理 agentAccess（删除自身条目 + 从其他 agent 的 scopes 中移除引用）
       if (opts.deleteAgentName) {
         const deleteId = tenant.agentId(opts.deleteAgentName);
         if (scopes.agentAccess?.[deleteId]) {
           delete scopes.agentAccess[deleteId];
           changed = true;
+        }
+        // 从其他 agent 的 scopes 列表中移除已删除 agent 的引用
+        for (const [agentId, scopeList] of Object.entries(scopes.agentAccess ?? {})) {
+          if (Array.isArray(scopeList) && scopeList.includes(deleteId)) {
+            scopes.agentAccess![agentId] = scopeList.filter((s: string) => s !== deleteId);
+            changed = true;
+          }
         }
       }
 
