@@ -80,6 +80,10 @@ export default function ChatPage() {
   const delegationPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const currentSessionRef = useRef<string>('');
   const streamAbortRef = useRef<AbortController | null>(null);
+  // SSE 节流 refs
+  const pendingContentRef = useRef('');
+  const pendingThinkingRef = useRef('');
+  const rafIdRef = useRef<number | null>(null);
   // 提醒
   const [activeReminder, setActiveReminder] = useState<{ id: string; title: string; text?: string } | null>(null);
 
@@ -342,22 +346,57 @@ export default function ChatPage() {
               const content = parsed.choices?.[0]?.delta?.content || parsed.content || '';
               const thinking = parsed.thinking || '';
               if (content || thinking) {
-                setMessages((prev) => {
-                  const updated = [...prev];
-                  const last = updated[updated.length - 1];
-                  if (last.role === 'assistant') {
-                    updated[updated.length - 1] = {
-                      ...last,
-                      content: last.content + content,
-                      ...(thinking ? { thinking: (last.thinking || '') + thinking } : {}),
-                    };
-                  }
-                  return updated;
-                });
+                pendingContentRef.current += content;
+                pendingThinkingRef.current += thinking;
+                if (!rafIdRef.current) {
+                  rafIdRef.current = requestAnimationFrame(() => {
+                    const c = pendingContentRef.current;
+                    const t = pendingThinkingRef.current;
+                    pendingContentRef.current = '';
+                    pendingThinkingRef.current = '';
+                    rafIdRef.current = null;
+                    setMessages((prev) => {
+                      const updated = [...prev];
+                      const last = updated[updated.length - 1];
+                      if (last?.role === 'assistant') {
+                        updated[updated.length - 1] = {
+                          ...last,
+                          content: last.content + c,
+                          ...(t ? { thinking: (last.thinking || '') + t } : {}),
+                        };
+                      }
+                      return updated;
+                    });
+                  });
+                }
               }
             } catch { /* ignore */ }
           }
         }
+      }
+
+      // 清理 raf + flush 剩余增量
+      if (rafIdRef.current) {
+        cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
+      }
+      if (pendingContentRef.current || pendingThinkingRef.current) {
+        const c = pendingContentRef.current;
+        const t = pendingThinkingRef.current;
+        pendingContentRef.current = '';
+        pendingThinkingRef.current = '';
+        setMessages((prev) => {
+          const updated = [...prev];
+          const last = updated[updated.length - 1];
+          if (last?.role === 'assistant') {
+            updated[updated.length - 1] = {
+              ...last,
+              content: last.content + c,
+              ...(t ? { thinking: (last.thinking || '') + t } : {}),
+            };
+          }
+          return updated;
+        });
       }
 
       // 如果有委派操作，轮询等待 subagent 结果
