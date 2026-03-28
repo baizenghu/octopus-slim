@@ -86,7 +86,15 @@ export function createDbConnectionsRouter(authService: AuthService, prisma: AppP
       const updateData: Record<string, unknown> = {};
       if (name !== undefined) updateData.name = name;
       if (dbType !== undefined) updateData.dbType = dbType;
-      if (host !== undefined) updateData.host = host;
+      if (host !== undefined) {
+        // SSRF 校验：禁止更新为内网地址
+        const hostCheck = validateMcpUrl(`http://${host}:${port || existing.port}`);
+        if (!hostCheck.valid) {
+          res.status(400).json({ error: `数据库主机地址不安全: ${hostCheck.error}` });
+          return;
+        }
+        updateData.host = host;
+      }
       if (port !== undefined) updateData.port = Number(port);
       if (dbUser !== undefined) updateData.dbUser = dbUser;
       if (dbPassword !== undefined && dbPassword !== '••••••') updateData.dbPassword = encryptPassword(dbPassword);

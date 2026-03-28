@@ -50,6 +50,7 @@ const sessionPrefs = new Map<string, { mcpId?: string; skillId?: string; updated
 
 const activeStreams = new Map<string, number>(); // userId → 活跃 SSE 连接数
 const MAX_CONCURRENT_STREAMS = 5;
+const MAX_MESSAGE_LENGTH = 100_000; // 100K 字符
 const MAX_STREAM_DURATION_MS = 30 * 60 * 1000; // 30 分钟
 
 // 将 setInterval 返回值保存并调用 unref，不阻塞 graceful shutdown
@@ -246,7 +247,6 @@ export function createChatRouter(
       return;
     }
 
-    const MAX_MESSAGE_LENGTH = 100_000; // 100K 字符
     if (message && message.length > MAX_MESSAGE_LENGTH) {
       res.status(400).json({ error: `消息长度不能超过 ${MAX_MESSAGE_LENGTH} 个字符` });
       return;
@@ -325,7 +325,6 @@ export function createChatRouter(
       res.status(429).json({ error: '并发对话数超限，请关闭其他对话后重试' });
       return;
     }
-    activeStreams.set(user.id, currentStreams + 1);
 
     // SSE 响应头
     res.writeHead(200, {
@@ -358,6 +357,9 @@ export function createChatRouter(
       if (remaining <= 0) activeStreams.delete(user.id);
       else activeStreams.set(user.id, remaining);
     });
+
+    // P0 fix: 递增放在 close handler 注册之后，保证任何异常路径都能递减
+    activeStreams.set(user.id, currentStreams + 1);
 
     // 构建企业级 extraSystemPrompt
     const extraPrompt = await buildEnterpriseSystemPrompt(user, agent, { prisma, workspaceManager, dataRoot });
@@ -518,6 +520,10 @@ export function createChatRouter(
 
     if (!message?.trim() && (!attNonStream || attNonStream.length === 0)) {
       res.status(400).json({ error: 'message is required' });
+      return;
+    }
+    if (message && message.length > MAX_MESSAGE_LENGTH) {
+      res.status(400).json({ error: `消息长度不能超过 ${MAX_MESSAGE_LENGTH} 个字符` });
       return;
     }
 
