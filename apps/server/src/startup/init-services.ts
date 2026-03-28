@@ -171,7 +171,7 @@ export async function initServices(config: AppConfig): Promise<Services> {
         const { PrismaAgentStore } = await import('../services/PrismaAgentStore');
         const { registerAgentStore } = await import('../../../../packages/engine/src/agents/store-registry');
         const { refreshAgentStoreCache } = await import('../../../../packages/engine/src/agents/agent-scope');
-        const prismaStore = new PrismaAgentStore(prismaClient);
+        const prismaStore = new PrismaAgentStore(prismaClient, config.workspace.dataRoot);
         registerAgentStore('prisma', prismaStore);
         await refreshAgentStoreCache();
         logger.info('AgentStore: PrismaAgentStore registered (DB-backed)');

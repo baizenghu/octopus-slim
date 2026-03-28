@@ -7,6 +7,7 @@
  * 类型来源: @octopus/engine/plugin-sdk (packages/engine/src/agents/store.ts)
  */
 
+import path from 'path';
 import type { PrismaClient } from '@prisma/client';
 import type { AgentStore, AgentStoreEntry } from '@octopus/engine/plugin-sdk';
 import { createLogger } from '../utils/logger';
@@ -38,7 +39,7 @@ interface AgentRecord {
 // ---- Implementation ----
 
 export class PrismaAgentStore implements AgentStore {
-  constructor(private prisma: PrismaClient) {}
+  constructor(private prisma: PrismaClient, private dataRoot?: string) {}
 
   async list(filter?: { tenantId?: string }): Promise<AgentStoreEntry[]> {
     const agents = await this.prisma.agent.findMany({
@@ -114,6 +115,14 @@ export class PrismaAgentStore implements AgentStore {
 
     // tenantId — 企业层额外字段，对应 ownerId
     entry.tenantId = record.ownerId;
+
+    // workspace — 引擎通过此字段决定 agent 的工作目录
+    // 不设置则引擎 fallback 到 .octopus-state/workspace-{agentId}
+    if (this.dataRoot && record.ownerId && record.name) {
+      entry.workspace = record.name === 'default'
+        ? path.join(this.dataRoot, 'users', record.ownerId, 'workspace')
+        : path.join(this.dataRoot, 'users', record.ownerId, 'agents', record.name, 'workspace');
+    }
 
     // tools — 从平铺字段组装为嵌套结构
     const tools: NonNullable<AgentStoreEntry['tools']> = {};
