@@ -8,6 +8,8 @@
  * 合并 chat.ts ensureNativeAgent 与 agents.ts syncToNative 的共享逻辑。
  */
 
+import * as fs from 'fs';
+import * as path from 'path';
 import type { EngineAdapter } from './EngineAdapter';
 import { TenantEngineAdapter } from './TenantEngineAdapter';
 import type { WorkspaceManager } from '@octopus/workspace';
@@ -406,18 +408,22 @@ export async function ensureAndSyncNativeAgent(
       identityParts.push(`vibe: ${identity.vibe}`);
     }
     if (identityParts.length > 0) {
-      await setFileWithRetry(bridge, nativeAgentId, 'IDENTITY.md', identityParts.join('\n'), logPrefix).catch((e: unknown) => {
+      const identityContent = identityParts.join('\n');
+      await setFileWithRetry(bridge, nativeAgentId, 'IDENTITY.md', identityContent, logPrefix).catch((e: unknown) => {
         logger.error(`${logPrefix} agentFilesSet IDENTITY.md ultimately failed for ${nativeAgentId}:`, { message: (e as Error).message });
       });
+      // 同步写入磁盘
+      try { fs.writeFileSync(path.join(workspacePath, 'IDENTITY.md'), identityContent, 'utf-8'); } catch { /* ignore */ }
     }
 
     // SOUL.md — 优先使用 DB 中的 systemPrompt，否则从 data/templates/ 加载模板
     const soulContent = systemPrompt || getSoulTemplate(dataRoot, agentName);
     if (!isUpdate || systemPrompt) {
-      // 创建时始终写入模板；更新时仅在有 systemPrompt 时覆盖
       await setFileWithRetry(bridge, nativeAgentId, 'SOUL.md', soulContent, logPrefix).catch((e: unknown) => {
         logger.error(`${logPrefix} agentFilesSet SOUL.md failed for ${nativeAgentId}:`, { message: (e as Error).message });
       });
+      // 同步写入磁盘
+      try { fs.writeFileSync(path.join(workspacePath, 'SOUL.md'), soulContent, 'utf-8'); } catch { /* ignore */ }
     }
   }
 }
