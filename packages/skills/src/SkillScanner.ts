@@ -84,7 +84,7 @@ const SCAN_RULES: ScanRule[] = [
   },
   {
     id: 'ENV002',
-    severity: 'critical',
+    severity: 'warning',
     description: '检测到访问敏感环境变量（API 密钥等）',
     extensions: ['.py', '.js', '.ts'],
     // 使用 \b 词边界，避免 max_tokens / token_count 等正常变量名误报

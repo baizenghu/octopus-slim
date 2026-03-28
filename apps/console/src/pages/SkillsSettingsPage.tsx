@@ -82,8 +82,8 @@ export default function SkillsSettingsPage() {
       enterpriseFileRef.current = null;
       await loadData();
       // 上传成功后自动弹出扫描报告
-      if (result.skill && result.scanReport) {
-        setReportSkill({ ...result.skill, scanReport: result.scanReport });
+      if (result.source && result.scanReport) {
+        setReportSkill({ ...result.source, scanReport: result.scanReport });
         setReportModalOpen(true);
       }
     } catch (err: any) {
@@ -169,8 +169,8 @@ export default function SkillsSettingsPage() {
       personalFileRef.current = null;
       await loadData();
       // 上传成功后自动弹出扫描报告
-      if (result.skill && result.scanReport) {
-        setReportSkill({ ...result.skill, scanReport: result.scanReport });
+      if (result.source && result.scanReport) {
+        setReportSkill({ ...result.source, scanReport: result.scanReport });
         setReportModalOpen(true);
       }
     } catch (err: any) {

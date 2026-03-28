@@ -476,7 +476,7 @@ export default function McpSettingsPage() {
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>上传 MCP 项目</DialogTitle>
-            <DialogDescription>上传 zip/tar.gz 格式的 Python MCP 项目，需包含 packages 离线依赖目录和 requirements.txt</DialogDescription>
+            <DialogDescription>上传 zip/tar.gz 格式的 Python MCP 项目，需包含 requirements.txt 和 packages/ 离线依赖目录（.whl 或 .tar.gz 格式）</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">

@@ -494,67 +494,67 @@ class AdminApi {
   // ─── MCP Servers ───
 
   async getMcpServers() {
-    return this.request<{ data: McpServerInfo[]; total: number }>('/mcp/servers');
+    return this.request<{ data: McpServerInfo[]; total: number }>('/tool-sources?type=mcp');
   }
 
   async createMcpServer(data: Partial<McpServerInfo>) {
-    return this.request<{ message: string; server: McpServerInfo }>('/mcp/servers', {
+    return this.request<{ message: string; server: McpServerInfo }>('/tool-sources', {
       method: 'POST',
       body: JSON.stringify(data),
     });
   }
 
   async updateMcpServer(id: string, data: Partial<McpServerInfo>) {
-    return this.request<{ message: string; server: McpServerInfo }>(`/mcp/servers/${id}`, {
+    return this.request<{ message: string; server: McpServerInfo }>(`/tool-sources/${id}`, {
       method: 'PUT',
       body: JSON.stringify(data),
     });
   }
 
   async deleteMcpServer(id: string) {
-    return this.request<{ message: string }>(`/mcp/servers/${id}`, { method: 'DELETE' });
+    return this.request<{ message: string }>(`/tool-sources/${id}`, { method: 'DELETE' });
   }
 
   async testMcpServer(id: string) {
     return this.request<{ success: boolean; message: string; tools: McpToolInfo[] }>(
-      `/mcp/servers/${id}/test`,
+      `/tool-sources/${id}/test`,
       { method: 'POST' },
     );
   }
 
   async getMcpServerTools(id: string) {
-    return this.request<{ tools: McpToolInfo[] }>(`/mcp/servers/${id}/tools`);
+    return this.request<{ tools: McpToolInfo[] }>(`/tool-sources/${id}/tools`);
   }
 
   // ─── Personal MCP ───
 
   async getPersonalMcpServers() {
-    return this.request<{ data: McpServerInfo[]; total: number }>('/mcp/personal');
+    return this.request<{ data: McpServerInfo[]; total: number }>('/tool-sources/personal');
   }
 
   async createPersonalMcpServer(data: Partial<McpServerInfo>) {
-    return this.request<{ message: string; server: McpServerInfo }>('/mcp/personal', {
+    return this.request<{ message: string; server: McpServerInfo }>('/tool-sources/personal', {
       method: 'POST',
       body: JSON.stringify(data),
     });
   }
 
   async updatePersonalMcpServer(id: string, data: Partial<McpServerInfo>) {
-    return this.request<{ message: string; server: McpServerInfo }>(`/mcp/personal/${id}`, {
+    return this.request<{ message: string; server: McpServerInfo }>(`/tool-sources/personal/${id}`, {
       method: 'PUT',
       body: JSON.stringify(data),
     });
   }
 
   async deletePersonalMcpServer(id: string) {
-    return this.request<{ message: string }>(`/mcp/personal/${id}`, { method: 'DELETE' });
+    return this.request<{ message: string }>(`/tool-sources/personal/${id}`, { method: 'DELETE' });
   }
 
   async uploadPersonalMcpServer(file: File, name?: string): Promise<{ message: string; server: McpServerInfo; entryFile: string; toolCount: number }> {
     const formData = new FormData();
     formData.append('file', file);
     if (name) formData.append('name', name);
-    const res = await this.fetchWithAuth(`${API_BASE}/mcp/personal/upload`, {
+    const res = await this.fetchWithAuth(`${API_BASE}/tool-sources/personal/upload`, {
       method: 'POST',
       // 不设 Content-Type，让浏览器自动设 multipart boundary
       body: formData,
@@ -569,7 +569,7 @@ class AdminApi {
   // ─── Skills ───
 
   async getSkills() {
-    return this.request<{ data: SkillInfo[]; total: number }>('/skills');
+    return this.request<{ data: SkillInfo[]; total: number }>('/tool-sources?type=skill');
   }
 
   async uploadSkill(file: File, meta?: { name?: string; description?: string; command?: string; scriptPath?: string }) {
@@ -589,11 +589,11 @@ class AdminApi {
       (err as any).scanReport = body.scanReport;
       throw err;
     }
-    return res.json() as Promise<{ message: string; skill: SkillInfo; scanReport: any }>;
+    return res.json() as Promise<{ message: string; source: SkillInfo; scanReport: any }>;
   }
 
   async updateSkill(id: string, data: Partial<SkillInfo>) {
-    return this.request<{ message: string; skill: SkillInfo }>(`/skills/${id}`, {
+    return this.request<{ message: string; source: SkillInfo }>(`/skills/${id}`, {
       method: 'PUT',
       body: JSON.stringify(data),
     });
@@ -608,18 +608,18 @@ class AdminApi {
   }
 
   async approveSkill(id: string) {
-    return this.request<{ message: string; skill: SkillInfo }>(`/skills/${id}/approve`, { method: 'POST' });
+    return this.request<{ message: string; source: SkillInfo }>(`/skills/${id}/approve`, { method: 'POST' });
   }
 
   async rejectSkill(id: string, reason?: string) {
-    return this.request<{ message: string; skill: SkillInfo }>(`/skills/${id}/reject`, {
+    return this.request<{ message: string; source: SkillInfo }>(`/skills/${id}/reject`, {
       method: 'POST',
       body: JSON.stringify({ reason }),
     });
   }
 
   async enableSkill(id: string, enabled: boolean) {
-    return this.request<{ message: string; skill: SkillInfo }>(`/skills/${id}/enable`, {
+    return this.request<{ message: string; source: SkillInfo }>(`/skills/${id}/enable`, {
       method: 'PUT',
       body: JSON.stringify({ enabled }),
     });
@@ -628,7 +628,7 @@ class AdminApi {
   // ─── Personal Skills ───
 
   async getPersonalSkills() {
-    return this.request<{ data: SkillInfo[]; total: number }>('/skills/personal');
+    return this.request<{ data: SkillInfo[]; total: number }>('/tool-sources/personal?type=skill');
   }
 
   async uploadPersonalSkill(file: File, meta?: { name?: string; description?: string; command?: string; scriptPath?: string }) {
@@ -648,7 +648,7 @@ class AdminApi {
       (err as any).scanReport = body.scanReport;
       throw err;
     }
-    return res.json() as Promise<{ message: string; skill: SkillInfo; scanReport: any }>;
+    return res.json() as Promise<{ message: string; source: SkillInfo; scanReport: any }>;
   }
 
   async deletePersonalSkill(id: string) {

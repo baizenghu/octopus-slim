@@ -330,7 +330,8 @@ export function createToolSourcesRouter(
           version: cfg?.version ?? null,
           status: cfg?.status ?? (s.enabled ? 'active' : 'pending'),
           scanReport: cfg?.scanReport ?? null,
-          command: cfg?.command ?? null,
+          // skill 的 command 存在 config 中，mcp 的 command 在顶层，不覆盖
+          ...(s.type === 'skill' ? { command: cfg?.command ?? null } : {}),
         };
       });
       res.json({ data, total: data.length });
@@ -981,7 +982,7 @@ export function createToolSourcesRouter(
           version: cfg?.version ?? null,
           status: cfg?.status ?? (s.enabled ? 'active' : 'pending'),
           scanReport: cfg?.scanReport ?? null,
-          command: cfg?.command ?? null,
+          ...(s.type === 'skill' ? { command: cfg?.command ?? null } : {}),
         };
       });
       res.json({ data, total: data.length });
@@ -1160,7 +1161,7 @@ export function createToolSourcesRouter(
     const packagesDir = path.join(projectDir, 'packages');
     if (!fs.existsSync(packagesDir) || !fs.statSync(packagesDir).isDirectory() || fs.readdirSync(packagesDir).length === 0) {
       fs.rmSync(projectDir, { recursive: true, force: true });
-      res.status(400).json({ error: '请在压缩包中包含 packages 离线依赖目录' }); return;
+      res.status(400).json({ error: '请在压缩包中包含 packages/ 离线依赖目录（.whl 或 .tar.gz 格式）' }); return;
     }
     const reqFile = path.join(projectDir, 'requirements.txt');
     if (!fs.existsSync(reqFile)) {
@@ -1192,14 +1193,14 @@ export function createToolSourcesRouter(
     }
 
     // 扫描入口文件
-    const entryFileCandidates = ['server.py', 'main.py', 'app.py', 'index.py'];
+    const entryFileCandidates = ['mcp_server.py', 'mcp_stdio.py', 'server.py', 'main.py', 'app.py', 'index.py'];
     let entryFile: string | null = null;
     for (const c of entryFileCandidates) {
       if (fs.existsSync(path.join(projectDir, c))) { entryFile = c; break; }
     }
 
     const python3Bin = path.join(projectDir, 'venv', 'bin', 'python3');
-    const mcpArgs = entryFile ? [entryFile] : [];
+    const entryAbsPath = entryFile ? path.join(projectDir, entryFile) : null;
 
     const id = `mcp-personal-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const source = await prisma.toolSource.create({
@@ -1213,7 +1214,7 @@ export function createToolSourcesRouter(
         enabled: true,
         transport: 'stdio',
         command: python3Bin,
-        args: mcpArgs,
+        args: entryAbsPath ? [entryAbsPath] : [],
         url: null,
         env: {},
       },
@@ -1305,7 +1306,7 @@ export function createToolSourcesRouter(
     if (!fs.existsSync(packagesDir) || !fs.statSync(packagesDir).isDirectory() || fs.readdirSync(packagesDir).length === 0) {
       fs.rmSync(projectDir, { recursive: true, force: true });
       cleanupTmp(tempFile);
-      res.status(400).json({ error: '请在压缩包中包含 packages 离线依赖目录' }); return;
+      res.status(400).json({ error: '请在压缩包中包含 packages/ 离线依赖目录（.whl 或 .tar.gz 格式）' }); return;
     }
     const reqFile = path.join(projectDir, 'requirements.txt');
     if (!fs.existsSync(reqFile)) {
@@ -1342,14 +1343,14 @@ export function createToolSourcesRouter(
     }
 
     // 扫描入口文件
-    const entryFileCandidates = ['server.py', 'main.py', 'app.py', 'index.py'];
+    const entryFileCandidates = ['mcp_server.py', 'mcp_stdio.py', 'server.py', 'main.py', 'app.py', 'index.py'];
     let entryFile: string | null = null;
     for (const c of entryFileCandidates) {
       if (fs.existsSync(path.join(projectDir, c))) { entryFile = c; break; }
     }
 
     const python3Bin = path.join(projectDir, 'venv', 'bin', 'python3');
-    const mcpArgs = entryFile ? [entryFile] : [];
+    const entryAbsPath = entryFile ? path.join(projectDir, entryFile) : null;
 
     const id = `mcp-enterprise-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const source = await prisma.toolSource.create({
@@ -1363,7 +1364,7 @@ export function createToolSourcesRouter(
         enabled: true,
         transport: 'stdio',
         command: python3Bin,
-        args: mcpArgs,
+        args: entryAbsPath ? [entryAbsPath] : [],
         url: null,
         env: {},
       },
