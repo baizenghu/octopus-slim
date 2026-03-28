@@ -447,14 +447,18 @@ export function createAdminRouter(
         dailyTrend.push({ date: dateStr, count: trendMap.get(dateStr) || 0 });
       }
 
-      // 操作类型分布
-      const recentLogs = await prisma.auditLog.findMany({
-        where: { createdAt: { gte: weekAgo } },
-        select: { action: true },
-      });
+      // 操作类型分布（SQL GROUP BY 替代全量扫描）
+      const actionRows = await prisma.$queryRaw<Array<{ action: string; count: bigint }>>`
+        SELECT action, COUNT(*) as count
+        FROM audit_logs
+        WHERE created_at >= ${weekAgo}
+        GROUP BY action
+        ORDER BY count DESC
+        LIMIT 20
+      `;
       const actionDistribution: Record<string, number> = {};
-      for (const log of recentLogs) {
-        actionDistribution[log.action] = (actionDistribution[log.action] || 0) + 1;
+      for (const row of actionRows) {
+        actionDistribution[row.action] = Number(row.count);
       }
 
       res.json({
