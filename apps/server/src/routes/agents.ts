@@ -605,6 +605,19 @@ export function createAgentsRouter(
       const nativeAgentId = req.tenantBridge!.agentId(existing.name);
       await bridge.call('agents.files.set', { agentId: nativeAgentId, name: fileName, content });
 
+      // 同步写入磁盘文件（引擎 RPC 可能只写内存，需要持久化到 workspace）
+      if (workspaceManager) {
+      const agentWorkspace = existing.name === 'default'
+        ? workspaceManager.getSubPath(user.id, 'WORKSPACE')
+        : workspaceManager.getAgentWorkspacePath(user.id, existing.name);
+      try {
+        const filePath = path.join(agentWorkspace, fileName);
+        await fs.promises.writeFile(filePath, content, 'utf-8');
+      } catch (e: unknown) {
+        logger.warn(`Failed to persist ${fileName} to disk`, { error: (e as Error).message });
+      }
+      }
+
       // SOUL.md 同步更新 DB 中的 systemPrompt 字段（保持一致性）
       if (fileName === 'SOUL.md') {
         await prisma.agent.update({
