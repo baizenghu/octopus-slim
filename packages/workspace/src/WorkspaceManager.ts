@@ -40,17 +40,15 @@ export class WorkspaceManager {
 
     // 如果已存在则跳过
     if (fs.existsSync(userRoot)) {
-      return this.getWorkspacePath(userId);
+      return userRoot;
     }
 
-    // 创建所有子目录（mode 0o777: Docker sandbox uid=2000 需要写权限）
-    const dirs = Object.values(WORKSPACE_DIRS);
-    for (const dir of dirs) {
+    // 创建用户级目录（files/outputs/temp）
+    for (const dir of Object.values(WORKSPACE_DIRS)) {
       const dirPath = path.join(userRoot, dir);
       await fsp.mkdir(dirPath, { recursive: true });
       await fsp.chmod(dirPath, 0o777);
     }
-    // 用户根目录也需要可写（sandbox 需要在此创建文件）
     await fsp.chmod(userRoot, 0o777);
 
     // 写入元数据
@@ -68,19 +66,14 @@ export class WorkspaceManager {
     };
     await this.writeMetadata(userId, metadata);
 
-    // 复制模板文件（如果配置了模板目录）
-    if (this.config.templateDir && fs.existsSync(this.config.templateDir)) {
-      await this.copyTemplates(userId);
-    }
-
-    return this.getWorkspacePath(userId);
+    return userRoot;
   }
 
   /**
    * 获取用户工作空间路径（workspace 子目录）
    */
   getWorkspacePath(userId: string): string {
-    return path.join(this.config.dataRoot, 'users', userId, WORKSPACE_DIRS.WORKSPACE);
+    return path.join(this.config.dataRoot, 'users', userId);
   }
 
   /**
@@ -379,25 +372,6 @@ export class WorkspaceManager {
   }
 
   /**
-   * 复制模板文件到用户工作空间
-   */
-  private async copyTemplates(userId: string): Promise<void> {
-    if (!this.config.templateDir) return;
-
-    const targetDir = this.getWorkspacePath(userId);
-    const entries = await fsp.readdir(this.config.templateDir);
-
-    for (const entry of entries) {
-      const src = path.join(this.config.templateDir, entry);
-      const dest = path.join(targetDir, entry);
-      const stat = await fsp.stat(src);
-
-      if (stat.isFile()) {
-        await fsp.copyFile(src, dest);
-      }
-    }
-  }
-
   /**
    * 递归计算目录大小
    */

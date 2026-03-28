@@ -51,24 +51,12 @@ export interface UserMetadata {
  * 工作空间目录结构常量
  */
 export const WORKSPACE_DIRS = {
-  /** 用户工作空间根目录 */
-  WORKSPACE: 'workspace',
-  /** 会话记录 */
-  SESSIONS: 'workspace/sessions',
   /** 用户上传文件 */
-  FILES: 'workspace/files',
+  FILES: 'files',
   /** Agent 生成的输出（用户可下载） */
-  OUTPUTS: 'workspace/outputs',
+  OUTPUTS: 'outputs',
   /** Agent 工作临时目录（中间脚本、临时数据） */
-  TEMP: 'workspace/temp',
-  /** 用户私有技能（二期） */
-  SKILLS: 'workspace/skills',
-  /** 用户个人 MCP 脚本 */
-  MCP: 'workspace/mcp',
-  /** 临时缓存 */
-  CACHE: 'cache',
-  /** 用户操作日志 */
-  LOGS: 'logs',
+  TEMP: 'temp',
 } as const;
 
 /**
