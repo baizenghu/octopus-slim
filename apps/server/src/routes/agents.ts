@@ -274,6 +274,8 @@ export function createAgentsRouter(
           model: model?.trim() || null,
           systemPrompt: null,
           identity: identity || null,
+          // TODO(P2): 迁移到 allowedToolSources 统一白名单，删除 skillsFilter/mcpFilter/toolsFilter
+          // 参见 docs/plans/2026-03-27-enterprise-plugin-architecture.md Phase 4
           skillsFilter: skillsFilter ?? [],
           mcpFilter: mcpFilter ?? [],
           toolsFilter: toolsFilter ?? [],
@@ -340,6 +342,8 @@ export function createAgentsRouter(
       if (description !== undefined) data.description = description?.trim() || null;
       if (model !== undefined) data.model = model?.trim() || null;
       if (identity !== undefined) data.identity = identity;
+      // TODO(P2): 迁移到 allowedToolSources 统一白名单，删除 skillsFilter/mcpFilter/toolsFilter
+      // 参见 docs/plans/2026-03-27-enterprise-plugin-architecture.md Phase 4
       if (skillsFilter !== undefined) data.skillsFilter = skillsFilter;
       if (mcpFilter !== undefined) data.mcpFilter = mcpFilter;
       if (toolsFilter !== undefined) data.toolsFilter = toolsFilter;
