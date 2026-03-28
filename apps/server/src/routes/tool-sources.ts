@@ -322,7 +322,18 @@ export function createToolSourcesRouter(
         });
       }
 
-      res.json({ data: sources, total: sources.length });
+      // 将 config 中的 skill 字段提取到顶层（前端 SkillInfo 期望 version/status/scanReport 在顶层）
+      const data = sources.map((s: any) => {
+        const cfg = s.config as Record<string, unknown> | null;
+        return {
+          ...s,
+          version: cfg?.version ?? null,
+          status: cfg?.status ?? (s.enabled ? 'active' : 'pending'),
+          scanReport: cfg?.scanReport ?? null,
+          command: cfg?.command ?? null,
+        };
+      });
+      res.json({ data, total: data.length });
     } catch (err) {
       next(err);
     }
@@ -431,6 +442,12 @@ export function createToolSourcesRouter(
         return;
       }
 
+      // 企业级 MCP 项目上传
+      if (req.body.type === 'mcp') {
+        await handleEnterpriseMCPUpload(req, res, tmpFile);
+        return;
+      }
+
       const { name: bodyName, description: bodyDesc, command: bodyCommand, scriptPath: bodyScriptPath } = req.body;
 
       const skillId = `skill-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -518,7 +535,7 @@ export function createToolSourcesRouter(
       const depsWarning = deps.depsType.endsWith('-only') ? deps.depsInfo : undefined;
       res.json({
         message: depsWarning ? `技能已上传，等待审批。注意: ${depsWarning}` : '技能已上传，等待审批',
-        source,
+        source: { ...source, version: finalVersion, status: 'pending', scanReport: reportWithDeps, command: finalCommand },
         scanReport: reportWithDeps,
       });
     } catch (err) {
@@ -957,7 +974,17 @@ export function createToolSourcesRouter(
         },
         orderBy: { createdAt: 'desc' },
       });
-      res.json({ data: sources, total: sources.length });
+      const data = sources.map((s: any) => {
+        const cfg = s.config as Record<string, unknown> | null;
+        return {
+          ...s,
+          version: cfg?.version ?? null,
+          status: cfg?.status ?? (s.enabled ? 'active' : 'pending'),
+          scanReport: cfg?.scanReport ?? null,
+          command: cfg?.command ?? null,
+        };
+      });
+      res.json({ data, total: data.length });
     } catch (err) {
       next(err);
     }
@@ -1200,6 +1227,158 @@ export function createToolSourcesRouter(
       message: entryFile
         ? `MCP 项目 "${projectName}" 上传安装成功`
         : `MCP 项目 "${projectName}" 上传安装成功，但未检测到入口文件`,
+      source,
+      entryFile,
+      installLogs,
+    });
+  }
+
+  /** 企业级 MCP Python 项目上传处理 */
+  async function handleEnterpriseMCPUpload(
+    req: AuthenticatedRequest,
+    res: import('express').Response,
+    tempFile: string,
+  ) {
+    const originalName = ((req as { file?: Express.Multer.File }).file as Express.Multer.File).originalname;
+    let projectName = (req.body.name as string || '')
+      .trim()
+      .replace(/[^a-zA-Z0-9_\-\u4e00-\u9fff]/g, '_');
+    if (!projectName) {
+      projectName = originalName
+        .replace(/\.tar\.gz$/i, '')
+        .replace(/\.zip$/i, '')
+        .replace(/[^a-zA-Z0-9_\-\u4e00-\u9fff]/g, '_');
+    }
+    if (!projectName) projectName = `mcp-enterprise-${Date.now()}`;
+
+    const enterpriseMcpProjectBase = path.resolve(dataRoot, 'mcp-enterprise');
+    if (!fs.existsSync(enterpriseMcpProjectBase)) fs.mkdirSync(enterpriseMcpProjectBase, { recursive: true });
+    const projectDir = path.join(enterpriseMcpProjectBase, projectName);
+
+    if (fs.existsSync(projectDir)) {
+      fs.rmSync(projectDir, { recursive: true, force: true });
+    }
+    fs.mkdirSync(projectDir, { recursive: true });
+
+    const isZip = originalName.toLowerCase().endsWith('.zip');
+    const extractTmpDir = path.join(os.tmpdir(), `octopus-extract-${Date.now()}`);
+    fs.mkdirSync(extractTmpDir, { recursive: true });
+
+    try {
+      if (isZip) {
+        const { stdout: zipList } = await execFileAsync('unzip', ['-l', tempFile], { timeout: 30000 });
+        if (zipList.split('\n').some((e: string) => { const n = path.normalize(e.trim()); return n.startsWith('..') || path.isAbsolute(n); })) {
+          res.status(400).json({ error: '压缩包中包含不合法的路径' }); return;
+        }
+        await execFileAsync('unzip', ['-o', '-q', tempFile, '-d', extractTmpDir], { timeout: 120000 });
+      } else {
+        const { stdout: tarList } = await execFileAsync('tar', ['tzf', tempFile], { timeout: 30000 });
+        if (tarList.split('\n').some((e: string) => { const n = path.normalize(e.trim()); return n.startsWith('..') || path.isAbsolute(n); })) {
+          res.status(400).json({ error: '压缩包中包含不合法的路径' }); return;
+        }
+        await execFileAsync('tar', ['xzf', tempFile, '-C', extractTmpDir], { timeout: 120000 });
+      }
+
+      // 检查单层包装
+      const extractedItems = fs.readdirSync(extractTmpDir);
+      let sourceDir = extractTmpDir;
+      if (extractedItems.length === 1) {
+        const singleItem = path.join(extractTmpDir, extractedItems[0]);
+        if (fs.statSync(singleItem).isDirectory()) sourceDir = singleItem;
+      }
+
+      await execFileAsync('cp', ['-a', sourceDir + '/.', projectDir + '/'], { timeout: 60000 });
+    } catch (err) {
+      fs.rmSync(extractTmpDir, { recursive: true, force: true });
+      if (fs.existsSync(projectDir)) {
+        fs.rmSync(projectDir, { recursive: true, force: true });
+      }
+      throw err;
+    } finally {
+      if (fs.existsSync(extractTmpDir)) {
+        fs.rmSync(extractTmpDir, { recursive: true, force: true });
+      }
+    }
+
+    // 校验 packages + requirements.txt
+    const packagesDir = path.join(projectDir, 'packages');
+    if (!fs.existsSync(packagesDir) || !fs.statSync(packagesDir).isDirectory() || fs.readdirSync(packagesDir).length === 0) {
+      fs.rmSync(projectDir, { recursive: true, force: true });
+      cleanupTmp(tempFile);
+      res.status(400).json({ error: '请在压缩包中包含 packages 离线依赖目录' }); return;
+    }
+    const reqFile = path.join(projectDir, 'requirements.txt');
+    if (!fs.existsSync(reqFile)) {
+      fs.rmSync(projectDir, { recursive: true, force: true });
+      cleanupTmp(tempFile);
+      res.status(400).json({ error: '缺少 requirements.txt' }); return;
+    }
+
+    const installLogs: string[] = [];
+
+    // 创建 venv
+    try {
+      const { stdout: vOut, stderr: vErr } = await execFileAsync('python3', ['-m', 'venv', path.join(projectDir, 'venv')], { timeout: 120000 });
+      if (vOut) installLogs.push(vOut);
+      if (vErr) installLogs.push(vErr);
+    } catch (err: unknown) {
+      installLogs.push((err as { stderr?: string }).stderr || (err as Error).message);
+      fs.rmSync(projectDir, { recursive: true, force: true });
+      cleanupTmp(tempFile);
+      res.status(500).json({ error: 'Python 虚拟环境创建失败', logs: installLogs }); return;
+    }
+
+    // 离线安装依赖
+    const pipBin = path.join(projectDir, 'venv', 'bin', 'pip');
+    try {
+      const { stdout: pOut, stderr: pErr } = await execFileAsync(pipBin, ['install', '--no-index', '--find-links=' + packagesDir, '-r', reqFile], { timeout: 120000 });
+      if (pOut) installLogs.push(pOut);
+      if (pErr) installLogs.push(pErr);
+    } catch (err: unknown) {
+      installLogs.push((err as { stderr?: string }).stderr || (err as Error).message);
+      fs.rmSync(projectDir, { recursive: true, force: true });
+      cleanupTmp(tempFile);
+      res.status(500).json({ error: '依赖安装失败', logs: installLogs }); return;
+    }
+
+    // 扫描入口文件
+    const entryFileCandidates = ['server.py', 'main.py', 'app.py', 'index.py'];
+    let entryFile: string | null = null;
+    for (const c of entryFileCandidates) {
+      if (fs.existsSync(path.join(projectDir, c))) { entryFile = c; break; }
+    }
+
+    const python3Bin = path.join(projectDir, 'venv', 'bin', 'python3');
+    const mcpArgs = entryFile ? [entryFile] : [];
+
+    const id = `mcp-enterprise-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const source = await prisma.toolSource.create({
+      data: {
+        id,
+        name: projectName,
+        type: 'mcp',
+        description: `Python MCP 项目（企业级上传安装）${entryFile ? '' : ' - 未检测到入口文件'}`,
+        scope: 'enterprise',
+        ownerId: null,
+        enabled: true,
+        transport: 'stdio',
+        command: python3Bin,
+        args: mcpArgs,
+        url: null,
+        env: {},
+      },
+    });
+
+    mcpRegistry.register(toMCPConfig(source as unknown as ToolSourceRow));
+    notifyMCPRegistryChanged();
+    // Enterprise MCP affects all users — invalidate with empty prefix to clear all
+    invalidatePromptCache('');
+    cleanupTmp(tempFile);
+
+    res.json({
+      message: entryFile
+        ? `企业级 MCP 项目 "${projectName}" 上传安装成功`
+        : `企业级 MCP 项目 "${projectName}" 上传安装成功，但未检测到入口文件`,
       source,
       entryFile,
       installLogs,

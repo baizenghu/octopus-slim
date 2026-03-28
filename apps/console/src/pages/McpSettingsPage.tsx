@@ -5,9 +5,9 @@
  * - 查看/管理企业级 MCP 工具（管理员可 CRUD）
  * - 管理个人 MCP Server（通过 PersonalMcpManager 共享组件）
  */
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { toast } from 'sonner';
-import { Plus, Trash2, Pencil, Zap, Loader2, Wrench } from 'lucide-react';
+import { Plus, Trash2, Pencil, Zap, Loader2, Wrench, Upload } from 'lucide-react';
 import { adminApi, type McpServerInfo, type McpToolInfo } from '../api';
 import { useAuthStore } from '../store';
 import PersonalMcpManager from '@/components/PersonalMcpManager';
@@ -47,6 +47,11 @@ export default function McpSettingsPage() {
   const [formUrl, setFormUrl] = useState('');
   const [formEnv, setFormEnv] = useState('');
   const [formEnabled, setFormEnabled] = useState(true);
+
+  // 企业 MCP 项目上传
+  const [uploadModalOpen, setUploadModalOpen] = useState(false);
+  const [uploadLoading, setUploadLoading] = useState(false);
+  const mcpUploadRef = useRef<HTMLInputElement>(null);
 
   // 企业 MCP 测试连接
   const [testModalOpen, setTestModalOpen] = useState(false);
@@ -179,6 +184,41 @@ export default function McpSettingsPage() {
     setTestLoading(false);
   };
 
+  const handleMcpUpload = async () => {
+    const file = mcpUploadRef.current?.files?.[0];
+    if (!file) {
+      toast.error('请选择文件');
+      return;
+    }
+    setUploadLoading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('type', 'mcp');
+      if (formName.trim()) formData.append('name', formName.trim());
+
+      const token = localStorage.getItem('admin_token');
+      const res = await fetch('/api/tool-sources/upload', {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: formData,
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({ error: res.statusText }));
+        throw new Error(body.error || '上传失败');
+      }
+      const result = await res.json();
+      toast.success(result.message || 'MCP 项目上传成功');
+      setUploadModalOpen(false);
+      if (mcpUploadRef.current) mcpUploadRef.current.value = '';
+      setFormName('');
+      loadEnterpriseData();
+    } catch (err: unknown) {
+      toast.error((err as Error).message || '上传失败');
+    }
+    setUploadLoading(false);
+  };
+
   const renderEnterpriseTable = () => (
     <div className="rounded-md border">
       <Table>
@@ -267,7 +307,11 @@ export default function McpSettingsPage() {
 
         <TabsContent value="enterprise">
           {isAdmin && (
-            <div className="flex justify-end mb-4">
+            <div className="flex justify-end mb-4 gap-2">
+              <Button variant="outline" onClick={() => setUploadModalOpen(true)}>
+                <Upload className="h-4 w-4 mr-1" />
+                上传 MCP 项目
+              </Button>
               <Button onClick={openCreateModal}>
                 <Plus className="h-4 w-4 mr-1" />
                 注册企业 MCP
@@ -423,6 +467,33 @@ export default function McpSettingsPage() {
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setTestModalOpen(false)}>关闭</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 企业 MCP 项目上传 Dialog */}
+      <Dialog open={uploadModalOpen} onOpenChange={setUploadModalOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>上传 MCP 项目</DialogTitle>
+            <DialogDescription>上传 zip/tar.gz 格式的 Python MCP 项目，需包含 packages 离线依赖目录和 requirements.txt</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>项目名称（可选，默认从文件名提取）</Label>
+              <Input value={formName} onChange={(e) => setFormName(e.target.value)} placeholder="my-mcp-server" />
+            </div>
+            <div className="space-y-2">
+              <Label>项目文件 (zip / tar.gz)</Label>
+              <Input ref={mcpUploadRef} type="file" accept=".zip,.tar.gz,.tgz" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setUploadModalOpen(false)}>取消</Button>
+            <Button onClick={handleMcpUpload} disabled={uploadLoading}>
+              {uploadLoading && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
+              上传并安装
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

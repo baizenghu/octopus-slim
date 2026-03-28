@@ -154,7 +154,9 @@ export async function initRoutes(params: {
     app.use('/api/admin/config', createSystemConfigRouter(authService, bridge, prismaClient));
   }
   app.use('/api/files', createFilesRouter(config, authService, workspaceManager, prismaClient));
-  app.use('/api/tool-sources', createToolSourcesRouter(authService, prismaClient!, mcpRegistry, mcpExecutor, config.workspace.dataRoot, bridge));
+  const toolSourcesRouter = createToolSourcesRouter(authService, prismaClient!, mcpRegistry, mcpExecutor, config.workspace.dataRoot, bridge);
+  app.use('/api/tool-sources', toolSourcesRouter);
+  app.use('/api/skills', toolSourcesRouter);  // 前端兼容别名
   app.use('/api/agents', createAgentsRouter(authService, prismaClient!, workspaceManager, bridge, config.workspace.dataRoot));
   app.use('/api/scheduler', createSchedulerRouter(authService, prismaClient!, bridge, imService));
   app.use('/api/user/db-connections', createDbConnectionsRouter(authService, prismaClient));
@@ -170,6 +172,12 @@ export async function initRoutes(params: {
 
   // 全局错误处理（5xx 不泄漏内部信息，4xx 保留业务消息）
   app.use(globalErrorHandler);
+
+  // ── 确保企业 MCP 项目目录存在 ──
+  const enterpriseMcpDir = path.resolve(config.workspace.dataRoot, 'mcp-enterprise');
+  if (!fs.existsSync(enterpriseMcpDir)) {
+    fs.mkdirSync(enterpriseMcpDir, { recursive: true });
+  }
 
   // ── 启动时清理孤儿 Skill 目录 ──
   const enterpriseSkillsDir = path.resolve(config.workspace.dataRoot, 'skills');
