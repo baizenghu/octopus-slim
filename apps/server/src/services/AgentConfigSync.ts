@@ -14,7 +14,7 @@ import type { WorkspaceManager } from '@octopus/workspace';
 import { getSoulTemplate } from './SoulTemplate';
 import { createLogger } from '../utils/logger';
 import { readToolsCache } from '../utils/tools-cache';
-import type { EngineConfig, EngineAgentFileResponse } from '../types/engine';
+import type { EngineConfig } from '../types/engine';
 
 const logger = createLogger('AgentConfigSync');
 
@@ -411,24 +411,13 @@ export async function ensureAndSyncNativeAgent(
       });
     }
 
-    // SOUL.md
-    if (systemPrompt) {
-      await setFileWithRetry(bridge, nativeAgentId, 'SOUL.md', systemPrompt, logPrefix).catch((e: unknown) => {
-        logger.error(`${logPrefix} agentFilesSet SOUL.md ultimately failed for ${nativeAgentId}:`, { message: (e as Error).message });
+    // SOUL.md — 优先使用 DB 中的 systemPrompt，否则从 data/templates/ 加载模板
+    const soulContent = systemPrompt || getSoulTemplate(dataRoot, agentName);
+    if (!isUpdate || systemPrompt) {
+      // 创建时始终写入模板；更新时仅在有 systemPrompt 时覆盖
+      await setFileWithRetry(bridge, nativeAgentId, 'SOUL.md', soulContent, logPrefix).catch((e: unknown) => {
+        logger.error(`${logPrefix} agentFilesSet SOUL.md failed for ${nativeAgentId}:`, { message: (e as Error).message });
       });
-    } else if (!isUpdate) {
-      try {
-        const existing = await bridge.call<EngineAgentFileResponse>('agents.files.get', { agentId: nativeAgentId, name: 'SOUL.md' });
-        if (!existing?.content) {
-          await setFileWithRetry(bridge, nativeAgentId, 'SOUL.md', getSoulTemplate(dataRoot, agentName), logPrefix).catch((e: unknown) => {
-            logger.error(`${logPrefix} agentFilesSet SOUL.md ultimately failed for ${nativeAgentId}:`, { message: (e as Error).message });
-          });
-        }
-      } catch {
-        await setFileWithRetry(bridge, nativeAgentId, 'SOUL.md', getSoulTemplate(dataRoot, agentName), logPrefix).catch((e: unknown) => {
-          logger.error(`${logPrefix} agentFilesSet SOUL.md ultimately failed for ${nativeAgentId}:`, { message: (e as Error).message });
-        });
-      }
     }
   }
 }
