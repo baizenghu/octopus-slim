@@ -150,7 +150,20 @@ export async function syncAgentToEngine(
 
     // tools（profile + alsoAllow + deny）
     if (opts.toolsFilter !== undefined || opts.mcpFilter !== undefined) {
-      const currentDeny: string[] = [];
+      let currentDeny: string[] = [];
+      if (opts.agentName) {
+        try {
+          const { getPrismaClient } = await import('@octopus/database');
+          const prisma = getPrismaClient();
+          const dbAgent = await prisma.agent.findFirst({
+            where: { ownerId: userId, name: opts.agentName },
+            select: { toolsDeny: true },
+          });
+          if (dbAgent?.toolsDeny && Array.isArray(dbAgent.toolsDeny)) {
+            currentDeny = dbAgent.toolsDeny as string[];
+          }
+        } catch { /* DB 查询失败时使用空 deny，不阻塞同步 */ }
+      }
       updateParams.tools = computeToolsUpdate(
         opts.agentName, opts.toolsFilter, opts.mcpFilter, opts.skillsFilter, currentDeny,
       );
