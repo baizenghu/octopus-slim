@@ -18,7 +18,7 @@ export function initEngineEvents(params: {
   const { bridge, prismaClient, imService } = params;
 
   // 监听 native cron 事件（仅用于调试/日志）
-  bridge.on('cron', (payload: any) => {
+  bridge.on('cron_finished', (payload: any) => {
     if (payload?.action === 'started' || payload?.action === 'finished') {
       logger.info(`job ${payload.jobId} ${payload.action}`);
     }
