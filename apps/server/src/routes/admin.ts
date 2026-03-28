@@ -313,17 +313,18 @@ export function createAdminRouter(
         logger.warn(`[admin] Failed to cleanup sandbox containers for ${id}:`, { error: e instanceof Error ? e.message : String(e) });
       }
 
-      // ── 清理数据库关联记录 ──
-      await prisma.agent.deleteMany({ where: { ownerId: id } }).catch(() => { });
-      await prisma.scheduledTask.deleteMany({ where: { userId: id } }).catch(() => { });
-      await prisma.databaseConnection.deleteMany({ where: { userId: id } }).catch(() => { });
-      await prisma.toolSource.deleteMany({ where: { ownerId: id } }).catch(() => { });
-      await prisma.generatedFile.deleteMany({ where: { userId: id } }).catch(() => { });
-      await prisma.iMUserBinding.deleteMany({ where: { userId: id } }).catch(() => { });
-      await prisma.mailLog.deleteMany({ where: { userId: id } }).catch(() => { });
-
-      // ── 删除用户记录 ──
-      await prisma.user.delete({ where: { userId: id } });
+      // ── 清理数据库关联记录（事务保证原子性） ──
+      await prisma.$transaction(async (tx: any) => {
+        await tx.agent.deleteMany({ where: { ownerId: id } });
+        await tx.scheduledTask.deleteMany({ where: { userId: id } });
+        await tx.databaseConnection.deleteMany({ where: { userId: id } });
+        await tx.toolSource.deleteMany({ where: { ownerId: id } });
+        await tx.generatedFile.deleteMany({ where: { userId: id } });
+        await tx.iMUserBinding.deleteMany({ where: { userId: id } });
+        await tx.mailLog.deleteMany({ where: { userId: id } });
+        // ── 删除用户记录 ──
+        await tx.user.delete({ where: { userId: id } });
+      });
 
       // ── 从 MockLDAP 移除 ──
       authService.removeMockUser(userToDelete.username);
