@@ -104,35 +104,45 @@ Model Provider (DeepSeek / etc.)
 
 ### Key Files
 
-| 文件 | 行数 | 职责 |
-|------|------|------|
-| `EngineAdapter.ts` | 598 | 企业层→引擎桥接，进程内 RPC 调用 |
-| `AgentConfigSync.ts` | 577 | agent model/tools/heartbeat 同步到引擎 config |
-| `SystemPromptBuilder.ts` | 291 | 企业级 extraSystemPrompt（用户信息、工作区、MCP、Skills） |
-| `chat.ts` | 589 | SSE 对话流，调用引擎 agent |
-| `agents.ts` | 724 | Agent CRUD + 同步到引擎 |
-| `IMRouter.ts` | 664 | 飞书/微信消息路由 |
+| 文件 | 职责 |
+|------|------|
+| `EngineAdapter.ts` | 企业层→引擎桥接，`call()` 通用 RPC + `callAgent()` 事件映射 |
+| `AgentConfigSync.ts` | memory scope 同步（plugin 配置）+ tools deny 计算 |
+| `PrismaAgentStore.ts` | DB-backed AgentStore 实现，引擎通过它读写 Agent 配置 |
+| `SystemPromptBuilder.ts` | 企业级 extraSystemPrompt（用户信息、工作区、MCP、Skills） |
+| `chat.ts` | SSE 对话流，斜杠命令，thinking 分离 |
+| `agents.ts` | Agent CRUD，tools deny 计算写入 DB |
+| `tool-sources.ts` | 统一工具源管理（MCP + Skills 合并） |
+| `IMRouter.ts` | 飞书/微信消息路由 |
 
 ### Key Concepts
 
+**架构核心（2026-03-27 重构后）**
+- **octopus.json 是启动配置**（providers、gateway、sandbox、plugins），不再是运行时数据库
+- **Agent 配置存 DB**（通过 PrismaAgentStore），引擎 RPC 通过 AgentStore 接口读写
+- **ToolSource 统一模型**：MCP 和 Skills 合并为一张表，Agent 用白名单控制权限
+- **tools deny 从 DB 读取**：PrismaAgentStore.toEntry() 返回计算好的 tools.deny/alsoAllow
+
 **多租户隔离**
-- Agent ID: `ent_{userId}_{agentName}`（md5 hash 后缀处理中文）
+- Agent ID: `ent_{userId}_{agentName}`（统一格式，DB 和引擎共用）
 - Workspace: `{dataRoot}/users/{userId}/workspace/`
 - Docker sandbox: `tools.exec.host = "sandbox"`, `sandbox.scope = "agent"`
-- 记忆隔离: `memory-lancedb-pro` agentAccess 白名单
+- 记忆隔离: `memory-lancedb-pro` agentAccess 白名单（octopus.json plugin 配置）
 
-**引擎配置**
-- 唯一源: `.octopus-state/octopus.json`
-- `start.sh` 通过 `OCTOPUS_STATE_DIR` 指定
-- 写入用 `config.set` RPC（非 `config.apply`，避免强制重启）
+**数据存储分工**
 
-**Data Directories**
-
-| 目录 | 用途 |
+| 存储 | 数据 |
 |------|------|
-| `data/` | 企业数据（skills、用户、审计） |
-| `.octopus-state/` | 引擎 state（config、agent、memory、plugins） |
-| `plugins/` | 企业插件（enterprise-audit、enterprise-mcp） |
+| `MySQL (Prisma)` | User、Agent 配置、ToolSource、AuditLog、Session 元数据 |
+| `.octopus-state/octopus.json` | 启动配置：providers、gateway、sandbox、plugins |
+| `.octopus-state/` | 引擎运行时：memory LanceDB、cron、JSONL 会话 |
+| `data/` | 企业数据：skills 脚本、用户工作区、审计日志文件 |
+| `plugins/` | 企业插件：enterprise-audit、enterprise-mcp、enterprise-email |
+
+**引擎扩展点**
+- `AgentStore`：可插拔的 agent 存储（默认文件，企业层注册 PrismaAgentStore）
+- `CronLockProvider`：可插拔的分布式锁（默认单机，企业层可注册 Redis 实现）
+- Plugin API：registerTool / registerHook / registerHttpRoute / registerService
 
 ---
 
@@ -147,7 +157,10 @@ Model Provider (DeepSeek / etc.)
 | **Plugin package.json 规范** | 必须有 `"octopus": {"extensions": ["./src/index.ts"]}`，name 与 manifest id 一致 |
 | **MCP 通过 Plugin 注册** | 引擎无原生 MCP config，enterprise-mcp 用 `registerTool()` 桥接 |
 | **Skills 用 extraDirs** | 不用软链接（workspaceOnly realpath 会失效） |
-| **config.set 替代 config.apply** | `config.apply` 触发 full restart；`config.set` 由 reload 模块智能评估 |
+| **Agent 配置走 DB** | Agent CRUD 通过 PrismaAgentStore，不再双写 octopus.json；tools deny 在创建/更新时计算并存 DB |
+| **config.set 替代 config.apply** | `config.apply` 触发 full restart；`config.set` 由 reload 模块智能评估（仅用于 plugin 配置） |
+| **stub 返回安全默认值** | stub 函数不能返回 undefined，必须返回 null/[]/{}，否则运行时崩溃（3 个实际案例） |
+| **tools.allow vs alsoAllow** | allow 是严格白名单（替换默认），alsoAllow 是追加。PrismaAgentStore 必须映射到 alsoAllow |
 | **config 是 JSON5 格式** | `configGetParsed()` 先 JSON.parse 失败后 json5 兜底 |
 | **configApply 对数组是替换** | `agents.list` 变更必须 read-modify-write，不能 deep merge |
 | **config 变更前先 diff** | 无变化时跳过写入，避免不必要的引擎 reload |
