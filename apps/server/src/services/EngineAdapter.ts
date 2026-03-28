@@ -462,7 +462,10 @@ export class EngineAdapter extends EventEmitter {
 
   async configApply(patch: Record<string, unknown>): Promise<void> {
     return this.configRetryLoop('configApply', (config) => {
-      return deepMerge(config, patch);
+      const merged = deepMerge(config, patch);
+      // diff: 无变化时跳过写入，避免不必要的引擎 reload
+      if (JSON.stringify(merged) === JSON.stringify(config)) return null;
+      return merged;
     });
   }
 
