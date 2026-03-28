@@ -32,13 +32,14 @@ const logger = createLogger('files');
 // 一次性下载 token 存储（替代 URL 中传递 JWT）
 const downloadTokens = new Map<string, { userId: string; filePath: string; expires: number }>();
 
-// 定期清理过期 token（每分钟）
-setInterval(() => {
+// 将 setInterval 返回值保存并调用 unref，不阻塞 graceful shutdown
+const tokenCleanupTimer = setInterval(() => {
   const now = Date.now();
   for (const [key, val] of downloadTokens) {
     if (now > val.expires) downloadTokens.delete(key);
   }
 }, 60 * 1000);
+tokenCleanupTimer.unref();
 
 // ========== 安全配置 ==========
 

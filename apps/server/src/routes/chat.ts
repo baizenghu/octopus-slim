@@ -52,8 +52,8 @@ const activeStreams = new Map<string, number>(); // userId → 活跃 SSE 连接
 const MAX_CONCURRENT_STREAMS = 5;
 const MAX_STREAM_DURATION_MS = 30 * 60 * 1000; // 30 分钟
 
-// 清理过期条目
-setInterval(() => {
+// 将 setInterval 返回值保存并调用 unref，不阻塞 graceful shutdown
+const prefsCleanupTimer = setInterval(() => {
   const now = Date.now();
   for (const [key, val] of sessionPrefs) {
     if (now - val.updatedAt > getRuntimeConfig().chat.sessionPrefsTTLMs) sessionPrefs.delete(key);
@@ -64,6 +64,7 @@ setInterval(() => {
     if (oldest) sessionPrefs.delete(oldest); else break;
   }
 }, getRuntimeConfig().chat.sessionPrefsCleanupIntervalMs);
+prefsCleanupTimer.unref();
 
 export function createChatRouter(
   _config: GatewayConfig,

@@ -85,8 +85,8 @@ async function main() {
   // Graceful shutdown
   const shutdown = async () => {
     logger.info('Shutting down gracefully...');
-    server.close();
-    services.bridge?.shutdown();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    await services.bridge?.shutdown();
     await services.prismaClient?.$disconnect();
     process.exit(0);
   };
