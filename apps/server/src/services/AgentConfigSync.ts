@@ -392,9 +392,12 @@ export async function ensureAndSyncNativeAgent(
   if (!agentReady) return;
 
   if (useCache && isNewAgent) {
-    await setFileWithRetry(bridge, nativeAgentId, 'SOUL.md', getSoulTemplate(dataRoot, agentName), logPrefix).catch((e: unknown) => {
+    const soulTemplate = getSoulTemplate(dataRoot, agentName);
+    await setFileWithRetry(bridge, nativeAgentId, 'SOUL.md', soulTemplate, logPrefix).catch((e: unknown) => {
       logger.error(`${logPrefix} agentFilesSet SOUL.md failed for ${nativeAgentId}:`, { message: (e as Error).message });
     });
+    // 同步写入磁盘（覆盖引擎默认英文模板）
+    try { fs.writeFileSync(path.join(workspacePath, 'SOUL.md'), soulTemplate, 'utf-8'); } catch { /* ignore */ }
   } else if (!useCache) {
     // IDENTITY.md
     const identityParts = [
