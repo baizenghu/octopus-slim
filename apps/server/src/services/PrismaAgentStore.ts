@@ -191,7 +191,7 @@ export class PrismaAgentStore implements AgentStore {
     // 当 tools 被传入时，将未出现的子字段显式设为 null，避免 partial update 遗留旧值
     if (entry.tools !== undefined) {
       data.toolsProfile = entry.tools.profile ?? null;
-      data.toolsAllow = entry.tools.allow ?? null;
+      data.toolsAllow = entry.tools.alsoAllow ?? entry.tools.allow ?? null;  // 优先 alsoAllow
       data.toolsDeny = entry.tools.deny ?? null;
     }
 
