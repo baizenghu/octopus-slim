@@ -264,6 +264,25 @@ class AdminApi {
     return res.json();
   }
 
+  private async fetchWithAuth(url: string, options: RequestInit): Promise<Response> {
+    let res = await fetch(url, {
+      ...options,
+      headers: { Authorization: `Bearer ${this.token}`, ...options.headers },
+    });
+    if (res.status === 401 && this.refreshToken) {
+      const refreshed = await this.tryRefreshToken();
+      if (refreshed) {
+        res = await fetch(url, {
+          ...options,
+          headers: { Authorization: `Bearer ${this.token}`, ...options.headers },
+        });
+      } else {
+        if (this.onAuthFailure) this.onAuthFailure();
+      }
+    }
+    return res;
+  }
+
   // ─── Auth ───
 
   async login(username: string, password: string) {
@@ -449,9 +468,8 @@ class AdminApi {
     const formData = new FormData();
     formData.append('file', file);
     const qs = subdir ? `?subdir=${encodeURIComponent(subdir)}` : '';
-    const res = await fetch(`${API_BASE}/files/upload${qs}`, {
+    const res = await this.fetchWithAuth(`${API_BASE}/files/upload${qs}`, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${this.token}` },
       body: formData,
     });
     if (!res.ok) {
@@ -536,9 +554,8 @@ class AdminApi {
     const formData = new FormData();
     formData.append('file', file);
     if (name) formData.append('name', name);
-    const res = await fetch(`${API_BASE}/mcp/personal/upload`, {
+    const res = await this.fetchWithAuth(`${API_BASE}/mcp/personal/upload`, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${this.token}` },
       // 不设 Content-Type，让浏览器自动设 multipart boundary
       body: formData,
     });
@@ -562,9 +579,8 @@ class AdminApi {
     if (meta?.description) formData.append('description', meta.description);
     if (meta?.command) formData.append('command', meta.command);
     if (meta?.scriptPath) formData.append('scriptPath', meta.scriptPath);
-    const res = await fetch(`${API_BASE}/skills/upload`, {
+    const res = await this.fetchWithAuth(`${API_BASE}/skills/upload`, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${this.token}` },
       body: formData,
     });
     if (!res.ok) {
@@ -622,9 +638,8 @@ class AdminApi {
     if (meta?.description) formData.append('description', meta.description);
     if (meta?.command) formData.append('command', meta.command);
     if (meta?.scriptPath) formData.append('scriptPath', meta.scriptPath);
-    const res = await fetch(`${API_BASE}/skills/personal/upload`, {
+    const res = await this.fetchWithAuth(`${API_BASE}/skills/personal/upload`, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${this.token}` },
       body: formData,
     });
     if (!res.ok) {
@@ -645,9 +660,8 @@ class AdminApi {
   async uploadUserAvatar(file: File): Promise<{ ok: boolean; avatarUrl: string }> {
     const formData = new FormData();
     formData.append('avatar', file);
-    const res = await fetch(`${API_BASE}/auth/avatar`, {
+    const res = await this.fetchWithAuth(`${API_BASE}/auth/avatar`, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${this.token}` },
       body: formData,
     });
     if (!res.ok) {
@@ -660,9 +674,8 @@ class AdminApi {
   async uploadAgentAvatar(agentId: string, file: File): Promise<{ ok: boolean; avatarUrl: string }> {
     const formData = new FormData();
     formData.append('avatar', file);
-    const res = await fetch(`${API_BASE}/agents/${agentId}/avatar`, {
+    const res = await this.fetchWithAuth(`${API_BASE}/agents/${agentId}/avatar`, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${this.token}` },
       body: formData,
     });
     if (!res.ok) {
