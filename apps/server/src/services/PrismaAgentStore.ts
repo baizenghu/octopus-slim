@@ -24,6 +24,7 @@ interface AgentRecord {
   systemPrompt: string | null;
   identity: unknown;
   allowedToolSources: unknown;
+  skillsFilter: unknown;
   toolsProfile: string | null;
   toolsDeny: unknown;
   toolsAllow: unknown;
@@ -146,6 +147,12 @@ export class PrismaAgentStore implements AgentStore {
       entry.sandbox = { mode: record.sandboxMode };
     }
 
+    // skills — DB skillsFilter 映射到引擎的 per-agent skills 白名单
+    // undefined = 引擎默认（显示所有），[] = 不显示任何 skill
+    if (record.skillsFilter !== undefined && record.skillsFilter !== null) {
+      entry.skills = record.skillsFilter as string[];
+    }
+
     // allowedToolSources — 企业层额外字段
     if (record.allowedToolSources) {
       entry.allowedToolSources = record.allowedToolSources as string[];
@@ -204,6 +211,11 @@ export class PrismaAgentStore implements AgentStore {
     // sandbox (嵌套) → sandboxMode 字符串
     if (entry.sandbox !== undefined) {
       data.sandboxMode = entry.sandbox?.mode ?? null;
+    }
+
+    // skills → skillsFilter (引擎 per-agent 白名单 → DB 字段)
+    if (entry.skills !== undefined) {
+      data.skillsFilter = entry.skills;
     }
 
     // 企业层额外字段
