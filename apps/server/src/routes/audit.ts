@@ -18,9 +18,9 @@ import { createLogger } from '../utils/logger';
 
 const logger = createLogger('audit');
 
-export function createAuditRouter(authService: AuthService, auditLogger: AuditLogger): Router {
+export function createAuditRouter(authService: AuthService, auditLogger: AuditLogger, prisma?: any): Router {
   const router = Router();
-  const authMiddleware = createAuthMiddleware(authService);
+  const authMiddleware = createAuthMiddleware(authService, prisma);
 
   /**
    * 查询审计日志

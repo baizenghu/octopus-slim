@@ -148,7 +148,7 @@ export async function initRoutes(params: {
   app.use('/api/auth', createAuthRouter(authService, workspaceManager, prismaClient, config.workspace.dataRoot));
   app.use('/api/chat', createChatRouter(config, authService, workspaceManager, bridge, prismaClient, auditLogger));
   app.use('/api/chat', createSessionsRouter(config, authService, workspaceManager, bridge, prismaClient, auditLogger));
-  app.use('/api/audit', createAuditRouter(authService, auditLogger));
+  app.use('/api/audit', createAuditRouter(authService, auditLogger, prismaClient));
   app.use('/api/admin', createAdminRouter(authService, auditLogger, prismaClient!, workspaceManager, bridge));
   if (bridge) {
     app.use('/api/admin/config', createSystemConfigRouter(authService, bridge, prismaClient));

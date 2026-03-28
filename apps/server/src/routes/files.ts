@@ -64,7 +64,7 @@ export function createFilesRouter(
   prismaClient?: AppPrismaClient,
 ): Router {
   const router = Router();
-  const authMiddleware = createAuthMiddleware(authService);
+  const authMiddleware = createAuthMiddleware(authService, prismaClient);
 
   /** 最大文件大小（字节），从运行时配置读取 */
   const MAX_FILE_SIZE = getRuntimeConfig().upload.maxFileSizeBytes;
