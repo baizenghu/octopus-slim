@@ -153,6 +153,13 @@ export default function ChatInput({
     const files = e.target.files;
     if (!files) return;
 
+    const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB
+    const oversized = Array.from(files).filter(f => f.size > MAX_FILE_SIZE);
+    if (oversized.length > 0) {
+      alert(`以下文件超过 20MB 限制：${oversized.map(f => f.name).join(', ')}`);
+      return;
+    }
+
     Array.from(files).forEach((file) => {
       const reader = new FileReader();
       const isText = file.type.startsWith('text/') ||
