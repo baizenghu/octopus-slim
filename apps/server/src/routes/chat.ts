@@ -48,6 +48,10 @@ const logger = createLogger('chat');
  */
 const sessionPrefs = new Map<string, { mcpId?: string; skillId?: string; updatedAt: number }>();
 
+const activeStreams = new Map<string, number>(); // userId → 活跃 SSE 连接数
+const MAX_CONCURRENT_STREAMS = 5;
+const MAX_STREAM_DURATION_MS = 30 * 60 * 1000; // 30 分钟
+
 // 清理过期条目
 setInterval(() => {
   const now = Date.now();
@@ -308,6 +312,14 @@ export function createChatRouter(
       await (auditLogger as any)?.log?.({ userId: user.id, action: 'chat', details: { agentId: nativeAgentId, sessionId: sid } });
     } catch (err) { logger.warn('审计日志记录失败', { error: (err as Error)?.message || String(err) }); }
 
+    // 并发 SSE 流限制
+    const currentStreams = activeStreams.get(user.id) || 0;
+    if (currentStreams >= MAX_CONCURRENT_STREAMS) {
+      res.status(429).json({ error: '并发对话数超限，请关闭其他对话后重试' });
+      return;
+    }
+    activeStreams.set(user.id, currentStreams + 1);
+
     // SSE 响应头
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
@@ -317,8 +329,8 @@ export function createChatRouter(
       'X-Session-Id': sessionKey,
     });
 
-    req.setTimeout(0);
-    res.setTimeout(0);
+    req.setTimeout(MAX_STREAM_DURATION_MS);
+    res.setTimeout(MAX_STREAM_DURATION_MS);
 
     // 流式状态标记：客户端断连后停止写入
     let streamDone = false;
@@ -334,6 +346,10 @@ export function createChatRouter(
         bridge?.call('chat.abort', { sessionKey }).catch(() => {});
       }
       clearInterval(heartbeat);
+      // 递减活跃流计数
+      const remaining = (activeStreams.get(user.id) || 1) - 1;
+      if (remaining <= 0) activeStreams.delete(user.id);
+      else activeStreams.set(user.id, remaining);
     });
 
     // 构建企业级 extraSystemPrompt
