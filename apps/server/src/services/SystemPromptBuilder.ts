@@ -114,10 +114,8 @@ export async function buildEnterpriseSystemPrompt(
     );
   } catch { /* ignore */ }
 
-  // ── Agent 指令 ──
-  if (agent?.systemPrompt) {
-    sections.push(`## Agent 指令\n${agent.systemPrompt}`);
-  }
+  // Agent 行为准则由引擎从 workspace/SOUL.md 原生读取，不在 extraSystemPrompt 中重复注入
+  // systemPrompt 字段仅作 DB 备份，不再注入到 prompt
 
   // ── 专业 Agent 列表（仅 default agent） ──
   if ((!agent || agent.name === 'default') && prisma) {

@@ -618,7 +618,7 @@ export function createAgentsRouter(
       }
       }
 
-      // SOUL.md 同步更新 DB 中的 systemPrompt 字段（保持一致性）
+      // SOUL.md 同步备份到 DB（引擎从 workspace 文件读取，DB 仅作备份）
       if (fileName === 'SOUL.md') {
         await prisma.agent.update({
           where: { id },
