@@ -54,6 +54,7 @@ export default function enterpriseAuditPlugin(api: any) {
 
   // Prisma 延迟初始化（异步，连接完成前 DB 写入跳过，文件写入正常）
   let prisma: PrismaClient | null = null;
+  let retryTimer: ReturnType<typeof setInterval> | null = null;
   if (databaseUrl) {
     // 限制连接池大小：plugin 与 enterprise-mcp 共享 native gateway 进程，
     // 减少每个 PrismaClient 的连接数以避免 MySQL max_connections 耗尽
@@ -69,7 +70,17 @@ export default function enterpriseAuditPlugin(api: any) {
       })
       .catch((err: any) => {
         api.logger.error(`database connection failed: ${err.message}`);
-        api.logger.warn('falling back to file-only audit');
+        api.logger.warn('falling back to file-only audit, retrying every 60s');
+        retryTimer = setInterval(() => {
+          p.$connect()
+            .then(() => {
+              prisma = p;
+              api.logger.info('database reconnected');
+              if (retryTimer) { clearInterval(retryTimer); retryTimer = null; }
+            })
+            .catch((e: any) => api.logger.warn(`DB reconnect failed: ${e.message}`));
+        }, 60_000);
+        retryTimer.unref();
       });
   } else {
     api.logger.warn('databaseUrl not configured, DB audit disabled');
@@ -277,6 +288,7 @@ export default function enterpriseAuditPlugin(api: any) {
 
   // ─── 清理：gateway 停止时断开 DB ────────────────────
   api.on('gateway_stop', async () => {
+    if (retryTimer) { clearInterval(retryTimer); retryTimer = null; }
     fileWriter.close();
     if (prisma) {
       await prisma.$disconnect();
