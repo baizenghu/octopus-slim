@@ -627,7 +627,7 @@ export function createToolSourcesRouter(
 
       // 引用完整性检查：agent 关联
       const allAgents = await prisma.agent.findMany({
-        select: { id: true, name: true, ownerId: true, mcpFilter: true, skillsFilter: true },
+        select: { id: true, name: true, ownerId: true, mcpFilter: true, skillsFilter: true, toolsFilter: true },
       });
       const filterField = existing.type === 'mcp' ? 'mcpFilter' : 'skillsFilter';
       const referencingAgents = allAgents.filter((a) => {
@@ -643,15 +643,25 @@ export function createToolSourcesRouter(
       }
 
       if (existing.type === 'skill' && referencingAgents.length > 0) {
-        // Skill: 自动清理关联（admin 可强制删除企业级技能）
+        // Skill: 自动清理关联（admin 可强制删除企业级技能）+ 重算权限
         const { Prisma } = await import('@prisma/client');
+        const { computeToolsUpdate } = await import('../services/AgentConfigSync');
         for (const agent of referencingAgents) {
           const filter = ((agent as Record<string, unknown>)[filterField] as string[]).filter(
             (s: string) => s !== id && s !== existing.name,
           );
+          const newSkillsFilter = filter.length > 0 ? filter : [];
+          const agentToolsFilter = (agent as Record<string, unknown>).toolsFilter as string[] | null;
+          const agentMcpFilter = (agent as Record<string, unknown>).mcpFilter as string[] | null;
+          const computed = computeToolsUpdate(agent.name, agentToolsFilter, agentMcpFilter, newSkillsFilter, []);
           await prisma.agent.update({
             where: { id: agent.id },
-            data: { [filterField]: filter.length > 0 ? filter : Prisma.JsonNull },
+            data: {
+              [filterField]: filter.length > 0 ? filter : Prisma.JsonNull,
+              toolsProfile: computed.profile,
+              toolsDeny: computed.deny ?? [],
+              toolsAllow: computed.alsoAllow,
+            },
           });
         }
       }

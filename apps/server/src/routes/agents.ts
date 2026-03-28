@@ -443,6 +443,21 @@ export function createAgentsRouter(
         return;
       }
 
+      // 清理关联的心跳定时任务
+      const heartbeatTasks = await prisma.scheduledTask.findMany({
+        where: { userId: user.id, taskType: 'heartbeat' },
+      });
+      for (const task of heartbeatTasks) {
+        const cfg = task.taskConfig as any;
+        if (cfg?.agentId === id || cfg?.agentName === existing.name) {
+          if (cfg?.cronJobId && bridge?.isConnected) {
+            await bridge.call('cron.remove', { id: cfg.cronJobId }).catch(() => {});
+          }
+          await prisma.scheduledTask.delete({ where: { id: task.id } });
+          logger.info(`Cleaned heartbeat task ${task.id} for deleted agent ${id}`);
+        }
+      }
+
       await prisma.agent.delete({ where: { id } });
 
       // 从原生 Gateway 删除（deleteFiles: true 清理 sessions 等 state 数据），清理 memory scope 配置 + 工作空间
