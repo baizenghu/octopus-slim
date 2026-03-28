@@ -1,0 +1,18 @@
+[api]
+# MiniMax OpenAI 兼容接口
+base_url = "https://api.minimaxi.com/v1"
+api_key = "YOUR_MINIMAX_API_KEY"
+timeout = 120  # MiniMax 推理模型需要更长时间
+total_timeout = 280
+
+[models]
+leader = "MiniMax-M2.7"
+worker = "MiniMax-M2.7"
+editor = "MiniMax-M2.7"
+
+[params]
+leader_max_tokens = 2000
+worker_max_tokens = 2000
+editor_max_tokens = 4096
+temperature = 0.7
+max_concurrent_workers = 5

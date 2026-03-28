@@ -1,12 +1,9 @@
 ---
 name: echarts-visualization
 description: 智能可视化分析技能，基于 Excel/数据库数据自动生成 ECharts 仪表盘
-license: MIT
-compatibility: opencode
-metadata:
-  audience: 数据分析师、业务人员
-  workflow: 数据可视化
-  category: 数据分析
+version: 1.0.0
+command-dispatch: tool
+command-tool: run_skill
 ---
 
 # ECharts 可视化分析助手

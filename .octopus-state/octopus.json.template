@@ -1,7 +1,7 @@
 {
   "meta": {
     "lastTouchedVersion": "1.0.0",
-    "lastTouchedAt": "2026-03-27T21:14:01.124Z"
+    "lastTouchedAt": "2026-03-27T23:50:39.329Z"
   },
   "update": {
     "channel": "beta"
@@ -109,7 +109,7 @@
         "docker": {
           "image": "octopus-sandbox:enterprise",
           "binds": [
-            "/home/baizh/octopus-slim/data/skills:/home/baizh/octopus-slim/data/skills:ro"
+            "__PROJECT_ROOT__/data/skills:__PROJECT_ROOT__/data/skills:ro"
           ],
           "dangerouslyAllowExternalBindSources": true
         }
@@ -119,8 +119,8 @@
       {
         "id": "ent_user-admin_default",
         "name": "ent_user-admin_default",
-        "workspace": "/home/baizh/octopus-slim/data/users/user-admin/agents/default",
-        "agentDir": "/home/baizh/octopus-slim/.octopus-state/agents/ent_user-admin_default/agent",
+        "workspace": "__PROJECT_ROOT__/data/users/user-admin/agents/default",
+        "agentDir": "__PROJECT_ROOT__/.octopus-state/agents/ent_user-admin_default/agent",
         "skills": [],
         "subagents": {
           "allowAgents": []
@@ -174,12 +174,14 @@
       {
         "id": "ent_user-baizh_default",
         "name": "ent_user-baizh_default",
-        "workspace": "/home/baizh/octopus-slim/data/users/user-baizh/workspace",
-        "agentDir": "/home/baizh/octopus-slim/.octopus-state/agents/ent_user-baizh_default/agent",
+        "workspace": "__PROJECT_ROOT__/data/users/user-baizh/workspace",
+        "agentDir": "__PROJECT_ROOT__/.octopus-state/agents/ent_user-baizh_default/agent",
         "model": "minimax-portal/MiniMax-M2.7",
         "skills": [],
         "subagents": {
-          "allowAgents": []
+          "allowAgents": [
+            "ent_user-baizh_readonly"
+          ]
         },
         "tools": {
           "profile": "coding",
@@ -195,8 +197,8 @@
       {
         "id": "ent_user-baizh_think",
         "name": "ent_user-baizh_think",
-        "workspace": "/home/baizh/octopus-slim/data/users/user-baizh/agents/think/workspace",
-        "agentDir": "/home/baizh/octopus-slim/.octopus-state/agents/ent_user-baizh_think/agent",
+        "workspace": "__PROJECT_ROOT__/data/users/user-baizh/agents/think/workspace",
+        "agentDir": "__PROJECT_ROOT__/.octopus-state/agents/ent_user-baizh_think/agent",
         "model": "minimax-portal/MiniMax-M2.7",
         "skills": [
           "team-research"
@@ -235,8 +237,8 @@
       {
         "id": "ent_user-test_default",
         "name": "ent_user-test_default",
-        "workspace": "/home/baizh/octopus-slim/data/users/user-test/workspace",
-        "agentDir": "/home/baizh/octopus-slim/.octopus-state/agents/ent_user-test_default/agent",
+        "workspace": "__PROJECT_ROOT__/data/users/user-test/workspace",
+        "agentDir": "__PROJECT_ROOT__/.octopus-state/agents/ent_user-test_default/agent",
         "skills": [
           "claude-code-dispatch",
           "echarts-visualization",
@@ -253,6 +255,74 @@
           "alsoAllow": [
             "group:plugins",
             "agents_list"
+          ]
+        }
+      },
+      {
+        "id": "ent_user-baizh_readonly-agent",
+        "name": "ent_user-baizh_readonly-agent",
+        "workspace": "__PROJECT_ROOT__/data/users/user-baizh/agents/readonly-agent/workspace",
+        "agentDir": "__PROJECT_ROOT__/.octopus-state/agents/ent_user-baizh_readonly-agent/agent",
+        "skills": [],
+        "subagents": {
+          "allowAgents": []
+        },
+        "tools": {
+          "profile": "coding",
+          "alsoAllow": [
+            "group:plugins"
+          ],
+          "deny": [
+            "write",
+            "exec",
+            "process",
+            "sessions_spawn",
+            "subagents",
+            "agents_list",
+            "sessions_list",
+            "sessions_history",
+            "sessions_send",
+            "run_skill"
+          ]
+        }
+      },
+      {
+        "id": "ent_user-baizh_readonly",
+        "name": "ent_user-baizh_readonly",
+        "workspace": "__PROJECT_ROOT__/data/users/user-baizh/agents/readonly/workspace",
+        "agentDir": "__PROJECT_ROOT__/.octopus-state/agents/ent_user-baizh_readonly/agent",
+        "skills": [],
+        "subagents": {
+          "allowAgents": []
+        },
+        "tools": {
+          "profile": "coding",
+          "alsoAllow": [
+            "group:plugins"
+          ],
+          "deny": [
+            "write",
+            "exec",
+            "process",
+            "sessions_spawn",
+            "subagents",
+            "agents_list",
+            "sessions_list",
+            "sessions_history",
+            "sessions_send",
+            "mcp_mcp_amap_maps_regeocode",
+            "mcp_mcp_amap_maps_geo",
+            "mcp_mcp_amap_maps_ip_location",
+            "mcp_mcp_amap_maps_weather",
+            "mcp_mcp_amap_maps_search_detail",
+            "mcp_mcp_amap_maps_bicycling",
+            "mcp_mcp_amap_maps_direction_walking",
+            "mcp_mcp_amap_maps_direction_driving",
+            "mcp_mcp_amap_maps_direction_transit_integrated",
+            "mcp_mcp_amap_maps_distance",
+            "mcp_mcp_amap_maps_text_search",
+            "mcp_mcp_amap_maps_around_search",
+            "run_skill"
           ]
         }
       }
@@ -302,7 +372,7 @@
   "skills": {
     "load": {
       "extraDirs": [
-        "/home/baizh/octopus-slim/data/skills"
+        "__PROJECT_ROOT__/data/skills"
       ],
       "watch": true,
       "watchDebounceMs": 500
@@ -331,8 +401,8 @@
     ],
     "load": {
       "paths": [
-        "/home/baizh/octopus-slim/.octopus-state/extensions",
-        "/home/baizh/octopus-slim/plugins"
+        "__PROJECT_ROOT__/.octopus-state/extensions",
+        "__PROJECT_ROOT__/plugins"
       ]
     },
     "slots": {
@@ -342,7 +412,7 @@
       "memory-lancedb-pro": {
         "enabled": true,
         "config": {
-          "dbPath": "/home/baizh/octopus-slim/.octopus-state/memory/lancedb-pro",
+          "dbPath": "__PROJECT_ROOT__/.octopus-state/memory/lancedb-pro",
           "embedding": {
             "apiKey": "YOUR_JINA_API_KEY",
             "model": "jina-embeddings-v5-text-small",
@@ -383,7 +453,8 @@
                 "ent_user-admin_default"
               ],
               "ent_user-baizh_default": [
-                "ent_user-baizh_default"
+                "ent_user-baizh_default",
+                "ent_user-baizh_readonly"
               ],
               "ent_user-baizh_think": [
                 "ent_user-baizh_think",
@@ -391,6 +462,26 @@
               ],
               "ent_user-test_default": [
                 "ent_user-test_default"
+              ],
+              "ent_user-baizh_readonly-agent": [
+                "ent_user-baizh_readonly-agent",
+                "ent_user-baizh_default"
+              ],
+              "ent_user-baizh_readonly": [
+                "ent_user-baizh_readonly",
+                "ent_user-baizh_default"
+              ],
+              "ent_user-baizh_map-only": [
+                "ent_user-baizh_map-only",
+                "ent_user-baizh_default"
+              ],
+              "ent_user-baizh_ent_user-baizh_default": [
+                "ent_user-baizh_ent_user-baizh_default",
+                "ent_user-baizh_default"
+              ],
+              "ent_user-baizh_ent_user-baizh_map-only": [
+                "ent_user-baizh_ent_user-baizh_map-only",
+                "ent_user-baizh_default"
               ]
             }
           },
@@ -401,7 +492,7 @@
         "enabled": true,
         "config": {
           "databaseUrl": "mysql://octopus:YOUR_DB_PASSWORD_URLENCODED@localhost:3306/octopus_enterprise",
-          "logDir": "/home/baizh/octopus-slim/data/audit-logs",
+          "logDir": "__PROJECT_ROOT__/data/audit-logs",
           "retentionDays": 30
         }
       },
@@ -409,7 +500,7 @@
         "enabled": true,
         "config": {
           "databaseUrl": "mysql://octopus:YOUR_DB_PASSWORD_URLENCODED@localhost:3306/octopus_enterprise",
-          "dataRoot": "/home/baizh/octopus-slim/data",
+          "dataRoot": "__PROJECT_ROOT__/data",
           "sandbox": {
             "mcp": {
               "memory": "256m",

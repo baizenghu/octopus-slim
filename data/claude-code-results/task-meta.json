@@ -1,0 +1,21 @@
+{
+  "task_name": "p0-fixes",
+  "telegram_group": "-5006066016",
+  "callback_group": "",
+  "callback_dm": "8453928079",
+  "callback_account": "default",
+  "callback_session": "agent:main:telegram:direct:8453928079",
+  "prompt": "修复 Octopus P0 紧急问题（只改必要代码，每个修复单独 commit）：\n\n## 1. 心跳告警 userId 双重拼接（init-engine-events.ts:44）\n- `user-${match[1]}` 中 match[1] 已包含 `user-` 前缀\n- 改为 `userIds = [match[1]]`\n- 同时修复正则 `^ent_(.+?)_[^_]+$` 为 `^ent_(user-[^_]+)_(.+)$`（agentName 含下划线的边界问题）\n\n## 2. .env 权限修复\n- 执行 `chmod 600 .env`\n- 在 start.sh 启动时增加 .env 权限检查（非 600 时 warn）\n\n## 3. AUDIT_HMAC_KEY 默认值\n- plugins/audit/src/file-writer.ts:7 的 fallback 'default-audit-key-change-me'\n- 启动时检查：若为默认值则打 WARN 日志提示配置\n\n## 4. ecosystem.config.js 命令行 token 暴露\n- `--token ${GW_TOKEN}` 从 args 移到 env 传递\n\n## 5. ecosystem.config.js gateway cwd 路径错误\n- `apps/gateway` 修正为 `apps/server`\n\n## 6. 单进程异常兜底\n- index.ts main() 前注册 process.on('uncaughtException') 和 process.on('unhandledRejection')\n- 记录错误日志但不退出（让 PM2 管理重启）\n\n## 7. TenantEngineAdapter.test.ts mock 修复\n- mock 返回值从裸数组改为 `{ agents: [...] }` 对象\n\n注意：\n- 每个修复一个 commit，message 格式 `fix: 简短描述`\n- 修完跑 `npx vitest run` 确认测试通过\n- 不要改其他代码",
+  "workdir": "/home/baizh/octopus",
+  "started_at": "2026-03-26T16:39:48-07:00",
+  "agent_teams": false,
+  "agent_id": "",
+  "model": "opus",
+  "fallback_model": "",
+  "max_budget_usd": "",
+  "max_turns": "",
+  "worktree": "",
+  "status": "done",
+  "exit_code": 0,
+  "completed_at": "2026-03-26T16:42:04-07:00"
+}

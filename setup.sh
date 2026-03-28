@@ -96,6 +96,32 @@ else
   fi
 fi
 
+# ─── 步骤 2.5: 生成 octopus.json（引擎配置）──────────────────────────
+log_step "2.5" "生成 octopus.json"
+
+OCTOPUS_JSON="$ROOT_DIR/.octopus-state/octopus.json"
+OCTOPUS_TEMPLATE="$ROOT_DIR/.octopus-state/octopus.json.template"
+if [ -f "$OCTOPUS_JSON" ]; then
+  log_ok "octopus.json 已存在"
+else
+  mkdir -p "$ROOT_DIR/.octopus-state"
+  if [ -f "$OCTOPUS_TEMPLATE" ]; then
+    sed "s|__PROJECT_ROOT__|$ROOT_DIR|g" "$OCTOPUS_TEMPLATE" > "$OCTOPUS_JSON"
+    chmod 600 "$OCTOPUS_JSON"
+    log_ok "octopus.json 已从模板生成（路径: $ROOT_DIR）"
+  else
+    log_fail "octopus.json.template 不存在"
+  fi
+fi
+
+# 更新 .env 中的 DATA_ROOT 为当前项目路径
+if [ -f "$ROOT_DIR/.env" ]; then
+  if grep -q "DATA_ROOT=./data\|DATA_ROOT=/path/to" "$ROOT_DIR/.env"; then
+    sed -i "s|DATA_ROOT=.*|DATA_ROOT=$ROOT_DIR/data|" "$ROOT_DIR/.env"
+    log_ok "DATA_ROOT 已更新为 $ROOT_DIR/data"
+  fi
+fi
+
 # ─── 步骤 3: 安装 Node.js 依赖 ──────────────────────────────────────
 log_step 3 "安装 Node.js 依赖"
 
