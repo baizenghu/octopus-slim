@@ -252,8 +252,13 @@ export function createToolSourcesRouter(
     try {
       const depsDir = path.join(skillDir, 'deps');
       logger.info('Installing .whl packages', { count: deps.whlFiles!.length, skillId });
-      const { execSync } = await import('child_process');
-      execSync(`${venvPip} install "${depsDir}/"*.whl --quiet --disable-pip-version-check --no-deps`, {
+      const { execFileSync } = await import('child_process');
+      const whlFiles = fs.readdirSync(depsDir).filter(f => f.endsWith('.whl')).map(f => path.join(depsDir, f));
+      if (whlFiles.length === 0) {
+        deps.depsInfo = 'deps 目录中没有 .whl 文件';
+        return;
+      }
+      execFileSync(venvPip, ['install', ...whlFiles, '--quiet', '--disable-pip-version-check', '--no-deps'], {
         timeout: 120000, stdio: 'pipe',
       });
       deps.depsType = 'python-shared-venv';

@@ -14,6 +14,7 @@ import { createAuthMiddleware, type AuthenticatedRequest } from '../middleware/a
 import type { AppPrismaClient } from '../types/prisma';
 import { encryptPassword } from '../utils/crypto';
 import { invalidatePromptCache } from '../services/SystemPromptBuilder';
+import { validateMcpUrl } from '../utils/url-validator';
 
 export function createDbConnectionsRouter(authService: AuthService, prisma: AppPrismaClient): Router {
   const router = Router();
@@ -44,6 +45,13 @@ export function createDbConnectionsRouter(authService: AuthService, prisma: AppP
         res.status(400).json({ error: '所有字段必填' });
         return;
       }
+      // 校验 host 不是内网地址
+      const hostCheck = validateMcpUrl(`http://${host}:${port}`);
+      if (!hostCheck.valid) {
+        res.status(400).json({ error: `数据库主机地址不安全: ${hostCheck.error}` });
+        return;
+      }
+
       // 检查同名
       const existing = await prisma.databaseConnection.findUnique({
         where: { userId_name: { userId, name } },
