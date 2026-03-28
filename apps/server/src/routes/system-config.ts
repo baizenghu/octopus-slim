@@ -57,9 +57,10 @@ async function writeEnterpriseConfig(config: Record<string, any>): Promise<void>
 export function createSystemConfigRouter(
   authService: AuthService,
   bridge: EngineAdapter,
+  prisma?: any,
 ): Router {
   const router = Router();
-  const authMiddleware = createAuthMiddleware(authService);
+  const authMiddleware = createAuthMiddleware(authService, prisma);
 
   /**
    * GET /api/admin/config
@@ -71,6 +72,28 @@ export function createSystemConfigRouter(
       const config = await readConfigFromFile();
       // 合并独立的 enterprise.json（前端从 config.enterprise 读取运行参数）
       config.enterprise = await readEnterpriseConfig();
+      // 脱敏 provider apiKey（只显示前4后4位）
+      if (config.models?.providers) {
+        for (const provider of Object.values(config.models.providers) as any[]) {
+          if (provider?.apiKey && typeof provider.apiKey === 'string') {
+            const key = provider.apiKey;
+            provider.apiKey = key.length > 12
+              ? `${key.slice(0, 4)}****${key.slice(-4)}`
+              : '********';
+          }
+        }
+      }
+      // 脱敏 plugin 中的敏感字段
+      if (config.plugins?.entries) {
+        for (const entry of Object.values(config.plugins.entries) as any[]) {
+          if (entry?.config?.embeddingApiKey) {
+            const k = entry.config.embeddingApiKey;
+            entry.config.embeddingApiKey = k.length > 12
+              ? `${k.slice(0, 4)}****${k.slice(-4)}`
+              : '********';
+          }
+        }
+      }
       res.json({ config });
     } catch (err) {
       next(err);
@@ -90,6 +113,14 @@ export function createSystemConfigRouter(
       }
 
       const c = await readConfigFromFile();
+
+      // 保留脱敏值对应的磁盘原始 apiKey
+      const oldConfig = await readConfigFromFile();
+      for (const [name, provider] of Object.entries(providers) as [string, any][]) {
+        if (provider?.apiKey?.includes('****') && oldConfig.models?.providers?.[name]?.apiKey) {
+          provider.apiKey = oldConfig.models.providers[name].apiKey;
+        }
+      }
 
       if (!c.models) c.models = {};
       c.models.providers = providers;
@@ -117,6 +148,15 @@ export function createSystemConfigRouter(
       const { allow, entries } = req.body;
 
       const c = await readConfigFromFile();
+
+      // 保留脱敏值对应的磁盘原始 embeddingApiKey
+      if (entries && typeof entries === 'object') {
+        for (const [name, val] of Object.entries(entries) as [string, any][]) {
+          if (val?.config?.embeddingApiKey?.includes('****') && c.plugins?.entries?.[name]?.config?.embeddingApiKey) {
+            val.config.embeddingApiKey = c.plugins.entries[name].config.embeddingApiKey;
+          }
+        }
+      }
 
       if (!c.plugins) c.plugins = {};
 

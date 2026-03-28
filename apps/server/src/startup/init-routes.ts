@@ -151,7 +151,7 @@ export async function initRoutes(params: {
   app.use('/api/audit', createAuditRouter(authService, auditLogger));
   app.use('/api/admin', createAdminRouter(authService, auditLogger, prismaClient!, workspaceManager, bridge));
   if (bridge) {
-    app.use('/api/admin/config', createSystemConfigRouter(authService, bridge));
+    app.use('/api/admin/config', createSystemConfigRouter(authService, bridge, prismaClient));
   }
   app.use('/api/files', createFilesRouter(config, authService, workspaceManager, prismaClient));
   app.use('/api/tool-sources', createToolSourcesRouter(authService, prismaClient!, mcpRegistry, mcpExecutor, config.workspace.dataRoot, bridge));
