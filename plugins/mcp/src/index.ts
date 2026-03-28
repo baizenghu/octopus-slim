@@ -631,6 +631,9 @@ export default function enterpriseMcpPlugin(api: any) {
         skill_name: Type.String({
           description: '技能名称，与可用技能列表中的名称一致',
         }),
+        read: Type.Optional(Type.Boolean({
+          description: '设为 true 时只读取技能的 SKILL.md 说明文档，不执行脚本。用于了解技能用法和参数。',
+        })),
         script: Type.Optional(Type.String({
           description: '指定要执行的脚本相对路径（相对于技能目录），例如 "scripts/data_analyzer.py"。不指定时自动发现入口脚本。',
         })),
@@ -638,7 +641,7 @@ export default function enterpriseMcpPlugin(api: any) {
           description: '传递给脚本的命令行参数字符串，例如 "--data sales.xlsx --output outputs/report.html"。如果不需要参数可以留空。',
         })),
       }),
-      async execute(_toolCallId: string, params: { skill_name: string; script?: string; args?: string }) {
+      async execute(_toolCallId: string, params: { skill_name: string; read?: boolean; script?: string; args?: string }) {
         // execute 时重新取最新的 _prisma（避免闭包捕获旧引用）
         const prisma = _prisma;
         if (!prisma) {
@@ -752,6 +755,21 @@ export default function enterpriseMcpPlugin(api: any) {
               content: [{ type: 'text' as const, text: JSON.stringify({
                 error: `技能目录不存在: ${skillPath}。技能可能未正确安装。`,
               }) }],
+            };
+          }
+
+          // 3.5 read 模式：只返回 SKILL.md 内容，不执行
+          if (params.read) {
+            const skillMdPath = path.join(skillPath, 'SKILL.md');
+            if (fs.existsSync(skillMdPath)) {
+              const content = fs.readFileSync(skillMdPath, 'utf-8');
+              return {
+                content: [{ type: 'text' as const, text: content }],
+                details: { skill: skillName, path: skillMdPath, mode: 'read' },
+              };
+            }
+            return {
+              content: [{ type: 'text' as const, text: JSON.stringify({ error: `技能 "${skillName}" 没有 SKILL.md 文件` }) }],
             };
           }
 
