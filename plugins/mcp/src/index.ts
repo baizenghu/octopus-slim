@@ -67,9 +67,12 @@ async function getAgentFilter(
   }
 }
 
-/** 检查 MCP server 是否在白名单内（null/[] = 全部禁用，有值数组 = 白名单） */
+/** 检查 MCP server 是否在白名单内 */
 function isMcpServerAllowed(serverNameOrId: string, filter: string[] | null): boolean {
-  if (!filter || filter.length === 0) return false; // null/[] = 全部禁用
+  // null/undefined = 未配置 = 允许所有
+  if (filter === null || filter === undefined) return true;
+  // 空数组 = 显式禁用全部
+  if (filter.length === 0) return false;
   return filter.includes(serverNameOrId);
 }
 
