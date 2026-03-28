@@ -7,6 +7,7 @@
  * 类型来源: @octopus/engine/plugin-sdk (packages/engine/src/agents/store.ts)
  */
 
+import fs from 'fs';
 import path from 'path';
 import type { PrismaClient } from '@prisma/client';
 import type { AgentStore, AgentStoreEntry } from '@octopus/engine/plugin-sdk';
@@ -117,11 +118,15 @@ export class PrismaAgentStore implements AgentStore {
     entry.tenantId = record.ownerId;
 
     // workspace — 引擎通过此字段决定 agent 的工作目录
-    // 不设置则引擎 fallback 到 .octopus-state/workspace-{agentId}
+    // 统一到 data/users/{userId}/workspace (default) 或 data/users/{userId}/agents/{name}/workspace
     if (this.dataRoot && record.ownerId && record.name) {
-      entry.workspace = record.name === 'default'
+      const wsPath = record.name === 'default'
         ? path.join(this.dataRoot, 'users', record.ownerId, 'workspace')
         : path.join(this.dataRoot, 'users', record.ownerId, 'agents', record.name, 'workspace');
+      if (!fs.existsSync(wsPath)) {
+        try { fs.mkdirSync(wsPath, { recursive: true, mode: 0o777 }); } catch { /* ignore */ }
+      }
+      entry.workspace = wsPath;
     }
 
     // tools — 从平铺字段组装为嵌套结构
