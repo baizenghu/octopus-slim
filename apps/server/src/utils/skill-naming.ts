@@ -6,6 +6,14 @@ export function skillDirName(scope: string, skillId: string, ownerId: string | n
   return `ent_${skillId}`;
 }
 
+/** 生成 MCP 项目在 data/mcp-servers/ 下的目录名（全局唯一） */
+export function mcpDirName(scope: string, projectName: string, ownerId: string | null): string {
+  if (scope === 'personal' && ownerId) {
+    return `usr_${ownerId}_${projectName}`;
+  }
+  return `ent_${projectName}`;
+}
+
 /** 生成 SKILL.md 中的 name 字段（引擎按此过滤，必须全局唯一） */
 export function skillMdName(scope: string, name: string, ownerId: string | null): string {
   if (scope === 'personal' && ownerId) {

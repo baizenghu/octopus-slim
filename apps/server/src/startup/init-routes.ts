@@ -173,10 +173,10 @@ export async function initRoutes(params: {
   // 全局错误处理（5xx 不泄漏内部信息，4xx 保留业务消息）
   app.use(globalErrorHandler);
 
-  // ── 确保企业 MCP 项目目录存在 ──
-  const enterpriseMcpDir = path.resolve(config.workspace.dataRoot, 'mcp-enterprise');
-  if (!fs.existsSync(enterpriseMcpDir)) {
-    fs.mkdirSync(enterpriseMcpDir, { recursive: true });
+  // ── 确保 MCP 项目统一目录存在 ──
+  const mcpServersDir = path.resolve(config.workspace.dataRoot, 'mcp-servers');
+  if (!fs.existsSync(mcpServersDir)) {
+    fs.mkdirSync(mcpServersDir, { recursive: true });
   }
 
   // ── 启动时清理孤儿 Skill 目录 ──

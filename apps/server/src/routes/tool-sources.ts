@@ -39,7 +39,7 @@ import type { AppPrismaClient } from '../types/prisma';
 import { validateMcpUrl } from '../utils/url-validator';
 import { getRuntimeConfig } from '../config';
 import { invalidatePromptCache } from '../services/SystemPromptBuilder';
-import { skillDirName, skillMdName } from '../utils/skill-naming';
+import { skillDirName, skillMdName, mcpDirName } from '../utils/skill-naming';
 import { mergeSkillMd, generateSkillMd } from '../utils/skill-md-generator';
 import { createLogger } from '../utils/logger';
 
@@ -1117,8 +1117,9 @@ export function createToolSourcesRouter(
     }
     if (!projectName) projectName = `mcp-project-${Date.now()}`;
 
-    const userMcpBase = path.resolve(dataRoot, 'users', user.id, 'mcp-servers');
-    const projectDir = path.join(userMcpBase, projectName);
+    const mcpBase = path.resolve(dataRoot, 'mcp-servers');
+    const dirName = mcpDirName('personal', projectName, user.id);
+    const projectDir = path.join(mcpBase, dirName);
 
     if (fs.existsSync(projectDir)) {
       fs.rmSync(projectDir, { recursive: true, force: true });
@@ -1250,11 +1251,11 @@ export function createToolSourcesRouter(
         .replace(/\.zip$/i, '')
         .replace(/[^a-zA-Z0-9_\-\u4e00-\u9fff]/g, '_');
     }
-    if (!projectName) projectName = `mcp-enterprise-${Date.now()}`;
+    if (!projectName) projectName = `mcp-project-${Date.now()}`;
 
-    const enterpriseMcpProjectBase = path.resolve(dataRoot, 'mcp-enterprise');
-    if (!fs.existsSync(enterpriseMcpProjectBase)) fs.mkdirSync(enterpriseMcpProjectBase, { recursive: true });
-    const projectDir = path.join(enterpriseMcpProjectBase, projectName);
+    const mcpBase = path.resolve(dataRoot, 'mcp-servers');
+    const dirName = mcpDirName('enterprise', projectName, null);
+    const projectDir = path.join(mcpBase, dirName);
 
     if (fs.existsSync(projectDir)) {
       fs.rmSync(projectDir, { recursive: true, force: true });
