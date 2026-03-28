@@ -245,6 +245,12 @@ export function createChatRouter(
       return;
     }
 
+    const MAX_MESSAGE_LENGTH = 100_000; // 100K 字符
+    if (message && message.length > MAX_MESSAGE_LENGTH) {
+      res.status(400).json({ error: `消息长度不能超过 ${MAX_MESSAGE_LENGTH} 个字符` });
+      return;
+    }
+
     // 入口统一加载 Agent 配置（避免后续重复查询）
     const agent = await loadAgentFromDb(prisma, user.id, reqAgentId);
     const agentName = agent?.name || 'default';

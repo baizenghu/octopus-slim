@@ -245,6 +245,20 @@ export function createAgentsRouter(
         return;
       }
 
+      const trimmedName = name.trim();
+      if (trimmedName.length > 50) {
+        res.status(400).json({ error: 'Agent 名称不能超过 50 个字符' });
+        return;
+      }
+      if (!/^[\w\u4e00-\u9fa5-]+$/.test(trimmedName)) {
+        res.status(400).json({ error: 'Agent 名称只能包含字母、数字、中文、下划线和连字符' });
+        return;
+      }
+      if (['default', 'system', 'admin'].includes(trimmedName.toLowerCase())) {
+        res.status(400).json({ error: '不能使用保留名称' });
+        return;
+      }
+
       // 计算 tools deny/profile/alsoAllow 写入 DB（引擎通过 AgentStore 从 DB 读取）
       const computedTools = computeToolsUpdate(name.trim(), toolsFilter ?? [], mcpFilter ?? [], skillsFilter ?? [], []);
 
