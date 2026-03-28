@@ -312,9 +312,6 @@ export class WorkspaceManager {
    * default agent 使用用户主 workspace，专业 agent 使用 agents/{agentName}/workspace/
    */
   getAgentWorkspacePath(userId: string, agentName: string): string {
-    if (agentName === 'default') {
-      return this.getWorkspacePath(userId);
-    }
     return path.join(this.config.dataRoot, 'users', userId, 'agents', agentName, 'workspace');
   }
 
@@ -323,10 +320,6 @@ export class WorkspaceManager {
    * 创建目录结构 + chmod 0o755（Docker sandbox uid=2000 通过同组获取写权限）
    */
   async initAgentWorkspace(userId: string, agentName: string): Promise<string> {
-    if (agentName === 'default') {
-      return this.getWorkspacePath(userId);
-    }
-
     const agentWorkspace = this.getAgentWorkspacePath(userId, agentName);
     if (!fs.existsSync(agentWorkspace)) {
       await fsp.mkdir(agentWorkspace, { recursive: true, mode: 0o777 });

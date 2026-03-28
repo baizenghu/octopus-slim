@@ -539,15 +539,13 @@ export class IMRouter {
       if (this.workspaceManager || this.dataRoot) {
         try {
           let workspacePath: string, filesPath: string, outputsPath: string, tempPath: string;
-          if (agentName === 'default' && this.workspaceManager) {
-            workspacePath = this.workspaceManager.getSubPath(userId, 'WORKSPACE');
-            filesPath = this.workspaceManager.getSubPath(userId, 'FILES');
-            outputsPath = this.workspaceManager.getSubPath(userId, 'OUTPUTS');
-            tempPath = this.workspaceManager.getSubPath(userId, 'TEMP');
+          if (this.workspaceManager) {
+            workspacePath = this.workspaceManager.getAgentWorkspacePath(userId, agentName);
+            filesPath = path.join(workspacePath, 'files');
+            outputsPath = path.join(workspacePath, 'outputs');
+            tempPath = path.join(workspacePath, 'temp');
           } else if (this.dataRoot) {
-            const base = agentName === 'default'
-              ? path.join(this.dataRoot, 'users', userId, 'workspace')
-              : path.join(this.dataRoot, 'users', userId, 'agents', agentName, 'workspace');
+            const base = path.join(this.dataRoot, 'users', userId, 'agents', agentName, 'workspace');
             workspacePath = base;
             filesPath = path.join(base, 'files');
             outputsPath = path.join(base, 'outputs');

@@ -338,9 +338,7 @@ export async function ensureAndSyncNativeAgent(
   if (initWorkspace) {
     workspacePath = await workspaceManager.initAgentWorkspace(userId, agentName);
   } else {
-    workspacePath = agentName === 'default'
-      ? workspaceManager.getSubPath(userId, 'WORKSPACE')
-      : workspaceManager.getAgentWorkspacePath(userId, agentName);
+    workspacePath = workspaceManager.getAgentWorkspacePath(userId, agentName);
   }
 
   // ── 2. 创建 agent ──

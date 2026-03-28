@@ -259,9 +259,7 @@ export function createChatRouter(
     // 处理附件
     let finalMessage = message?.trim() || '';
     if (Array.isArray(attachments) && attachments.length > 0) {
-      const wsRoot = agentName === 'default'
-        ? workspaceManager.getSubPath(user.id, 'WORKSPACE')
-        : workspaceManager.getAgentWorkspacePath(user.id, agentName);
+      const wsRoot = workspaceManager.getAgentWorkspacePath(user.id, agentName);
       const { savedPaths, error } = await processAttachments(attachments, wsRoot);
       if (error) { res.status(413).json({ error }); return; }
       if (savedPaths.length > 0) {
@@ -534,9 +532,7 @@ export function createChatRouter(
     // 处理附件
     let finalMsgNonStream = message?.trim() || '';
     if (Array.isArray(attNonStream) && attNonStream.length > 0) {
-      const wsRootNS = agentNameNS === 'default'
-        ? workspaceManager.getSubPath(user.id, 'WORKSPACE')
-        : workspaceManager.getAgentWorkspacePath(user.id, agentNameNS);
+      const wsRootNS = workspaceManager.getAgentWorkspacePath(user.id, agentNameNS);
       const { savedPaths, error } = await processAttachments(attNonStream, wsRootNS);
       if (error) { res.status(413).json({ error }); return; }
       if (savedPaths.length > 0) {

@@ -607,9 +607,7 @@ export function createAgentsRouter(
 
       // 同步写入磁盘文件（引擎 RPC 可能只写内存，需要持久化到 workspace）
       if (workspaceManager) {
-      const agentWorkspace = existing.name === 'default'
-        ? workspaceManager.getSubPath(user.id, 'WORKSPACE')
-        : workspaceManager.getAgentWorkspacePath(user.id, existing.name);
+      const agentWorkspace = workspaceManager.getAgentWorkspacePath(user.id, existing.name);
       try {
         const filePath = path.join(agentWorkspace, fileName);
         await fs.promises.writeFile(filePath, content, 'utf-8');
