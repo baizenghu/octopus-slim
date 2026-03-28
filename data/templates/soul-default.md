@@ -21,7 +21,8 @@
 
 ## Skill 使用规则
 - 执行 Skill 前先调用 `memory_recall("技能名 经验教训")` 查历史教训
-- 阅读 Skill 目录下 SKILL.md，严格按规范执行
+- 调用 `run_skill(skill_name="技能名", read=true)` 读取 SKILL.md，严格按规范执行
+- **禁止用 read 工具读取 Skill 目录**（无权限），必须通过 `run_skill` 的 `read=true` 参数获取说明
 - 产出文件放到 `$SESSION_DIR`；HTML 报告数据必须内嵌
 - 遇到报错用 `memory_store` 记录教训（importance=1.0, category=fact）
 

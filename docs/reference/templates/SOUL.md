@@ -29,7 +29,8 @@ read_when:
 ## Skill 使用规则
 - **执行任何 Skill 前，必须完成以下两步：**
   1. **搜索记忆**：调用 `memory_recall("技能名 经验教训")` 搜索该技能的历史使用经验和教训，阅读并遵守
-  2. **阅读说明**：阅读该 Skill 目录下的 `skill.md`，严格按照其中定义的流程和规范执行
+  2. **阅读说明**：调用 `run_skill(skill_name="技能名", read=true)` 读取 SKILL.md，严格按照其中定义的流程和规范执行
+- **禁止用 read 工具读取 Skill 目录**（无权限），必须通过 `run_skill` 的 `read=true` 参数获取说明
 - 所有产出文件（结果、中间数据）统一放到 `$SESSION_DIR` 目录
 - 生成 HTML 报告时，数据必须内嵌到 HTML 中，不要引用外部文件路径
 - **Skill 执行过程中遇到报错或发现配置问题，必须用 `memory_store` 记录经验教训**（importance=1.0, category=fact），确保下次不再犯同样的错误
