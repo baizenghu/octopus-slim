@@ -236,15 +236,14 @@ export async function syncAgentToEngine(
         const allUserAgentIds = [defaultId, ...specialistIds];
         scopes.agentAccess = scopes.agentAccess || {};
 
-        // default agent 可访问所有该用户 agent 的记忆 + global
+        // 每个 agent 只能访问自己的记忆（agent:{id} 格式）
         const oldDefault = JSON.stringify(scopes.agentAccess[defaultId]);
-        scopes.agentAccess[defaultId] = [...allUserAgentIds, 'global'];
+        scopes.agentAccess[defaultId] = [`agent:${defaultId}`];
         if (JSON.stringify(scopes.agentAccess[defaultId]) !== oldDefault) changed = true;
 
-        // 每个专业 agent 只能访问自己、default 和 global 的记忆
         for (const sid of specialistIds) {
           const oldSpec = JSON.stringify(scopes.agentAccess[sid]);
-          scopes.agentAccess[sid] = [sid, defaultId, 'global'];
+          scopes.agentAccess[sid] = [`agent:${sid}`];
           if (JSON.stringify(scopes.agentAccess[sid]) !== oldSpec) changed = true;
         }
       }
