@@ -50,12 +50,10 @@ export interface UserMetadata {
 /**
  * 工作空间目录结构常量
  */
-export const WORKSPACE_DIRS = {
-  /** 用户上传文件 */
+/** Agent workspace 子目录（在 agents/{name}/workspace/ 下） */
+export const AGENT_WORKSPACE_SUBDIRS = {
   FILES: 'files',
-  /** Agent 生成的输出（用户可下载） */
   OUTPUTS: 'outputs',
-  /** Agent 工作临时目录（中间脚本、临时数据） */
   TEMP: 'temp',
 } as const;
 

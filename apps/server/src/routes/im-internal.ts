@@ -73,7 +73,7 @@ export function createImInternalRouter(imService: IMService, workspaceManager?: 
    * Response: { sent: number }
    */
   router.post('/send-file', async (req, res) => {
-    const { userId, fileName } = req.body || {};
+    const { userId, fileName, agentName } = req.body || {};
     if (!userId || typeof userId !== 'string') {
       return res.status(400).json({ error: 'userId is required' });
     }
@@ -88,12 +88,13 @@ export function createImInternalRouter(imService: IMService, workspaceManager?: 
     }
 
     // 解析宿主机上的 outputs 目录路径
+    const agent = agentName || 'default';
     let outputsDir: string;
     if (workspaceManager) {
-      outputsDir = workspaceManager.getSubPath(userId, 'OUTPUTS');
+      outputsDir = workspaceManager.getAgentSubPath(userId, agent, 'OUTPUTS');
     } else {
       const dataRoot = process.env.DATA_ROOT || './data';
-      outputsDir = path.join(dataRoot, 'users', userId, 'outputs');
+      outputsDir = path.join(dataRoot, 'users', userId, 'agents', agent, 'workspace', 'outputs');
     }
 
     const filePath = path.join(outputsDir, safeName);

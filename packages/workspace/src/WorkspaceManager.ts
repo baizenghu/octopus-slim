@@ -18,7 +18,7 @@ import type {
   UserMetadata,
   PathValidationResult,
 } from './types';
-import { WORKSPACE_DIRS } from './types';
+import { AGENT_WORKSPACE_SUBDIRS } from './types';
 
 /** 用户 .env 模板 */
 /**
@@ -43,12 +43,8 @@ export class WorkspaceManager {
       return userRoot;
     }
 
-    // 创建用户级目录（files/outputs/temp）
-    for (const dir of Object.values(WORKSPACE_DIRS)) {
-      const dirPath = path.join(userRoot, dir);
-      await fsp.mkdir(dirPath, { recursive: true });
-      await fsp.chmod(dirPath, 0o777);
-    }
+    // 创建用户根目录
+    await fsp.mkdir(userRoot, { recursive: true });
     await fsp.chmod(userRoot, 0o777);
 
     // 写入元数据
@@ -84,10 +80,22 @@ export class WorkspaceManager {
   }
 
   /**
-   * 获取用户特定子目录路径
+   * 获取 agent workspace 下的子目录路径（files/outputs/temp）
    */
-  getSubPath(userId: string, subDir: keyof typeof WORKSPACE_DIRS): string {
-    return path.join(this.config.dataRoot, 'users', userId, WORKSPACE_DIRS[subDir]);
+  getAgentSubPath(userId: string, agentName: string, subDir: keyof typeof AGENT_WORKSPACE_SUBDIRS): string {
+    return path.join(this.getAgentWorkspacePath(userId, agentName), AGENT_WORKSPACE_SUBDIRS[subDir]);
+  }
+
+  /**
+   * 列出用户所有 agent 的某个子目录（用于文件管理汇总）
+   */
+  async listAllAgentSubPaths(userId: string, subDir: keyof typeof AGENT_WORKSPACE_SUBDIRS): Promise<{ agentName: string; path: string }[]> {
+    const agentsDir = path.join(this.config.dataRoot, 'users', userId, 'agents');
+    if (!fs.existsSync(agentsDir)) return [];
+    const agents = await fsp.readdir(agentsDir);
+    return agents
+      .filter(name => fs.existsSync(path.join(agentsDir, name, 'workspace', AGENT_WORKSPACE_SUBDIRS[subDir])))
+      .map(name => ({ agentName: name, path: path.join(agentsDir, name, 'workspace', AGENT_WORKSPACE_SUBDIRS[subDir]) }));
   }
 
   /**
@@ -318,10 +326,12 @@ export class WorkspaceManager {
       await fsp.mkdir(agentWorkspace, { recursive: true, mode: 0o777 });
     }
 
-    // 创建 outputs 子目录
-    const outputsDir = path.join(agentWorkspace, 'outputs');
-    if (!fs.existsSync(outputsDir)) {
-      await fsp.mkdir(outputsDir, { recursive: true, mode: 0o777 });
+    // 创建 files/outputs/temp 子目录
+    for (const subDir of Object.values(AGENT_WORKSPACE_SUBDIRS)) {
+      const dirPath = path.join(agentWorkspace, subDir);
+      if (!fs.existsSync(dirPath)) {
+        await fsp.mkdir(dirPath, { recursive: true, mode: 0o777 });
+      }
     }
 
     return agentWorkspace;
