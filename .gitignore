@@ -26,8 +26,7 @@ Thumbs.db
 # Test
 coverage/
 
-# Prisma
-prisma/migrations/
+# Prisma (migrations tracked in git for production deploy)
 
 # Docker volumes
 docker/data/
