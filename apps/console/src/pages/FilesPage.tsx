@@ -4,14 +4,18 @@
  * 功能：
  * - 切换 files/（用户上传）和 outputs/（AI 生成）
  * - 拖拽上传
- * - 文件列表（名称、大小、修改时间）
+ * - 文件列表（名称、大小、修改时间、来源 agent）
  * - 下载 / 删除
  * - 文件预览（文本/图片/PDF/HTML 仪表盘）
+ *
+ * 存储布局（2026-03-28）：
+ * - 文件存储在 agent workspace 下: {agentName}/files/xxx 或 {agentName}/outputs/xxx
+ * - 未指定 agent 时汇总所有 agent 的文件
  */
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { toast } from 'sonner';
 import {
-  FolderOpen, Upload, Download, Trash2, Eye, X, Loader2,
+  FolderOpen, Upload, Download, Trash2, Eye, Loader2,
   FileText, FileImage, FileCode, File, FolderArchive, Bot,
 } from 'lucide-react';
 import { adminApi, type FileInfo } from '../api';
@@ -46,9 +50,10 @@ function getPreviewType(name: string): PreviewType {
   return null;
 }
 
-function getPreviewUrl(dir: string, fileName: string): string {
+/** 构建预览 URL: {agent}/{dir}/{fileName} */
+function getPreviewUrl(agent: string, dir: string, fileName: string): string {
   const token = localStorage.getItem('admin_token');
-  return `/api/files/download/${dir}/${encodeURIComponent(fileName)}?preview=true&token=${encodeURIComponent(token || '')}`;
+  return `/api/files/download/${encodeURIComponent(agent)}/${dir}/${encodeURIComponent(fileName)}?preview=true&token=${encodeURIComponent(token || '')}`;
 }
 
 function getLanguage(name: string): string {
@@ -86,11 +91,12 @@ export default function FilesPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // 预览状态
-  const [previewFile, setPreviewFile] = useState<string | null>(null);
+  const [previewFile, setPreviewFile] = useState<FileInfo | null>(null);
   const [previewType, setPreviewType] = useState<PreviewType>(null);
   const [previewContent, setPreviewContent] = useState<string>('');
   const [previewLoading, setPreviewLoading] = useState(false);
 
+  // 未指定 agent，汇总所有 agent 的文件
   const loadFiles = useCallback(async () => {
     setLoading(true);
     try {
@@ -107,6 +113,7 @@ export default function FilesPage() {
     setUploading(true);
     try {
       for (let i = 0; i < fileList.length; i++) {
+        // 默认上传到 default agent
         await adminApi.uploadFile(fileList[i]);
       }
       toast.success('上传完成');
@@ -117,17 +124,18 @@ export default function FilesPage() {
     setUploading(false);
   };
 
-  const handleDownload = (fileName: string) => {
-    const dir = activeTab;
+  const handleDownload = (file: FileInfo) => {
+    const agent = file.agent || 'default';
     const token = localStorage.getItem('admin_token');
-    const url = `/api/files/download/${dir}/${encodeURIComponent(fileName)}?token=${encodeURIComponent(token || '')}`;
+    const url = `/api/files/download/${encodeURIComponent(agent)}/${activeTab}/${encodeURIComponent(file.name)}?token=${encodeURIComponent(token || '')}`;
     window.open(url, '_blank');
   };
 
-  const handleDelete = async (fileName: string) => {
-    if (!confirm(`确定删除 ${fileName}？`)) return;
+  const handleDelete = async (file: FileInfo) => {
+    if (!confirm(`确定删除 ${file.name}？`)) return;
+    const agent = file.agent || 'default';
     try {
-      await adminApi.deleteFile(`${activeTab}/${fileName}`);
+      await adminApi.deleteFile(`${encodeURIComponent(agent)}/${activeTab}/${encodeURIComponent(file.name)}`);
       toast.success('已删除');
       loadFiles();
     } catch (err: any) {
@@ -135,18 +143,18 @@ export default function FilesPage() {
     }
   };
 
-  const handlePreview = async (fileName: string) => {
-    const type = getPreviewType(fileName);
+  const handlePreview = async (file: FileInfo) => {
+    const type = getPreviewType(file.name);
     if (!type) return;
 
-    setPreviewFile(fileName);
+    setPreviewFile(file);
     setPreviewType(type);
     setPreviewContent('');
 
     if (type === 'text') {
       setPreviewLoading(true);
       try {
-        const url = getPreviewUrl(activeTab, fileName);
+        const url = getPreviewUrl(file.agent || 'default', activeTab, file.name);
         const res = await fetch(url);
         if (!res.ok) throw new Error('加载失败');
         const text = await res.text();
@@ -233,10 +241,13 @@ export default function FilesPage() {
         <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              {previewFile && getFileIcon(previewFile, false)}
-              <span>{previewFile}</span>
+              {previewFile && getFileIcon(previewFile.name, false)}
+              <span>{previewFile?.name}</span>
+              {previewFile?.agent && (
+                <Badge variant="secondary" className="ml-1 text-xs">{previewFile.agent}</Badge>
+              )}
               {previewType === 'text' && previewFile && (
-                <Badge variant="outline" className="ml-2 text-xs">{getLanguage(previewFile)}</Badge>
+                <Badge variant="outline" className="ml-2 text-xs">{getLanguage(previewFile.name)}</Badge>
               )}
             </DialogTitle>
             <DialogDescription className="flex items-center gap-2">
@@ -262,24 +273,24 @@ export default function FilesPage() {
             {previewType === 'image' && previewFile && (
               <div className="flex items-center justify-center p-4">
                 <img
-                  src={getPreviewUrl(activeTab, previewFile)}
-                  alt={previewFile}
+                  src={getPreviewUrl(previewFile.agent || 'default', activeTab, previewFile.name)}
+                  alt={previewFile.name}
                   className="max-w-full max-h-[60vh] object-contain rounded-md"
                 />
               </div>
             )}
             {previewType === 'pdf' && previewFile && (
               <iframe
-                src={getPreviewUrl(activeTab, previewFile)}
+                src={getPreviewUrl(previewFile.agent || 'default', activeTab, previewFile.name)}
                 className="w-full h-[60vh] rounded-md border"
-                title={previewFile}
+                title={previewFile.name}
               />
             )}
             {previewType === 'html' && previewFile && (
               <iframe
-                src={getPreviewUrl(activeTab, previewFile)}
+                src={getPreviewUrl(previewFile.agent || 'default', activeTab, previewFile.name)}
                 className="w-full h-[60vh] rounded-md border"
-                title={previewFile}
+                title={previewFile.name}
                 sandbox="allow-scripts"
               />
             )}
@@ -294,9 +305,9 @@ function renderFileTable(
   files: FileInfo[],
   loading: boolean,
   activeTab: string,
-  handlePreview: (name: string) => void,
-  handleDownload: (name: string) => void,
-  handleDelete: (name: string) => void,
+  handlePreview: (file: FileInfo) => void,
+  handleDownload: (file: FileInfo) => void,
+  handleDelete: (file: FileInfo) => void,
 ) {
   return (
     <div className="rounded-md border">
@@ -304,6 +315,7 @@ function renderFileTable(
         <TableHeader>
           <TableRow>
             <TableHead>文件名</TableHead>
+            <TableHead className="w-24">来源</TableHead>
             <TableHead className="w-24">大小</TableHead>
             <TableHead className="w-44">修改时间</TableHead>
             <TableHead className="w-48">操作</TableHead>
@@ -312,24 +324,27 @@ function renderFileTable(
         <TableBody>
           {loading ? (
             <TableRow>
-              <TableCell colSpan={4} className="text-center py-8">
+              <TableCell colSpan={5} className="text-center py-8">
                 <Loader2 className="h-5 w-5 animate-spin mx-auto text-muted-foreground" />
               </TableCell>
             </TableRow>
           ) : files.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
+              <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
                 {activeTab === 'files' ? '还没有上传文件' : '还没有 AI 生成的文件'}
               </TableCell>
             </TableRow>
           ) : (
             files.map((f) => (
-              <TableRow key={f.name}>
+              <TableRow key={`${f.agent || 'default'}-${f.name}`}>
                 <TableCell>
                   <div className="flex items-center gap-2">
                     {getFileIcon(f.name, f.isDirectory)}
                     <span className="font-medium text-sm">{f.name}</span>
                   </div>
+                </TableCell>
+                <TableCell>
+                  <Badge variant="secondary" className="text-xs">{f.agent || 'default'}</Badge>
                 </TableCell>
                 <TableCell className="text-sm text-muted-foreground">
                   {formatSize(f.size)}
@@ -340,17 +355,17 @@ function renderFileTable(
                 <TableCell>
                   <div className="flex items-center gap-1">
                     {!f.isDirectory && getPreviewType(f.name) && (
-                      <Button variant="outline" size="sm" onClick={() => handlePreview(f.name)}>
+                      <Button variant="outline" size="sm" onClick={() => handlePreview(f)}>
                         <Eye className="h-3.5 w-3.5 mr-1" />
                         预览
                       </Button>
                     )}
-                    <Button variant="ghost" size="sm" onClick={() => handleDownload(f.name)}>
+                    <Button variant="ghost" size="sm" onClick={() => handleDownload(f)}>
                       <Download className="h-3.5 w-3.5 mr-1" />
                       下载
                     </Button>
                     {activeTab === 'files' && (
-                      <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={() => handleDelete(f.name)}>
+                      <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={() => handleDelete(f)}>
                         <Trash2 className="h-3.5 w-3.5 mr-1" />
                         删除
                       </Button>

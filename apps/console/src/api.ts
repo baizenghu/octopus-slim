@@ -68,6 +68,7 @@ export interface FileInfo {
   isDirectory: boolean;
   size: number;
   modifiedAt: string;
+  agent?: string;
 }
 
 export interface McpServerInfo {
@@ -464,11 +465,14 @@ class AdminApi {
 
   // ─── Files ───
 
-  async uploadFile(file: File, subdir?: string) {
+  async uploadFile(file: File, subdir?: string, agent?: string) {
     const formData = new FormData();
     formData.append('file', file);
-    const qs = subdir ? `?subdir=${encodeURIComponent(subdir)}` : '';
-    const res = await this.fetchWithAuth(`${API_BASE}/files/upload${qs}`, {
+    const qs = new URLSearchParams();
+    if (subdir) qs.set('subdir', subdir);
+    if (agent) qs.set('agent', agent);
+    const qsStr = qs.toString() ? `?${qs.toString()}` : '';
+    const res = await this.fetchWithAuth(`${API_BASE}/files/upload${qsStr}`, {
       method: 'POST',
       body: formData,
     });
@@ -479,10 +483,11 @@ class AdminApi {
     return res.json();
   }
 
-  async listFiles(dir: 'files' | 'outputs' = 'files', subdir?: string) {
+  async listFiles(dir: 'files' | 'outputs' = 'files', subdir?: string, agent?: string) {
     const qs = new URLSearchParams({ dir });
     if (subdir) qs.set('subdir', subdir);
-    return this.request<{ dir: string; subdir: string; files: FileInfo[] }>(
+    if (agent) qs.set('agent', agent);
+    return this.request<{ dir: string; subdir: string; agent?: string; files: FileInfo[] }>(
       `/files/list?${qs.toString()}`,
     );
   }

@@ -87,17 +87,17 @@ function CodeBlock({ className, children, node, ...props }: React.ComponentProps
   );
 }
 
-/** 将 outputs/xxx 路径转换为下载链接 */
-function linkifyOutputPaths(text: string): string {
+/** 将 outputs/xxx 路径转换为下载链接（加上 agentName 前缀） */
+function linkifyOutputPaths(text: string, agentName: string): string {
   // 匹配 outputs/开头的文件路径（可能被反引号包裹）
   return text.replace(
     /`?(outputs\/[\w./-]+\.\w+)`?/g,
-    (match, filePath) => `[📥 ${filePath}](/api/files/download/${filePath})`
+    (_match, filePath) => `[📥 ${filePath}](/api/files/download/${encodeURIComponent(agentName)}/${filePath})`
   );
 }
 
 /** Markdown 渲染组件（assistant 消息专用） */
-function MarkdownContent({ content }: { content: string }) {
+function MarkdownContent({ content, agentName = 'default' }: { content: string; agentName?: string }) {
   const components = useMemo(() => ({
     // 链接：outputs 下载链接直接触发下载，其他链接在新标签页打开
     a: ({ children, href, node, ...props }: React.ComponentPropsWithoutRef<'a'> & { node?: unknown }) => {
@@ -135,7 +135,7 @@ function MarkdownContent({ content }: { content: string }) {
   return (
     <div className="md-prose">
       <Markdown remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins} components={components}>
-        {linkifyOutputPaths(content)}
+        {linkifyOutputPaths(content, agentName)}
       </Markdown>
     </div>
   );
@@ -556,7 +556,8 @@ export default function ChatMessages({
 }: ChatMessagesProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const agentName = currentAgent?.identity?.name || currentAgent?.name || 'Octopus AI';
+  const agentDisplayName = currentAgent?.identity?.name || currentAgent?.name || 'Octopus AI';
+  const agentId = currentAgent?.name || 'default';
 
   // 自动滚动
   const scrollToBottom = useCallback(() => {
@@ -580,7 +581,7 @@ export default function ChatMessages({
                 你好，{user?.username || '用户'}
               </h2>
               <p className="text-muted-foreground mb-8">
-                我是 {agentName}，可以帮助你完成各种任务
+                我是 {agentDisplayName}，可以帮助你完成各种任务
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full max-w-lg">
                 {TIPS.map((tip, i) => (
@@ -610,7 +611,7 @@ export default function ChatMessages({
                     {msg.role === 'assistant' && currentAgent?.id && (
                       <AvatarImage
                         src={currentAgent.identity?.avatar || `/api/agents/${currentAgent.id}/avatar`}
-                        alt={agentName}
+                        alt={agentDisplayName}
                       />
                     )}
                     <AvatarFallback className={cn(
@@ -636,7 +637,7 @@ export default function ChatMessages({
                   {/* Message bubble */}
                   <div className={cn('flex flex-col w-full max-w-[90%] lg:max-w-[88%] min-w-0', msg.role === 'user' ? 'items-end ml-auto' : 'items-start')}>
                     <span className="text-[17px] md:text-lg text-muted-foreground mb-1 font-medium">
-                      {msg.role === 'user' ? (user?.username || '你') : agentName}
+                      {msg.role === 'user' ? (user?.username || '你') : agentDisplayName}
                     </span>
                     <div
                       className={cn(
@@ -659,7 +660,7 @@ export default function ChatMessages({
                               'text-xs opacity-60 mb-2 pl-2 border-l-2',
                               msg.role === 'user' ? 'border-primary-foreground/30' : 'border-muted-foreground/30'
                             )}>
-                              <MarkdownContent content={msg.thinking} />
+                              <MarkdownContent content={msg.thinking} agentName={agentId} />
                             </div>
                           </CollapsibleContent>
                         </Collapsible>
@@ -673,7 +674,7 @@ export default function ChatMessages({
                       {/* Message content */}
                       {msg.content ? (
                         msg.role === 'assistant' ? (
-                          <MarkdownContent content={filterInternalTags(msg.content)} />
+                          <MarkdownContent content={filterInternalTags(msg.content)} agentName={agentId} />
                         ) : (
                           filterInternalTags(msg.content).split('\n').map((line, j) => (
                             <p key={j} className="min-h-[1.2em]">{line || '\u00A0'}</p>

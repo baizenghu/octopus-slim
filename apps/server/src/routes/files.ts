@@ -1,7 +1,7 @@
 /**
  * 文件管理路由
  *
- * POST   /api/files/upload              - 上传文件到 workspace/files/
+ * POST   /api/files/upload              - 上传文件到 agent workspace/files/
  * GET    /api/files/list?dir=files       - 列出文件（files/ 或 outputs/）
  * GET    /api/files/download/:path       - 下载文件
  * DELETE /api/files/:path               - 删除文件
@@ -11,6 +11,11 @@
  * - 文件类型白名单
  * - 单文件大小限制（默认 20MB）
  * - 路径验证（防穿越）
+ *
+ * 存储布局（2026-03-28 重构）：
+ * - 文件存储在 agent workspace 下: data/users/{userId}/agents/{agentName}/workspace/files/
+ * - 输出文件: data/users/{userId}/agents/{agentName}/workspace/outputs/
+ * - URL 路径格式: {agentName}/files/xxx.txt 或 {agentName}/outputs/xxx.md
  */
 
 import { Router, NextFunction } from 'express';
@@ -58,6 +63,13 @@ const ALLOWED_EXTENSIONS = new Set([
   '.zip', '.tar', '.gz',
 ]);
 
+/** 从 URL 路径中解析 agentName（第一段）和剩余路径 */
+function parseAgentPath(relativePath: string): { agentName: string; rest: string } | null {
+  const parts = relativePath.split('/');
+  if (parts.length < 2) return null;
+  return { agentName: parts[0], rest: parts.slice(1).join('/') };
+}
+
 export function createFilesRouter(
   _config: GatewayConfig,
   authService: AuthService,
@@ -87,8 +99,9 @@ export function createFilesRouter(
   /**
    * 上传文件
    *
-   * POST /api/files/upload
+   * POST /api/files/upload?agent=default&subdir=reports
    * Body: multipart/form-data, field name = "file"
+   * Optional query: ?agent=agentName (默认 'default')
    * Optional query: ?subdir=reports (子目录)
    */
   router.post('/upload', authMiddleware, (req: AuthenticatedRequest, res) => {
@@ -114,6 +127,14 @@ export function createFilesRouter(
           return;
         }
 
+        const agentName = (req.query.agent as string) || 'default';
+
+        // agentName 安全检查：禁止 .. 和路径分隔符
+        if (agentName.includes('..') || agentName.includes('/') || agentName.includes('\\') || agentName.includes('\0')) {
+          res.status(403).json({ error: 'agent 名称不合法' });
+          return;
+        }
+
         // 确保用户工作空间已初始化
         await workspaceManager.initWorkspace(user.id, user.username || user.id);
 
@@ -134,7 +155,7 @@ export function createFilesRouter(
           return;
         }
 
-        const filesDir = workspaceManager.getSubPath(user.id, 'FILES');
+        const filesDir = workspaceManager.getAgentSubPath(user.id, agentName, 'FILES');
         const targetDir = subdir ? path.join(filesDir, subdir) : filesDir;
 
         // 确保目录存在
@@ -155,7 +176,9 @@ export function createFilesRouter(
         // 写入文件
         await fsp.writeFile(finalPath, file.buffer);
 
-        const relativePath = path.relative(workspaceManager.getWorkspacePath(user.id), finalPath);
+        // 返回相对路径格式: {agentName}/files/xxx.txt
+        const agentWorkspace = workspaceManager.getAgentWorkspacePath(user.id, agentName);
+        const relativePath = `${agentName}/${path.relative(agentWorkspace, finalPath)}`;
         res.json({
           message: '上传成功',
           file: {
@@ -163,6 +186,7 @@ export function createFilesRouter(
             path: relativePath,
             size: file.size,
             type: file.mimetype,
+            agent: agentName,
           },
         });
       } catch (err: unknown) {
@@ -176,13 +200,17 @@ export function createFilesRouter(
   /**
    * 列出文件
    *
-   * GET /api/files/list?dir=files|outputs&subdir=reports
+   * GET /api/files/list?dir=files|outputs&agent=agentName&subdir=reports
+   *
+   * - 如果指定 agent: 列出该 agent 的 files/outputs 目录
+   * - 如果未指定 agent: 汇总所有 agent 的文件，每个文件标注来源 agent
    */
   router.get('/list', authMiddleware, async (req: AuthenticatedRequest, res, next: NextFunction) => {
     try {
       const user = req.user!;
       await workspaceManager.initWorkspace(user.id, user.username || user.id);
       const dirType = (req.query.dir as string) || 'files';
+      const agentQuery = req.query.agent as string | undefined;
       const subdir = (req.query.subdir as string) || '';
 
       // 目录类型白名单检查
@@ -197,51 +225,99 @@ export function createFilesRouter(
         return;
       }
 
-      // 确定根目录
-      let rootDir: string;
-      if (dirType === 'outputs') {
-        rootDir = workspaceManager.getSubPath(user.id, 'OUTPUTS');
+      // agentName 安全检查
+      if (agentQuery && (agentQuery.includes('..') || agentQuery.includes('/') || agentQuery.includes('\\') || agentQuery.includes('\0'))) {
+        res.status(403).json({ error: 'agent 名称不合法' });
+        return;
+      }
+
+      const subDirKey = dirType === 'outputs' ? 'OUTPUTS' as const : 'FILES' as const;
+
+      if (agentQuery) {
+        // 指定 agent：列出单个 agent 的文件
+        const rootDir = workspaceManager.getAgentSubPath(user.id, agentQuery, subDirKey);
+        const targetDir = subdir ? path.join(rootDir, subdir) : rootDir;
+
+        // 二次防御：resolve 后确认路径仍在 rootDir 内
+        const resolvedTarget = path.resolve(targetDir);
+        if (!resolvedTarget.startsWith(path.resolve(rootDir))) {
+          res.status(403).json({ error: '路径越权访问' });
+          return;
+        }
+
+        if (!fs.existsSync(targetDir)) {
+          res.json({ dir: dirType, agent: agentQuery, subdir, files: [] });
+          return;
+        }
+
+        const entries = await fsp.readdir(targetDir, { withFileTypes: true });
+        const files = await Promise.all(
+          entries
+            .filter(e => !e.name.startsWith('.'))
+            .map(async (e) => {
+              const fullPath = path.join(targetDir, e.name);
+              const stat = await fsp.stat(fullPath);
+              return {
+                name: e.name,
+                isDirectory: e.isDirectory(),
+                size: stat.size,
+                modifiedAt: stat.mtime.toISOString(),
+                agent: agentQuery,
+              };
+            }),
+        );
+
+        // 目录排前面，其次按修改时间倒序
+        files.sort((a, b) => {
+          if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1;
+          return new Date(b.modifiedAt).getTime() - new Date(a.modifiedAt).getTime();
+        });
+
+        res.json({ dir: dirType, agent: agentQuery, subdir, files });
       } else {
-        rootDir = workspaceManager.getSubPath(user.id, 'FILES');
+        // 未指定 agent：汇总所有 agent 的文件
+        const agentPaths = await workspaceManager.listAllAgentSubPaths(user.id, subDirKey);
+
+        const allFiles: Array<{
+          name: string;
+          isDirectory: boolean;
+          size: number;
+          modifiedAt: string;
+          agent: string;
+        }> = [];
+
+        for (const { agentName, path: agentDir } of agentPaths) {
+          const targetDir = subdir ? path.join(agentDir, subdir) : agentDir;
+
+          if (!fs.existsSync(targetDir)) continue;
+
+          const entries = await fsp.readdir(targetDir, { withFileTypes: true });
+          const files = await Promise.all(
+            entries
+              .filter(e => !e.name.startsWith('.'))
+              .map(async (e) => {
+                const fullPath = path.join(targetDir, e.name);
+                const stat = await fsp.stat(fullPath);
+                return {
+                  name: e.name,
+                  isDirectory: e.isDirectory(),
+                  size: stat.size,
+                  modifiedAt: stat.mtime.toISOString(),
+                  agent: agentName,
+                };
+              }),
+          );
+          allFiles.push(...files);
+        }
+
+        // 目录排前面，其次按修改时间倒序
+        allFiles.sort((a, b) => {
+          if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1;
+          return new Date(b.modifiedAt).getTime() - new Date(a.modifiedAt).getTime();
+        });
+
+        res.json({ dir: dirType, subdir, files: allFiles });
       }
-
-      const targetDir = subdir ? path.join(rootDir, subdir) : rootDir;
-
-      // 二次防御：resolve 后确认路径仍在 rootDir 内
-      const resolvedTarget = path.resolve(targetDir);
-      if (!resolvedTarget.startsWith(path.resolve(rootDir))) {
-        res.status(403).json({ error: '路径越权访问' });
-        return;
-      }
-
-      if (!fs.existsSync(targetDir)) {
-        res.json({ dir: dirType, subdir, files: [] });
-        return;
-      }
-
-      const entries = await fsp.readdir(targetDir, { withFileTypes: true });
-      const files = await Promise.all(
-        entries
-          .filter(e => !e.name.startsWith('.'))
-          .map(async (e) => {
-            const fullPath = path.join(targetDir, e.name);
-            const stat = await fsp.stat(fullPath);
-            return {
-              name: e.name,
-              isDirectory: e.isDirectory(),
-              size: stat.size,
-              modifiedAt: stat.mtime.toISOString(),
-            };
-          }),
-      );
-
-      // 目录排前面，其次按修改时间倒序
-      files.sort((a, b) => {
-        if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1;
-        return new Date(b.modifiedAt).getTime() - new Date(a.modifiedAt).getTime();
-      });
-
-      res.json({ dir: dirType, subdir, files });
     } catch (err: unknown) {
       next(err instanceof Error ? err : new Error(String(err)));
     }
@@ -250,7 +326,7 @@ export function createFilesRouter(
   /**
    * 签发一次性下载 token（5 分钟有效）
    *
-   * GET /api/files/download-token?path=files/report.xlsx
+   * GET /api/files/download-token?path=default/files/report.xlsx
    * 返回 { token, expiresIn } — 用于 /download/* 接口的 ?token= 参数
    */
   router.get('/download-token', authMiddleware, async (req: AuthenticatedRequest, res) => {
@@ -282,9 +358,9 @@ export function createFilesRouter(
    * 下载文件
    *
    * GET /api/files/download/:filepath
-   * filepath 是相对于用户 workspace 的路径（URL encoded）
-   * 示例: /api/files/download/files%2Freport.xlsx
-   *       /api/files/download/outputs%2Fdashboard.html
+   * filepath 格式: {agentName}/files/report.xlsx 或 {agentName}/outputs/dashboard.html
+   * 示例: /api/files/download/default%2Ffiles%2Freport.xlsx
+   *       /api/files/download/analyst%2Foutputs%2Fdashboard.html
    *
    * 认证方式（优先级从高到低）：
    * 1. 一次性下载 token（推荐）：?token=<download-token>
@@ -323,10 +399,25 @@ export function createFilesRouter(
         return;
       }
 
-      const userRoot = workspaceManager.getWorkspacePath(user.id);
-      const fullPath = path.join(userRoot, relativePath);
+      // 解析 agentName 和剩余路径
+      const parsed = parseAgentPath(relativePath);
+      if (!parsed) {
+        res.status(400).json({ error: '路径格式不合法，应为 {agentName}/files/... 或 {agentName}/outputs/...' });
+        return;
+      }
 
-      // 路径安全验证
+      const { agentName, rest } = parsed;
+
+      // agentName 安全检查
+      if (agentName.includes('..') || agentName.includes('\0')) {
+        res.status(403).json({ error: 'agent 名称不合法' });
+        return;
+      }
+
+      const agentWorkspace = workspaceManager.getAgentWorkspacePath(user.id, agentName);
+      const fullPath = path.join(agentWorkspace, rest);
+
+      // 路径安全验证（validatePath 检查路径是否在用户空间内）
       const validation = await workspaceManager.validatePath(user.id, fullPath);
       if (!validation.valid) {
         res.status(403).json({ error: `路径不合法: ${validation.reason}` });
@@ -392,15 +483,29 @@ export function createFilesRouter(
   /**
    * 获取文件信息
    *
-   * GET /api/files/info/*
+   * GET /api/files/info/{agentName}/files/xxx 或 /api/files/info/{agentName}/outputs/xxx
    */
   router.get('/info/*', authMiddleware, async (req: AuthenticatedRequest, res, next: NextFunction) => {
     try {
       const user = req.user!;
       const relativePath = req.params[0];
 
-      const userRoot = workspaceManager.getWorkspacePath(user.id);
-      const fullPath = path.join(userRoot, relativePath);
+      // 解析 agentName 和剩余路径
+      const parsed = parseAgentPath(relativePath);
+      if (!parsed) {
+        res.status(400).json({ error: '路径格式不合法，应为 {agentName}/files/... 或 {agentName}/outputs/...' });
+        return;
+      }
+
+      const { agentName, rest } = parsed;
+
+      if (agentName.includes('..') || agentName.includes('\0')) {
+        res.status(403).json({ error: 'agent 名称不合法' });
+        return;
+      }
+
+      const agentWorkspace = workspaceManager.getAgentWorkspacePath(user.id, agentName);
+      const fullPath = path.join(agentWorkspace, rest);
 
       const validation = await workspaceManager.validatePath(user.id, fullPath);
       if (!validation.valid) {
@@ -421,6 +526,7 @@ export function createFilesRouter(
         isDirectory: stat.isDirectory(),
         createdAt: stat.birthtime.toISOString(),
         modifiedAt: stat.mtime.toISOString(),
+        agent: agentName,
       });
     } catch (err: unknown) {
       next(err instanceof Error ? err : new Error(String(err)));
@@ -430,8 +536,8 @@ export function createFilesRouter(
   /**
    * 删除文件
    *
-   * DELETE /api/files/*
-   * 仅允许删除 files/ 目录下的文件（outputs/ 受保护）
+   * DELETE /api/files/{agentName}/files/xxx 或 /api/files/{agentName}/outputs/xxx
+   * 仅禁止删除 outputs 根目录本身
    */
   router.delete('/*', authMiddleware, async (req: AuthenticatedRequest, res, next: NextFunction) => {
     try {
@@ -443,15 +549,28 @@ export function createFilesRouter(
         return;
       }
 
-      // outputs/ 中的文件允许用户删除（已有文件清理机制兜底）
-      // 仅禁止删除 outputs 目录本身
-      if (relativePath === 'outputs' || relativePath === 'outputs/') {
+      // 解析 agentName 和剩余路径
+      const parsed = parseAgentPath(relativePath);
+      if (!parsed) {
+        res.status(400).json({ error: '路径格式不合法，应为 {agentName}/files/... 或 {agentName}/outputs/...' });
+        return;
+      }
+
+      const { agentName, rest } = parsed;
+
+      if (agentName.includes('..') || agentName.includes('\0')) {
+        res.status(403).json({ error: 'agent 名称不合法' });
+        return;
+      }
+
+      // 禁止删除 outputs 根目录本身
+      if (rest === 'outputs' || rest === 'outputs/') {
         res.status(403).json({ error: '不允许删除 outputs 根目录' });
         return;
       }
 
-      const userRoot = workspaceManager.getWorkspacePath(user.id);
-      const fullPath = path.join(userRoot, relativePath);
+      const agentWorkspace = workspaceManager.getAgentWorkspacePath(user.id, agentName);
+      const fullPath = path.join(agentWorkspace, rest);
 
       const validation = await workspaceManager.validatePath(user.id, fullPath);
       if (!validation.valid) {
@@ -472,8 +591,9 @@ export function createFilesRouter(
       }
 
       // 如果删除的是 outputs 下的文件，同步更新 DB 状态
-      if (relativePath.startsWith('outputs/') && prismaClient) {
+      if (rest.startsWith('outputs/') && prismaClient) {
         try {
+          // DB 中存储的 filePath 格式: {agentName}/outputs/xxx
           await prismaClient.generatedFile.updateMany({
             where: { userId: user.id, filePath: relativePath, status: 'active' },
             data: { status: 'deleted' },
