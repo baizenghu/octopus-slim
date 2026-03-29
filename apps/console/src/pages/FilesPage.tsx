@@ -1,22 +1,16 @@
 /**
- * 文件管理页面
+ * 文件管理页面 — 按 Agent 分组展示
  *
- * 功能：
- * - 切换 files/（用户上传）和 outputs/（AI 生成）
- * - 拖拽上传
- * - 文件列表（名称、大小、修改时间、来源 agent）
- * - 下载 / 删除
- * - 文件预览（文本/图片/PDF/HTML 仪表盘）
- *
- * 存储布局（2026-03-28）：
- * - 文件存储在 agent workspace 下: {agentName}/files/xxx 或 {agentName}/outputs/xxx
- * - 未指定 agent 时汇总所有 agent 的文件
+ * 存储布局：
+ * - 文件存储在 agent workspace 下: agents/{name}/workspace/files|outputs|temp/
+ * - 按 agent 分组展示，可折叠
  */
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { toast } from 'sonner';
 import {
   FolderOpen, Upload, Download, Trash2, Eye, Loader2,
   FileText, FileImage, FileCode, File, FolderArchive, Bot,
+  ChevronDown, ChevronRight,
 } from 'lucide-react';
 import { adminApi, type FileInfo } from '../api';
 
@@ -30,7 +24,6 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from '@/components/ui/dialog';
 
-/** 可预览的文件类型分类 */
 const TEXT_EXTS = new Set([
   'txt', 'md', 'csv', 'json', 'xml', 'yaml', 'yml', 'toml',
   'py', 'js', 'ts', 'css', 'sql', 'sh', 'log', 'jsonl',
@@ -50,7 +43,6 @@ function getPreviewType(name: string): PreviewType {
   return null;
 }
 
-/** 构建预览 URL: {agent}/{dir}/{fileName} */
 function getPreviewUrl(agent: string, dir: string, fileName: string): string {
   const token = localStorage.getItem('admin_token');
   return `/api/files/download/${encodeURIComponent(agent)}/${dir}/${encodeURIComponent(fileName)}?preview=true&token=${encodeURIComponent(token || '')}`;
@@ -82,6 +74,24 @@ function formatSize(bytes: number) {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
+/** 按 agent 分组文件 */
+function groupByAgent(files: FileInfo[]): { agent: string; files: FileInfo[] }[] {
+  const map = new Map<string, FileInfo[]>();
+  for (const f of files) {
+    const agent = f.agent || 'default';
+    if (!map.has(agent)) map.set(agent, []);
+    map.get(agent)!.push(f);
+  }
+  // default 排第一，其余按名称排序
+  const groups = Array.from(map.entries()).map(([agent, files]) => ({ agent, files }));
+  groups.sort((a, b) => {
+    if (a.agent === 'default') return -1;
+    if (b.agent === 'default') return 1;
+    return a.agent.localeCompare(b.agent);
+  });
+  return groups;
+}
+
 export default function FilesPage() {
   const [activeTab, setActiveTab] = useState<'files' | 'outputs'>('files');
   const [files, setFiles] = useState<FileInfo[]>([]);
@@ -89,6 +99,7 @@ export default function FilesPage() {
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [collapsedAgents, setCollapsedAgents] = useState<Set<string>>(new Set());
 
   // 预览状态
   const [previewFile, setPreviewFile] = useState<FileInfo | null>(null);
@@ -96,7 +107,6 @@ export default function FilesPage() {
   const [previewContent, setPreviewContent] = useState<string>('');
   const [previewLoading, setPreviewLoading] = useState(false);
 
-  // 未指定 agent，汇总所有 agent 的文件
   const loadFiles = useCallback(async () => {
     setLoading(true);
     try {
@@ -108,12 +118,20 @@ export default function FilesPage() {
 
   useEffect(() => { loadFiles(); }, [loadFiles]);
 
+  const toggleAgent = (agent: string) => {
+    setCollapsedAgents(prev => {
+      const next = new Set(prev);
+      if (next.has(agent)) next.delete(agent);
+      else next.add(agent);
+      return next;
+    });
+  };
+
   const handleUpload = async (fileList: FileList | null) => {
     if (!fileList || fileList.length === 0) return;
     setUploading(true);
     try {
       for (let i = 0; i < fileList.length; i++) {
-        // 默认上传到 default agent
         await adminApi.uploadFile(fileList[i]);
       }
       toast.success('上传完成');
@@ -146,11 +164,9 @@ export default function FilesPage() {
   const handlePreview = async (file: FileInfo) => {
     const type = getPreviewType(file.name);
     if (!type) return;
-
     setPreviewFile(file);
     setPreviewType(type);
     setPreviewContent('');
-
     if (type === 'text') {
       setPreviewLoading(true);
       try {
@@ -159,24 +175,21 @@ export default function FilesPage() {
         if (!res.ok) throw new Error('加载失败');
         const text = await res.text();
         setPreviewContent(text.length > 512000 ? text.slice(0, 512000) + '\n\n... (文件过大，已截断)' : text);
-      } catch {
-        setPreviewContent('加载失败');
-      }
+      } catch { setPreviewContent('加载失败'); }
       setPreviewLoading(false);
     }
   };
 
-  const closePreview = () => {
-    setPreviewFile(null);
-    setPreviewType(null);
-    setPreviewContent('');
-  };
+  const closePreview = () => { setPreviewFile(null); setPreviewType(null); setPreviewContent(''); };
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setDragOver(false);
     handleUpload(e.dataTransfer.files);
   };
+
+  const groups = groupByAgent(files);
+  const totalFiles = files.length;
 
   return (
     <div className="p-6">
@@ -228,11 +241,11 @@ export default function FilesPage() {
             />
           </div>
 
-          {renderFileTable(files, loading, activeTab, handlePreview, handleDownload, handleDelete)}
+          {renderGroupedFiles(groups, totalFiles, loading, activeTab, collapsedAgents, toggleAgent, handlePreview, handleDownload, handleDelete)}
         </TabsContent>
 
         <TabsContent value="outputs">
-          {renderFileTable(files, loading, activeTab, handlePreview, handleDownload, handleDelete)}
+          {renderGroupedFiles(groups, totalFiles, loading, activeTab, collapsedAgents, toggleAgent, handlePreview, handleDownload, handleDelete)}
         </TabsContent>
       </Tabs>
 
@@ -257,7 +270,6 @@ export default function FilesPage() {
               </Button>
             </DialogDescription>
           </DialogHeader>
-
           <div className="flex-1 min-h-0 overflow-auto">
             {previewType === 'text' && (
               previewLoading ? (
@@ -279,19 +291,12 @@ export default function FilesPage() {
                 />
               </div>
             )}
-            {previewType === 'pdf' && previewFile && (
+            {(previewType === 'pdf' || previewType === 'html') && previewFile && (
               <iframe
                 src={getPreviewUrl(previewFile.agent || 'default', activeTab, previewFile.name)}
                 className="w-full h-[60vh] rounded-md border"
                 title={previewFile.name}
-              />
-            )}
-            {previewType === 'html' && previewFile && (
-              <iframe
-                src={getPreviewUrl(previewFile.agent || 'default', activeTab, previewFile.name)}
-                className="w-full h-[60vh] rounded-md border"
-                title={previewFile.name}
-                sandbox="allow-scripts"
+                {...(previewType === 'html' ? { sandbox: 'allow-scripts' } : {})}
               />
             )}
           </div>
@@ -301,82 +306,105 @@ export default function FilesPage() {
   );
 }
 
-function renderFileTable(
-  files: FileInfo[],
+function renderGroupedFiles(
+  groups: { agent: string; files: FileInfo[] }[],
+  totalFiles: number,
   loading: boolean,
   activeTab: string,
+  collapsedAgents: Set<string>,
+  toggleAgent: (agent: string) => void,
   handlePreview: (file: FileInfo) => void,
   handleDownload: (file: FileInfo) => void,
   handleDelete: (file: FileInfo) => void,
 ) {
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (totalFiles === 0) {
+    return (
+      <div className="text-center py-12 text-muted-foreground">
+        {activeTab === 'files' ? '还没有上传文件' : '还没有 AI 生成的文件'}
+      </div>
+    );
+  }
+
   return (
-    <div className="rounded-md border">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>文件名</TableHead>
-            <TableHead className="w-24">来源</TableHead>
-            <TableHead className="w-24">大小</TableHead>
-            <TableHead className="w-44">修改时间</TableHead>
-            <TableHead className="w-48">操作</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {loading ? (
-            <TableRow>
-              <TableCell colSpan={5} className="text-center py-8">
-                <Loader2 className="h-5 w-5 animate-spin mx-auto text-muted-foreground" />
-              </TableCell>
-            </TableRow>
-          ) : files.length === 0 ? (
-            <TableRow>
-              <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
-                {activeTab === 'files' ? '还没有上传文件' : '还没有 AI 生成的文件'}
-              </TableCell>
-            </TableRow>
-          ) : (
-            files.map((f) => (
-              <TableRow key={`${f.agent || 'default'}-${f.name}`}>
-                <TableCell>
-                  <div className="flex items-center gap-2">
-                    {getFileIcon(f.name, f.isDirectory)}
-                    <span className="font-medium text-sm">{f.name}</span>
-                  </div>
-                </TableCell>
-                <TableCell>
-                  <Badge variant="secondary" className="text-xs">{f.agent || 'default'}</Badge>
-                </TableCell>
-                <TableCell className="text-sm text-muted-foreground">
-                  {formatSize(f.size)}
-                </TableCell>
-                <TableCell className="text-sm text-muted-foreground">
-                  {new Date(f.modifiedAt).toLocaleString('zh-CN')}
-                </TableCell>
-                <TableCell>
-                  <div className="flex items-center gap-1">
-                    {!f.isDirectory && getPreviewType(f.name) && (
-                      <Button variant="outline" size="sm" onClick={() => handlePreview(f)}>
-                        <Eye className="h-3.5 w-3.5 mr-1" />
-                        预览
-                      </Button>
-                    )}
-                    <Button variant="ghost" size="sm" onClick={() => handleDownload(f)}>
-                      <Download className="h-3.5 w-3.5 mr-1" />
-                      下载
-                    </Button>
-                    {activeTab === 'files' && (
-                      <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={() => handleDelete(f)}>
-                        <Trash2 className="h-3.5 w-3.5 mr-1" />
-                        删除
-                      </Button>
-                    )}
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))
-          )}
-        </TableBody>
-      </Table>
+    <div className="space-y-3">
+      {groups.map(({ agent, files }) => {
+        const collapsed = collapsedAgents.has(agent);
+        return (
+          <div key={agent} className="rounded-md border">
+            {/* Agent 分组头 */}
+            <div
+              className="flex items-center gap-2 px-4 py-2.5 bg-muted/50 cursor-pointer hover:bg-muted/80 transition-colors"
+              onClick={() => toggleAgent(agent)}
+            >
+              {collapsed
+                ? <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                : <ChevronDown className="h-4 w-4 text-muted-foreground" />
+              }
+              <Bot className="h-4 w-4 text-primary" />
+              <span className="font-medium text-sm">{agent}</span>
+              <Badge variant="outline" className="text-xs ml-1">{files.length} 个文件</Badge>
+            </div>
+
+            {/* 文件列表 */}
+            {!collapsed && (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>文件名</TableHead>
+                    <TableHead className="w-24">大小</TableHead>
+                    <TableHead className="w-44">修改时间</TableHead>
+                    <TableHead className="w-40">操作</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {files.map((f) => (
+                    <TableRow key={f.name}>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          {getFileIcon(f.name, f.isDirectory)}
+                          <span className="text-sm">{f.name}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {formatSize(f.size)}
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {new Date(f.modifiedAt).toLocaleString('zh-CN')}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1">
+                          {!f.isDirectory && getPreviewType(f.name) && (
+                            <Button variant="outline" size="sm" onClick={() => handlePreview(f)}>
+                              <Eye className="h-3.5 w-3.5 mr-1" />
+                              预览
+                            </Button>
+                          )}
+                          <Button variant="ghost" size="sm" onClick={() => handleDownload(f)}>
+                            <Download className="h-3.5 w-3.5" />
+                          </Button>
+                          {activeTab === 'files' && (
+                            <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={() => handleDelete(f)}>
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
