@@ -123,35 +123,6 @@ export default function ChatPage() {
 
   useEffect(() => { loadAgents(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── 30 秒轮询提醒 ──
-  useEffect(() => {
-    const poll = async () => {
-      try {
-        const { reminders } = await adminApi.getDueReminders();
-        if (reminders.length > 0) {
-          const first = reminders[0];
-          setActiveReminder({ id: first.id, title: first.title, text: first.text });
-          // 同时尝试浏览器原生通知
-          if ('Notification' in window) {
-            if (Notification.permission === 'granted') {
-              new Notification(first.title, { body: first.text, icon: '/favicon.ico' });
-            } else if (Notification.permission !== 'denied') {
-              Notification.requestPermission().then(perm => {
-                if (perm === 'granted') {
-                  new Notification(first.title, { body: first.text, icon: '/favicon.ico' });
-                }
-              });
-            }
-          }
-          adminApi.dismissReminder(first.id).catch(() => {});
-        }
-      } catch { /* ignore */ }
-    };
-    poll(); // 立即执行一次
-    const timer = setInterval(poll, 30_000);
-    return () => clearInterval(timer);
-  }, []);
-
   // 加载会话列表（防抖：500ms 内不重复请求）
   const lastLoadRef = useRef(0);
   const loadSessions = useCallback(async () => {
@@ -314,6 +285,22 @@ export default function ChatPage() {
             if (data === '[DONE]') continue;
             try {
               const parsed = JSON.parse(data);
+              // 提醒推送事件（通过 SSE 推送，无需轮询）
+              if (parsed.type === 'reminders' && Array.isArray(parsed.reminders) && parsed.reminders.length > 0) {
+                const first = parsed.reminders[0];
+                setActiveReminder({ id: first.id, title: first.title, text: first.text });
+                if ('Notification' in window) {
+                  if (Notification.permission === 'granted') {
+                    new Notification(first.title, { body: first.text, icon: '/favicon.ico' });
+                  } else if (Notification.permission !== 'denied') {
+                    Notification.requestPermission().then(perm => {
+                      if (perm === 'granted') new Notification(first.title, { body: first.text, icon: '/favicon.ico' });
+                    });
+                  }
+                }
+                adminApi.dismissReminder(first.id).catch(() => {});
+                continue;
+              }
               if (parsed.delegated) delegated = true;
               // 后端返回完整 sessionKey，更新本地 sid 和 currentSession
               if (parsed.sessionId && parsed.done) {

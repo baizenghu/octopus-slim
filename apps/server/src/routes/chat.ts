@@ -33,6 +33,7 @@ import { sanitizeResponse } from '../utils/ContentSanitizer';
 import { stripReasoningTagsFromText } from '../utils/reasoning-tags';
 import { autoGenerateTitle, loadAgentFromDb } from './sessions';
 import { buildEnterpriseSystemPrompt } from '../services/SystemPromptBuilder';
+import { checkDueReminders } from './scheduler';
 import { createLogger } from '../utils/logger';
 
 const logger = createLogger('chat');
@@ -344,6 +345,18 @@ export function createChatRouter(
     const heartbeat = setInterval(() => {
       try { if (!streamDone) res.write(': heartbeat\n\n'); } catch { /* closed */ }
     }, getRuntimeConfig().chat.sseHeartbeatIntervalMs);
+
+    // 提醒推送：每 30s 检查到期提醒，通过 SSE 流推送给前端
+    const reminderInterval = setInterval(async () => {
+      if (streamDone) return;
+      try {
+        const reminders = await checkDueReminders(bridge, user.id);
+        if (reminders.length > 0) {
+          res.write(`data: ${JSON.stringify({ type: 'reminders', reminders })}\n\n`);
+        }
+      } catch { /* non-critical, skip silently */ }
+    }, 30_000);
+
     res.on('close', () => {
       if (!streamDone) {
         streamDone = true;
@@ -351,6 +364,7 @@ export function createChatRouter(
         bridge?.call('chat.abort', { sessionKey }).catch(() => {});
       }
       clearInterval(heartbeat);
+      clearInterval(reminderInterval);
       // 递减活跃流计数
       const remaining = (activeStreams.get(user.id) || 1) - 1;
       if (remaining <= 0) activeStreams.delete(user.id);
@@ -481,6 +495,7 @@ export function createChatRouter(
               logger.info(`[chat] done event: hasDelegation=${hasDelegation}, sessionKey=${sessionKey}`);
               res.write(`data: ${JSON.stringify({ content: '', done: true, sessionId: sessionKey, ...(hasDelegation ? { delegated: true } : {}) })}\n\n`);
               clearInterval(heartbeat);
+              clearInterval(reminderInterval);
               res.end();
               // 异步生成标题（不阻塞响应）
               autoGenerateTitle(bridge!, sessionKey).catch(err => logger.error('[TitleGen] Failed:', { error: err instanceof Error ? err.message : String(err), stack: err instanceof Error ? err.stack : undefined }));
@@ -490,6 +505,7 @@ export function createChatRouter(
               streamDone = true;
               res.write(`data: ${JSON.stringify({ error: event.error, done: true })}\n\n`);
               clearInterval(heartbeat);
+              clearInterval(reminderInterval);
               res.end();
               break;
           }
@@ -497,6 +513,7 @@ export function createChatRouter(
       );
     } catch (err) {
       clearInterval(heartbeat);
+      clearInterval(reminderInterval);
       if (!streamDone) {
         if (!res.headersSent) {
           next(err);

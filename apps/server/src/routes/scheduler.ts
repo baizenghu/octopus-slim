@@ -62,6 +62,33 @@ export function parseEveryToMs(every: string): number {
   }
 }
 
+// ---- 提醒查询（可复用，供 SSE 推送调用） ----
+
+/**
+ * 查询指定用户的到期提醒
+ */
+export async function checkDueReminders(
+  bridge: BridgeType | undefined,
+  userId: string,
+): Promise<Array<{ id: string; title: string; firedAt: string }>> {
+  if (!bridge?.isConnected) return [];
+  const result = await bridge.call<EngineCronListResponse>('cron.list', { includeDisabled: true });
+  const allJobs: EngineCronJob[] = result?.jobs ?? [];
+  const prefix = `ent-reminder:${userId}:`;
+  const now = Date.now();
+  return allJobs
+    .filter((j) => {
+      if (!(j.name || '').startsWith(prefix)) return false;
+      const at = j.schedule?.at;
+      return at && new Date(at).getTime() <= now;
+    })
+    .map((j) => ({
+      id: j.id || j.name || '',
+      title: j.payload?.text || j.payload?.message || '提醒',
+      firedAt: j.schedule?.at || new Date().toISOString(),
+    }));
+}
+
 // ---- 路由工厂 ----
 
 /**
@@ -481,25 +508,7 @@ export function createSchedulerRouter(
   router.get('/reminders/due', authMiddleware, async (req: AuthenticatedRequest, res) => {
     const user = req.user!;
     try {
-      if (!bridge?.isConnected) {
-        res.json({ reminders: [] });
-        return;
-      }
-      const result = await bridge.call<EngineCronListResponse>('cron.list', { includeDisabled: true });
-      const allJobs: EngineCronJob[] = result?.jobs ?? [];
-      const prefix = `ent-reminder:${user.id}:`;
-      const now = Date.now();
-      const dueReminders = allJobs
-        .filter((j) => {
-          if (!(j.name || '').startsWith(prefix)) return false;
-          const at = j.schedule?.at;
-          return at && new Date(at).getTime() <= now;
-        })
-        .map((j) => ({
-          id: j.id || j.name,
-          title: j.payload?.text || j.payload?.message || '提醒',
-          firedAt: j.schedule?.at || new Date().toISOString(),
-        }));
+      const dueReminders = await checkDueReminders(bridge, user.id);
       res.json({ reminders: dueReminders });
     } catch (err: unknown) {
       logger.error('[scheduler] Reminders query error:', { error: err instanceof Error ? err.message : String(err) });
