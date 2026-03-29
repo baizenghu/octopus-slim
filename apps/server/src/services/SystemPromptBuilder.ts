@@ -8,7 +8,6 @@
  * 包含 (userId, agentId) 维度的缓存，TTL 5 分钟。
  */
 
-import path from 'path';
 import type { WorkspaceManager } from '@octopus/workspace';
 import type { AppPrismaClient } from '../types/prisma';
 
@@ -97,11 +96,11 @@ export async function buildEnterpriseSystemPrompt(
 
   // ── 工作区 ──
   try {
+    const filesPath = workspaceManager.getSubPath(user.id, 'FILES');
+    const outputsPath = workspaceManager.getSubPath(user.id, 'OUTPUTS');
+    const tempPath = workspaceManager.getSubPath(user.id, 'TEMP');
     const agentName = agent?.name || 'default';
     const workspacePath = workspaceManager.getAgentWorkspacePath(user.id, agentName);
-    const filesPath = path.join(workspacePath, 'files');
-    const outputsPath = path.join(workspacePath, 'outputs');
-    const tempPath = path.join(workspacePath, 'temp');
     sections.push(
       `## 工作区\n` +
       `工作空间根目录: ${workspacePath}\n` +
