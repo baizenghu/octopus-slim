@@ -39,11 +39,8 @@ export function encryptPassword(plaintext: string): string {
 export function decryptPassword(ciphertext: string): string {
   const parts = ciphertext.split(':');
   if (parts.length !== 3) {
-    // 格式不匹配：可能是未加密的旧数据
-    if (ciphertext.length > 0) {
-      logger.warn('decryptPassword: 输入不是加密格式，返回原文（可能是未加密旧数据）');
-    }
-    return ciphertext;
+    // 格式不匹配：拒绝返回可能的明文密码
+    throw new Error('decryptPassword: 输入不是加密格式（iv:tag:enc），疑似明文或数据损坏');
   }
   const [ivHex, tagHex, encHex] = parts;
   try {
@@ -56,8 +53,7 @@ export function decryptPassword(ciphertext: string): string {
     ]);
     return decrypted.toString('utf8');
   } catch (err: unknown) {
-    // 解密失败：密钥错误或数据损坏
-    logger.error('decryptPassword: 解密失败（密钥可能已更换或数据损坏）', { error: err instanceof Error ? err.message : String(err), stack: err instanceof Error ? err.stack : undefined });
-    return ciphertext;
+    // 解密失败：密钥错误或数据损坏 — 不返回密文，抛异常
+    throw new Error(`decryptPassword: 解密失败（密钥可能已更换或数据损坏）: ${err instanceof Error ? err.message : String(err)}`);
   }
 }

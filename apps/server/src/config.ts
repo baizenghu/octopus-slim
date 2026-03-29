@@ -223,7 +223,11 @@ export function loadConfig(): GatewayConfig {
         }
         return s;
       })(),
-      refreshSecret: process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET || '',
+      refreshSecret: (() => {
+        const s = process.env.JWT_REFRESH_SECRET;
+        if (!s) throw new Error('JWT_REFRESH_SECRET 环境变量未设置。refresh token 必须使用独立密钥，不能与 JWT_SECRET 相同');
+        return s;
+      })(),
       accessTokenExpiresIn: process.env.JWT_EXPIRES_IN || '2h',
       refreshTokenExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d',
     },

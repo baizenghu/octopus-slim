@@ -109,9 +109,18 @@ export async function initRoutes(params: {
         redisStatus = 'error';
       }
     }
-    const nativeGatewayStatus = bridge?.isConnected ? 'running' : 'stopped';
+    // 引擎存活检查：不仅检查连接对象，还实际调用 RPC 确认引擎响应
+    let nativeGatewayStatus: 'running' | 'stopped' = 'stopped';
+    if (bridge?.isConnected) {
+      try {
+        await bridge.call('health', {});
+        nativeGatewayStatus = 'running';
+      } catch {
+        nativeGatewayStatus = 'stopped';
+      }
+    }
     const pluginStatus = (_name: string) => {
-      return bridge?.isConnected ? 'loaded' as const : 'not loaded' as const;
+      return nativeGatewayStatus === 'running' ? 'loaded' as const : 'not loaded' as const;
     };
     const overallStatus = (nativeGatewayStatus === 'stopped' || dbStatus === 'error')
       ? 'degraded' : 'ok';
@@ -156,6 +165,17 @@ export async function initRoutes(params: {
   });
   app.use('/api/auth/login', authLimiter);
   app.use('/api/auth/refresh', authLimiter);
+
+  // ── Chat API 频率限制（防 LLM 配额滥用）──
+  const chatLimiter = rateLimit({
+    windowMs: 60_000, // 1 分钟窗口
+    max: 30,          // 每用户每分钟最多 30 条消息
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: (req) => (req as any).user?.id || req.ip || 'anonymous',
+    message: { error: '消息发送过于频繁，请稍后再试' },
+  });
+  app.use('/api/chat', chatLimiter);
 
   // Fail-fast: DB 连接失败时直接退出，避免路由运行时 TypeError
   if (!prismaClient) {

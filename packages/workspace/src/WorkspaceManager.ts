@@ -45,7 +45,7 @@ export class WorkspaceManager {
 
     // 创建用户根目录
     await fsp.mkdir(userRoot, { recursive: true });
-    await fsp.chmod(userRoot, 0o777);
+    await fsp.chmod(userRoot, 0o750);
 
     // 写入元数据
     const metadata: UserMetadata = {
@@ -323,14 +323,14 @@ export class WorkspaceManager {
   async initAgentWorkspace(userId: string, agentName: string): Promise<string> {
     const agentWorkspace = this.getAgentWorkspacePath(userId, agentName);
     if (!fs.existsSync(agentWorkspace)) {
-      await fsp.mkdir(agentWorkspace, { recursive: true, mode: 0o777 });
+      await fsp.mkdir(agentWorkspace, { recursive: true, mode: 0o750 });
     }
 
     // 创建 files/outputs/temp 子目录
     for (const subDir of Object.values(AGENT_WORKSPACE_SUBDIRS)) {
       const dirPath = path.join(agentWorkspace, subDir);
       if (!fs.existsSync(dirPath)) {
-        await fsp.mkdir(dirPath, { recursive: true, mode: 0o777 });
+        await fsp.mkdir(dirPath, { recursive: true, mode: 0o750 });
       }
     }
 

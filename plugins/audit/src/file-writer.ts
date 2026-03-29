@@ -4,10 +4,10 @@ import { createHmac } from 'crypto';
 import { todayDateStr } from './utils';
 
 // 审计日志 HMAC 签名密钥（生产环境必须通过环境变量设置）
-const AUDIT_HMAC_KEY = process.env.AUDIT_HMAC_KEY || 'default-audit-key-change-me';
+const AUDIT_HMAC_KEY = process.env.AUDIT_HMAC_KEY;
 
-if (AUDIT_HMAC_KEY === 'default-audit-key-change-me') {
-  console.warn('[WARN] AUDIT_HMAC_KEY is using default value, audit signature chain is NOT secure. Set AUDIT_HMAC_KEY env var.');
+if (!AUDIT_HMAC_KEY) {
+  throw new Error('[FATAL] AUDIT_HMAC_KEY 环境变量未设置。审计签名链无法工作，拒绝启动。请在 .env 中配置: AUDIT_HMAC_KEY=$(openssl rand -hex 32)');
 }
 
 /**
