@@ -28,16 +28,34 @@ export const agentCallsTotal = new Counter({
 });
 
 /**
+ * Normalize request path for metrics labels to avoid high cardinality.
+ * Replaces dynamic segments with placeholders.
+ */
+function normalizePath(req: Request): string {
+  // Use route pattern if available (best case)
+  if (req.route?.path) return req.route.path;
+
+  // Normalize known dynamic patterns
+  const path = req.path;
+  return path
+    .replace(/\/ent_[^/]+/g, '/:id')           // Agent IDs: ent_user_name
+    .replace(/\/usr_[^/]+/g, '/:id')           // User tool source IDs
+    .replace(/\/[0-9a-f-]{36}/g, '/:uuid')     // UUIDs
+    .replace(/\/\d+/g, '/:num');                // Numeric IDs
+}
+
+/**
  * Express 中间件: 记录每个请求的耗时和状态码
  */
 export function metricsMiddleware(req: Request, res: Response, next: NextFunction): void {
-  // Use route pattern if available, otherwise normalize path to avoid high cardinality
-  const end = httpRequestDuration.startTimer({ method: req.method, path: req.route?.path || req.path });
+  // Normalize path to avoid high cardinality metrics
+  const normalizedPath = normalizePath(req);
+  const end = httpRequestDuration.startTimer({ method: req.method, path: normalizedPath });
   res.on('finish', () => {
     end();
     httpRequestsTotal.inc({
       method: req.method,
-      path: req.route?.path || req.path,
+      path: normalizedPath,
       status: String(res.statusCode),
     });
   });
