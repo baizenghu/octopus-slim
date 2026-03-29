@@ -30,6 +30,7 @@ import { createChatInternalRouter } from '../routes/chat-internal';
 import { createWeixinRoutes } from '../routes/weixin';
 import { createSystemConfigRouter } from '../routes/system-config';
 import { globalErrorHandler } from '../middleware/error-handler';
+import { register, metricsMiddleware } from '../middleware/metrics';
 import { securityMonitor } from '../services/SecurityMonitor';
 import { loadConfig, getRuntimeConfig } from '../config';
 import type { AppPrismaClient } from '../types/prisma';
@@ -83,6 +84,9 @@ export async function initRoutes(params: {
     next();
   });
 
+  // metrics 中间件（在路由注册前，安全中间件之后）
+  app.use(metricsMiddleware);
+
   // ── 健康检查 ──
   const startTime = Date.now();
   app.get('/health', async (_req, res) => {
@@ -134,6 +138,12 @@ export async function initRoutes(params: {
       },
       model: 'configured in octopus.json',
     });
+  });
+
+  // ── Prometheus metrics ──
+  app.get('/metrics', async (_req, res) => {
+    res.setHeader('Content-Type', register.contentType);
+    res.send(await register.metrics());
   });
 
   // ── 登录/刷新接口频率限制 ──
