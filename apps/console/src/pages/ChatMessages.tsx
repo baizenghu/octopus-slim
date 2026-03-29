@@ -159,19 +159,20 @@ function formatJsonDisplay(raw?: string): string {
 }
 
 /** 检测是否为 team-research 的 run_skill 调用 */
-function isClawTeamCall(tc: ToolCallInfo): { isClawTeam: boolean; template?: string; topic?: string } {
+function isClawTeamCall(tc: ToolCallInfo): { isClawTeam: boolean; template?: string; topic?: string; depth?: string } {
   if (tc.name !== 'run_skill') return { isClawTeam: false };
   try {
     const args = JSON.parse(tc.args || '{}');
     if (args.skill_name === 'team-research') {
-      // 从 args 字符串中提取 --template 和 --topic
       const argsStr = args.args || '';
       const tmplMatch = argsStr.match(/--template\s+(\S+)/);
       const topicMatch = argsStr.match(/--topic\s+'([^']+)'|--topic\s+"([^"]+)"|--topic\s+(\S+)/);
+      const depthMatch = argsStr.match(/--depth\s+(\S+)/);
       return {
         isClawTeam: true,
         template: tmplMatch?.[1] || 'research-survey',
         topic: topicMatch?.[1] || topicMatch?.[2] || topicMatch?.[3] || '研究课题',
+        depth: depthMatch?.[1] || 'standard',
       };
     }
   } catch { /* ignore */ }
@@ -214,9 +215,17 @@ const TEMPLATE_ROLES: Record<string, { leader: string; workers: string[]; editor
   },
 };
 
+const DEPTH_WORKER_COUNT: Record<string, number> = { quick: 3, standard: 5, deep: 7 };
+
 /** ClawTeam 执行中动画卡片 */
-function ClawTeamProgress({ template, topic }: { template: string; topic: string }) {
-  const roles = TEMPLATE_ROLES[template] || TEMPLATE_ROLES['research-survey'];
+function ClawTeamProgress({ template, topic, depth = 'standard' }: { template: string; topic: string; depth?: string }) {
+  const baseRoles = TEMPLATE_ROLES[template] || TEMPLATE_ROLES['research-survey'];
+  const targetCount = DEPTH_WORKER_COUNT[depth] || 5;
+  // 根据 depth 动态扩展/裁剪 worker 列表
+  const workers = targetCount <= baseRoles.workers.length
+    ? baseRoles.workers.slice(0, targetCount)
+    : [...baseRoles.workers, ...Array.from({ length: targetCount - baseRoles.workers.length }, (_, i) => `研究员${i + 1}`)];
+  const roles = { ...baseRoles, workers };
   const [elapsed, setElapsed] = useState(0);
 
   useEffect(() => {
@@ -484,7 +493,7 @@ function ToolCallCards({ toolCalls, isStreaming }: { toolCalls: ToolCallInfo[]; 
 
         // ClawTeam 执行中 — 仅在流式输出时展示动画进度卡片（历史加载不显示）
         if (clawInfo.isClawTeam && !tc.result && isStreaming) {
-          return <ClawTeamProgress key={tc.toolCallId || `tool-${idx}`} template={clawInfo.template!} topic={clawInfo.topic!} />;
+          return <ClawTeamProgress key={tc.toolCallId || `tool-${idx}`} template={clawInfo.template!} topic={clawInfo.topic!} depth={clawInfo.depth} />;
         }
 
         return (
