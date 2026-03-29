@@ -55,7 +55,7 @@ export function decryptPassword(ciphertext: string): string {
       decipher.final(),
     ]);
     return decrypted.toString('utf8');
-  } catch (err: any) {
+  } catch (err: unknown) {
     // 解密失败：密钥错误或数据损坏
     logger.error('decryptPassword: 解密失败（密钥可能已更换或数据损坏）', { error: err instanceof Error ? err.message : String(err), stack: err instanceof Error ? err.stack : undefined });
     return ciphertext;

@@ -211,8 +211,8 @@ export async function initRoutes(params: {
         logger.info(`Cleaned ${cleaned} orphan skill director${cleaned > 1 ? 'ies' : 'y'}`);
       }
     }
-  } catch (e: any) {
-    logger.warn('Orphan cleanup failed', { error: e.message });
+  } catch (e: unknown) {
+    logger.warn('Orphan cleanup failed', { error: e instanceof Error ? e.message : String(e) });
   }
 
   // ── 启动服务器 ──

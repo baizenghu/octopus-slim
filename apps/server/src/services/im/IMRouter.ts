@@ -488,7 +488,7 @@ export class IMRouter {
           await adapter.sendText(imUserId, `📎 文件 ${fileName} 发送失败，请到 Web 端下载。`);
         }
       }
-    } catch (e: any) {
+    } catch (e: unknown) {
       logger.error('[im-router] sendNewOutputFiles error:', { error: e instanceof Error ? e.message : String(e), stack: e instanceof Error ? e.stack : undefined });
     }
   }
@@ -633,7 +633,7 @@ export class IMRouter {
       if (outputsDir && adapter.sendFile) {
         await this.sendNewOutputFiles(adapter, msg.imUserId, outputsDir, filesBefore);
       }
-    } catch (e: any) {
+    } catch (e: unknown) {
       clearTimeout(timeoutTimer);
       this.activeRuns.delete(imKey);
       logger.error(`[im-router] Agent call error for ${userId}:`, { error: e instanceof Error ? e.message : String(e), stack: e instanceof Error ? e.stack : undefined });

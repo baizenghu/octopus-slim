@@ -60,8 +60,8 @@ async function main() {
         auditLogger: services.auditLogger,
         config,
       });
-    } catch (err: any) {
-      logger.warn('Native Gateway: connection failed', { error: err.message });
+    } catch (err: unknown) {
+      logger.warn('Native Gateway: connection failed', { error: err instanceof Error ? err.message : String(err) });
       logger.warn('Chat will not work until native gateway is available');
     }
   }

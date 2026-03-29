@@ -116,8 +116,9 @@ export function createAuthMiddleware(
       }
 
       next();
-    } catch (err: any) {
-      res.status(401).json({ error: err.message || 'Authentication failed' });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(401).json({ error: message || 'Authentication failed' });
     }
   };
 }

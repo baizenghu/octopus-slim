@@ -81,8 +81,8 @@ export class WeixinAdapter implements IMAdapter {
       try {
         await this.sendText(imUserId, text);
         sent++;
-      } catch (e: any) {
-        logger.error(`[wechat] broadcastText failed for ${imUserId}: ${e.message}`, { error: e instanceof Error ? e.message : String(e), stack: e instanceof Error ? e.stack : undefined });
+      } catch (e: unknown) {
+        logger.error(`[wechat] broadcastText failed for ${imUserId}: ${e instanceof Error ? e.message : String(e)}`, { error: e instanceof Error ? e.message : String(e), stack: e instanceof Error ? e.stack : undefined });
       }
     }
     return sent;
@@ -95,8 +95,8 @@ export class WeixinAdapter implements IMAdapter {
       try {
         await this.sendFile(imUserId, filePath, fileName);
         sent++;
-      } catch (e: any) {
-        logger.error(`[wechat] broadcastFile failed for ${imUserId}: ${e.message}`, { error: e instanceof Error ? e.message : String(e), stack: e instanceof Error ? e.stack : undefined });
+      } catch (e: unknown) {
+        logger.error(`[wechat] broadcastFile failed for ${imUserId}: ${e instanceof Error ? e.message : String(e)}`, { error: e instanceof Error ? e.message : String(e), stack: e instanceof Error ? e.stack : undefined });
       }
     }
     return sent;

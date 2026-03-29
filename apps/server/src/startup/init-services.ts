@@ -48,7 +48,7 @@ export async function initServices(config: AppConfig): Promise<Services> {
       });
       await redisClient.connect();
       logger.info('Redis: connected (auth)');
-    } catch (err: any) {
+    } catch (err: unknown) {
       logger.warn('Redis: unavailable for auth, using in-memory fallback');
       redisClient = undefined;
     }
@@ -95,8 +95,8 @@ export async function initServices(config: AppConfig): Promise<Services> {
         if (migrated > 0) {
           logger.info(`Password migration: upgraded ${migrated} plaintext passwords to bcrypt`);
         }
-      } catch (migrateErr: any) {
-        logger.warn('Password migration warning', { error: migrateErr.message });
+      } catch (migrateErr: unknown) {
+        logger.warn('Password migration warning', { error: migrateErr instanceof Error ? migrateErr.message : String(migrateErr) });
       }
     }
 
@@ -127,8 +127,8 @@ export async function initServices(config: AppConfig): Promise<Services> {
         if (synced > 0 || failed.length > 0) {
           logger.info(`MockLDAP: synced ${synced}/${dbUsers.length} users from database${failed.length > 0 ? ` (${failed.length} failed: ${failed.join(', ')})` : ''}`);
         }
-      } catch (syncErr: any) {
-        logger.warn('MockLDAP sync warning', { error: syncErr.message });
+      } catch (syncErr: unknown) {
+        logger.warn('MockLDAP sync warning', { error: syncErr instanceof Error ? syncErr.message : String(syncErr) });
       }
     }
   } catch (err) {
@@ -257,15 +257,15 @@ export async function initServices(config: AppConfig): Promise<Services> {
             if (restored > 0) {
               logger.info(`Heartbeat: restored ${restored}/${heartbeatTasks.length} cron job(s)`);
             }
-          } catch (hbSyncErr: any) {
-            logger.warn('Heartbeat restore warning', { error: hbSyncErr.message });
+          } catch (hbSyncErr: unknown) {
+            logger.warn('Heartbeat restore warning', { error: hbSyncErr instanceof Error ? hbSyncErr.message : String(hbSyncErr) });
           }
-        } catch (startupSyncErr: any) {
-          logger.warn('Startup sync failed', { error: startupSyncErr.message });
+        } catch (startupSyncErr: unknown) {
+          logger.warn('Startup sync failed', { error: startupSyncErr instanceof Error ? startupSyncErr.message : String(startupSyncErr) });
         }
       }
-    } catch (err: any) {
-      logger.warn('Native Gateway: connection failed', { error: err.message });
+    } catch (err: unknown) {
+      logger.warn('Native Gateway: connection failed', { error: err instanceof Error ? err.message : String(err) });
       logger.warn('Chat will not work until native gateway is available');
     }
   } else {

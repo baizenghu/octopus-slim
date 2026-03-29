@@ -19,6 +19,35 @@ const logger = createLogger('system-config');
 
 const projectRoot = path.resolve(__dirname, '..', '..', '..', '..');
 
+/** octopus.json 配置文件结构 */
+interface OctopusConfig {
+  models?: {
+    providers?: Record<string, { apiKey?: string; [key: string]: unknown }>;
+    [key: string]: unknown;
+  };
+  plugins?: {
+    allow?: string[];
+    entries?: Record<string, { enabled?: boolean; config?: Record<string, unknown>; [key: string]: unknown }>;
+    [key: string]: unknown;
+  };
+  tools?: {
+    loopDetection?: unknown;
+    exec?: unknown;
+    fs?: unknown;
+    sandbox?: { tools?: { allow?: string[] }; [key: string]: unknown };
+    [key: string]: unknown;
+  };
+  agents?: {
+    defaults?: { model?: unknown; sandbox?: unknown; [key: string]: unknown };
+    [key: string]: unknown;
+  };
+  enterprise?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+/** 企业运行时配置（enterprise.json）*/
+type EnterpriseConfig = Record<string, unknown>;
+
 /**
  * 直接读取 octopus.json 文件（绕过引擎 config.get 的 apiKey 脱敏）
  */
@@ -27,13 +56,13 @@ function getConfigPath(): string {
   return path.join(stateDir, 'octopus.json');
 }
 
-async function readConfigFromFile(): Promise<Record<string, any>> {
+async function readConfigFromFile(): Promise<OctopusConfig> {
   const raw = await fsPromises.readFile(getConfigPath(), 'utf-8');
-  return JSON.parse(raw);
+  return JSON.parse(raw) as OctopusConfig;
 }
 
 /** 直接写入 octopus.json */
-async function writeConfigToFile(config: Record<string, any>): Promise<void> {
+async function writeConfigToFile(config: OctopusConfig): Promise<void> {
   await fsPromises.writeFile(getConfigPath(), JSON.stringify(config, null, 2), 'utf-8');
 }
 
@@ -43,14 +72,14 @@ function getEnterprisePath(): string {
   return path.join(stateDir, 'enterprise.json');
 }
 
-async function readEnterpriseConfig(): Promise<Record<string, any>> {
+async function readEnterpriseConfig(): Promise<EnterpriseConfig> {
   try {
     const raw = await fsPromises.readFile(getEnterprisePath(), 'utf-8');
-    return JSON.parse(raw);
+    return JSON.parse(raw) as EnterpriseConfig;
   } catch (err) { logger.warn('读取企业配置文件失败，使用空配置', { error: (err as Error)?.message }); return {}; }
 }
 
-async function writeEnterpriseConfig(config: Record<string, any>): Promise<void> {
+async function writeEnterpriseConfig(config: EnterpriseConfig): Promise<void> {
   await fsPromises.writeFile(getEnterprisePath(), JSON.stringify(config, null, 2), 'utf-8');
 }
 
@@ -74,7 +103,7 @@ export function createSystemConfigRouter(
       config.enterprise = await readEnterpriseConfig();
       // 脱敏 provider apiKey（只显示前4后4位）
       if (config.models?.providers) {
-        for (const provider of Object.values(config.models.providers) as any[]) {
+        for (const provider of Object.values(config.models.providers)) {
           if (provider?.apiKey && typeof provider.apiKey === 'string') {
             const key = provider.apiKey;
             provider.apiKey = key.length > 12
@@ -85,8 +114,8 @@ export function createSystemConfigRouter(
       }
       // 脱敏 plugin 中的敏感字段
       if (config.plugins?.entries) {
-        for (const entry of Object.values(config.plugins.entries) as any[]) {
-          if (entry?.config?.embeddingApiKey) {
+        for (const entry of Object.values(config.plugins.entries)) {
+          if (entry?.config?.embeddingApiKey && typeof entry.config.embeddingApiKey === 'string') {
             const k = entry.config.embeddingApiKey;
             entry.config.embeddingApiKey = k.length > 12
               ? `${k.slice(0, 4)}****${k.slice(-4)}`
@@ -116,7 +145,7 @@ export function createSystemConfigRouter(
 
       // 保留脱敏值对应的磁盘原始 apiKey
       const oldConfig = await readConfigFromFile();
-      for (const [name, provider] of Object.entries(providers) as [string, any][]) {
+      for (const [name, provider] of Object.entries(providers) as [string, { apiKey?: string }][]) {
         if (provider?.apiKey?.includes('****') && oldConfig.models?.providers?.[name]?.apiKey) {
           provider.apiKey = oldConfig.models.providers[name].apiKey;
         }
@@ -151,8 +180,8 @@ export function createSystemConfigRouter(
 
       // 保留脱敏值对应的磁盘原始 embeddingApiKey
       if (entries && typeof entries === 'object') {
-        for (const [name, val] of Object.entries(entries) as [string, any][]) {
-          if (val?.config?.embeddingApiKey?.includes('****') && c.plugins?.entries?.[name]?.config?.embeddingApiKey) {
+        for (const [name, val] of Object.entries(entries) as [string, { config?: Record<string, unknown> }][]) {
+          if (typeof val?.config?.embeddingApiKey === 'string' && val.config.embeddingApiKey.includes('****') && c.plugins?.entries?.[name]?.config?.embeddingApiKey) {
             val.config.embeddingApiKey = c.plugins.entries[name].config.embeddingApiKey;
           }
         }
@@ -166,13 +195,13 @@ export function createSystemConfigRouter(
       if (entries && typeof entries === 'object') {
         // 保留已有 config，只覆盖前端发送的字段（防止丢失未在 UI 中展示的配置）
         if (!c.plugins.entries) c.plugins.entries = {};
-        for (const [name, val] of Object.entries(entries)) {
+        for (const [name, val] of Object.entries(entries) as [string, { config?: Record<string, unknown>; [key: string]: unknown }][]) {
           c.plugins.entries[name] = {
             ...c.plugins.entries[name],
-            ...(val as Record<string, any>),
+            ...val,
             config: {
               ...(c.plugins.entries[name]?.config || {}),
-              ...((val as any)?.config || {}),
+              ...(val?.config || {}),
             },
           };
         }
@@ -211,9 +240,10 @@ export function createSystemConfigRouter(
       if (agentsDefaults?.sandbox) {
         if (!c.agents) c.agents = {};
         if (!c.agents.defaults) c.agents.defaults = {};
+        const existingSandbox = typeof c.agents.defaults.sandbox === 'object' && c.agents.defaults.sandbox !== null ? c.agents.defaults.sandbox : {};
         c.agents.defaults.sandbox = {
-          ...c.agents.defaults.sandbox,
-          ...agentsDefaults.sandbox,
+          ...existingSandbox as Record<string, unknown>,
+          ...(agentsDefaults.sandbox as Record<string, unknown>),
         };
       }
 
@@ -242,7 +272,8 @@ export function createSystemConfigRouter(
       // 按类别 shallow merge
       for (const key of Object.keys(runtimeUpdate)) {
         if (typeof runtimeUpdate[key] === 'object' && runtimeUpdate[key] !== null) {
-          enterprise[key] = { ...enterprise[key], ...runtimeUpdate[key] };
+          const existing = typeof enterprise[key] === 'object' && enterprise[key] !== null ? enterprise[key] as Record<string, unknown> : {};
+          enterprise[key] = { ...existing, ...(runtimeUpdate[key] as Record<string, unknown>) };
         }
       }
 

@@ -59,8 +59,8 @@ export function createImInternalRouter(imService: IMService, workspaceManager?: 
     try {
       const sent = await imService.sendToUser(userId, message);
       res.json({ sent });
-    } catch (err: any) {
-      logger.error('send failed', { userId, error: err.message });
+    } catch (err: unknown) {
+      logger.error('send failed', { userId, error: err instanceof Error ? err.message : String(err) });
       res.status(500).json({ error: 'Internal send error' });
     }
   });
@@ -105,8 +105,8 @@ export function createImInternalRouter(imService: IMService, workspaceManager?: 
     try {
       const sent = await imService.sendFileToUser(userId, filePath, safeName);
       res.json({ sent });
-    } catch (err: any) {
-      logger.error('send-file failed', { userId, error: err.message });
+    } catch (err: unknown) {
+      logger.error('send-file failed', { userId, error: err instanceof Error ? err.message : String(err) });
       res.status(500).json({ error: 'Internal send error' });
     }
   });

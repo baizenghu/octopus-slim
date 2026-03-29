@@ -31,7 +31,7 @@ export class WeixinManager {
       try {
         await this.startUser(userId);
         started++;
-      } catch (e: any) {
+      } catch (e: unknown) {
         logger.error(`Failed to start adapter for ${userId}`, { error: e instanceof Error ? e.message : String(e) });
       }
     }

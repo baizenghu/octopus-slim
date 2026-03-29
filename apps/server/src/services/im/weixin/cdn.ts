@@ -278,8 +278,8 @@ export async function uploadAndSendFile(opts: {
       if (resJson.ret && resJson.ret !== 0) {
         throw new Error(`sendMessage (media) ret error: ret=${resJson.ret}`);
       }
-    } catch (e: any) {
-      if (e.message.includes('error')) throw e;
+    } catch (e: unknown) {
+      if (e instanceof Error && e.message.includes('error')) throw e;
     }
     logger.info(`[wechat-cdn] sendMessage item OK: type=${item.type}, response: ${resBody.slice(0, 300)}`);
   }

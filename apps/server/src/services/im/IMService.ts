@@ -58,7 +58,7 @@ export class IMService {
         await feishu.start();
         this.adapters.push(feishu);
         logger.info('   IM: Feishu adapter started');
-      } catch (e: any) {
+      } catch (e: unknown) {
         logger.error('   IM: Feishu adapter failed to start:', { error: e instanceof Error ? e.message : String(e), stack: e instanceof Error ? e.stack : undefined });
       }
     }
