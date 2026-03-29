@@ -37,17 +37,6 @@ function readMcpToolsCache(): Array<{ serverId: string; nativeToolName: string }
   return readToolsCache();
 }
 
-/** 根据 mcpFilter 白名单计算需要 deny 的 MCP 工具名列表 */
-function computeMcpDenyTools(mcpFilter: string[] | null): string[] {
-  if (!Array.isArray(mcpFilter)) return [];
-  const allTools = readMcpToolsCache();
-  if (allTools.length === 0) return [];
-  const allowSet = new Set(mcpFilter);
-  return allTools
-    .filter(t => !allowSet.has(t.serverId))
-    .map(t => t.nativeToolName);
-}
-
 /**
  * 基于统一 ToolSource 白名单计算 tools RPC 参数（profile + alsoAllow + deny）
  *
@@ -106,51 +95,6 @@ export function computeToolsFromAllowedSources(
 }
 
 /**
- * 计算 tools RPC 参数（profile + alsoAllow + deny）
- */
-export function computeToolsUpdate(
-  agentName: string,
-  toolsFilter: string[] | null | undefined,
-  mcpFilter: string[] | null | undefined,
-  skillsFilter: string[] | undefined,
-  currentDeny: string[],
-): { profile: string; alsoAllow: string[]; deny?: string[] } {
-  const isDefault = agentName === 'default';
-  const newProfile = 'coding';
-  const newAlsoAllow = isDefault
-    ? ['group:plugins', 'agents_list']
-    : ['group:plugins'];
-
-  // 1. toolsFilter deny（read/write/exec 组）
-  const toolsDeny = computeToolsDeny(toolsFilter ?? null);
-
-  // 2. 专业 agent 限制
-  const specialistDeny = isDefault ? [] : ['sessions_spawn', 'subagents', 'agents_list', 'sessions_list', 'sessions_history', 'sessions_send'];
-
-  // 3. MCP deny
-  let mcpDeny: string[] = [];
-  if (mcpFilter !== undefined) {
-    mcpDeny = computeMcpDenyTools(mcpFilter);
-  } else {
-    mcpDeny = currentDeny.filter((t: string) => t.startsWith('mcp_'));
-  }
-
-  // 4. run_skill deny（由 skillsFilter 管理）
-  const hasSkills = Array.isArray(skillsFilter) && skillsFilter.length > 0;
-  const runSkillDeny = (hasSkills || skillsFilter === undefined)
-    ? []  // 有技能或未指定 → 不 deny
-    : ['run_skill'];  // 技能全部禁用 → deny
-
-  const newDeny = [...new Set([...toolsDeny, ...specialistDeny, ...mcpDeny, ...runSkillDeny])];
-
-  return {
-    profile: newProfile,
-    alsoAllow: newAlsoAllow,
-    ...(newDeny.length > 0 ? { deny: newDeny } : {}),
-  };
-}
-
-/**
  * 统一 agent 原生配置同步。
  *
  * 通过引擎 RPC 直接同步：
@@ -167,7 +111,9 @@ export async function syncAgentToEngine(
     toolsFilter?: string[] | null;
     enabledAgentNames?: string[];
     deleteAgentName?: string;
+    /** @deprecated 已由 allowedToolSources 取代，保留兼容旧调用方 */
     skillsFilter?: string[];
+    /** @deprecated 已由 allowedToolSources 取代，保留兼容旧调用方 */
     mcpFilter?: string[] | null;
   },
 ): Promise<void> {
@@ -208,31 +154,37 @@ export async function syncAgentToEngine(
     }
 
     // tools（profile + alsoAllow + deny）
-    if (opts.toolsFilter !== undefined || opts.mcpFilter !== undefined) {
-      let currentDeny: string[] = [];
-      if (opts.agentName) {
-        try {
-          const { getPrismaClient } = await import('@octopus/database');
-          const prisma = getPrismaClient();
-          const dbAgent = await prisma.agent.findFirst({
-            where: { ownerId: userId, name: opts.agentName },
-            select: { toolsDeny: true },
-          });
-          if (dbAgent?.toolsDeny && Array.isArray(dbAgent.toolsDeny)) {
-            currentDeny = dbAgent.toolsDeny as string[];
-          }
-        } catch { /* DB 查询失败时使用空 deny，不阻塞同步 */ }
-      }
-      updateParams.tools = computeToolsUpdate(
-        opts.agentName, opts.toolsFilter, opts.mcpFilter, opts.skillsFilter, currentDeny,
-      );
-      logger.info(`tools: ${targetId} → ${JSON.stringify(updateParams.tools)}`);
-    }
+    // 从 DB 读取已预计算的 tools 配置（由 computeToolsFromAllowedSources 在 agent 创建/更新时写入）
+    if (opts.toolsFilter !== undefined || opts.mcpFilter !== undefined || opts.skillsFilter !== undefined) {
+      try {
+        const { getPrismaClient } = await import('@octopus/database');
+        const prisma = getPrismaClient();
+        const dbAgent = await prisma.agent.findFirst({
+          where: { ownerId: userId, name: opts.agentName },
+          select: { toolsProfile: true, toolsDeny: true, toolsAllow: true, allowedToolSources: true, toolsFilter: true },
+        });
+        if (dbAgent) {
+          const toolsConfig: Record<string, unknown> = {
+            profile: dbAgent.toolsProfile || 'coding',
+            alsoAllow: Array.isArray(dbAgent.toolsAllow) ? dbAgent.toolsAllow : [],
+          };
+          const deny = Array.isArray(dbAgent.toolsDeny) ? dbAgent.toolsDeny as string[] : [];
+          if (deny.length > 0) toolsConfig.deny = deny;
+          updateParams.tools = toolsConfig;
+          logger.info(`tools: ${targetId} → ${JSON.stringify(updateParams.tools)}`);
 
-    // skills
-    if (opts.skillsFilter !== undefined) {
-      updateParams.skills = opts.skillsFilter;
-      logger.info(`skills: ${targetId} → [${opts.skillsFilter.join(', ')}]`);
+          // skills（run_skill allowedSources 驱动，直接从 DB 读取 allowedToolSources 中的 skill 名称）
+          const allowedSources = Array.isArray(dbAgent.allowedToolSources) ? dbAgent.allowedToolSources as string[] : null;
+          if (allowedSources !== null) {
+            const { readToolsCacheAsync } = await import('../utils/tools-cache');
+            const allMcpTools = await readToolsCacheAsync();
+            const mcpServerIds = new Set(allMcpTools.map((t: { serverId: string }) => t.serverId));
+            const skillSources = allowedSources.filter(s => !mcpServerIds.has(s));
+            updateParams.skills = skillSources;
+            logger.info(`skills: ${targetId} → [${skillSources.join(', ')}]`);
+          }
+        }
+      } catch { /* DB 查询失败时跳过 tools 同步，不阻塞 model/subagents 更新 */ }
     }
 
     try {

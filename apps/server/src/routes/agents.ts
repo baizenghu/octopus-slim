@@ -25,24 +25,12 @@ import { invalidatePromptCache } from '../services/SystemPromptBuilder';
 import { createAvatarUpload, mimeToExt } from '../utils/avatar';
 import { createLogger } from '../utils/logger';
 import { readToolsCacheAsync } from '../utils/tools-cache';
-import { skillMdName } from '../utils/skill-naming';
 
 import type { AppPrismaClient } from '../types/prisma';
 import type { EngineAgentFileResponse } from '../types/engine';
 
 const logger = createLogger('agents');
 
-/** 过滤 skillsFilter：只保留 DB 中 enabled=true 的 skill，返回引擎可识别的 skillMdName */
-async function filterEnabledSkills(prisma: AppPrismaClient, skillsFilter: string[]): Promise<string[]> {
-  if (!skillsFilter.length) return [];
-  const skills = await prisma.toolSource.findMany({
-    where: { type: 'skill', enabled: true, name: { in: skillsFilter } },
-    select: { name: true, scope: true, ownerId: true },
-  });
-  return skills.map((s: { name: string; scope: string; ownerId: string | null }) =>
-    skillMdName(s.scope, s.name, s.ownerId),
-  );
-}
 /**
  * 将 string[] | null 转为 Prisma Json 字段可接受的值：
  * null → Prisma.JsonNull（Prisma 要求显式 JsonNull），数组直接传递
@@ -329,20 +317,17 @@ export function createAgentsRouter(
       // 同步到原生 Gateway（await 确保同步完成后再响应，#20 修复）
       try {
         await syncToNative(user.id, agent.name, null, agent.identity as { name?: string; emoji?: string; vibe?: string } | null, false, agent.description);
-        // 统一同步 allowAgents + model + tools 到 native agents.list（单次 config read/write）
+        // 统一同步 allowAgents + model + tools 到 native agents.list
         const enabledAgents = await prisma.agent.findMany({ where: { ownerId: user.id, enabled: true }, select: { name: true } });
-        // syncAgentToEngine 仍需旧字段格式；从 resolvedSources 派生 mcpFilter/skillsFilter
-        const syncMcpFilter = mcpFilter ?? (resolvedSources ?? []).filter(s => !skillsFilter?.includes(s));
-        const syncSkillsFilter = skillsFilter ?? [];
         await syncAgentToEngine(bridge!, user.id, {
           agentName: agent.name,
           model: model?.trim() || null,
+          // toolsFilter 触发从 DB 读取已预计算的 tools 配置
           toolsFilter: toolsFilter ?? [],
-          skillsFilter: await filterEnabledSkills(prisma, syncSkillsFilter),
-          mcpFilter: syncMcpFilter,
           enabledAgentNames: enabledAgents.map(a => a.name),
         });
         // 创建时同步 TOOLS.md（原生工具 + MCP 工具）
+        const syncMcpFilter = mcpFilter ?? (resolvedSources ?? []).filter(s => !skillsFilter?.includes(s));
         await syncToolsMd(user.id, agent.name, syncMcpFilter, toolsFilter || []);
       } catch (e: unknown) {
         logger.error('[agents] Native sync failed:', { error: e instanceof Error ? e.message : String(e) });
@@ -452,14 +437,8 @@ export function createAgentsRouter(
         if (modelChanged || toolsChanged) {
           syncOpts.agentName = agent.name;
           if (modelChanged) syncOpts.model = model?.trim() || null;
-          if (toolsFilterChanged) syncOpts.toolsFilter = toolsFilter ?? [];
-          // 派生 mcpFilter/skillsFilter 供 syncAgentToEngine 使用（兼容旧接口）
-          if (toolsChanged) {
-            const finalMcp = mcpFilter ?? (existing.mcpFilter as string[]) ?? [];
-            const finalSkills = skillsFilter ?? (existing.skillsFilter as string[]) ?? [];
-            if (skillsFilterChanged || allowedToolSourcesChanged) syncOpts.skillsFilter = await filterEnabledSkills(prisma, finalSkills);
-            if (mcpFilterChanged || allowedToolSourcesChanged) syncOpts.mcpFilter = finalMcp;
-          }
+          // toolsFilter 触发从 DB 读取已预计算的 tools 配置（allowedToolSources → toolsDeny/toolsAllow）
+          if (toolsChanged) syncOpts.toolsFilter = toolsFilter ?? (existing.toolsFilter as string[]) ?? [];
         }
         if (enabledChanged) {
           const enabledAgents = await prisma.agent.findMany({ where: { ownerId: user.id, enabled: true }, select: { name: true } });

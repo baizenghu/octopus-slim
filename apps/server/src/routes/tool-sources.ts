@@ -664,19 +664,25 @@ export function createToolSourcesRouter(
       if (existing.type === 'skill' && referencingAgents.length > 0) {
         // Skill: 自动清理关联（admin 可强制删除企业级技能）+ 重算权限
         const { Prisma } = await import('@prisma/client');
-        const { computeToolsUpdate } = await import('../services/AgentConfigSync');
-        for (const agent of referencingAgents) {
-          const filter = ((agent as Record<string, unknown>)[filterField] as string[]).filter(
-            (s: string) => s !== id && s !== existing.name,
-          );
-          const newSkillsFilter = filter.length > 0 ? filter : [];
-          const agentToolsFilter = (agent as Record<string, unknown>).toolsFilter as string[] | null;
-          const agentMcpFilter = (agent as Record<string, unknown>).mcpFilter as string[] | null;
-          const computed = computeToolsUpdate(agent.name, agentToolsFilter, agentMcpFilter, newSkillsFilter, []);
+        const { computeToolsFromAllowedSources } = await import('../services/AgentConfigSync');
+        // 同时查询 allowedToolSources 用于重算
+        const agentsWithSources = await prisma.agent.findMany({
+          where: { id: { in: referencingAgents.map(a => a.id) } },
+          select: { id: true, name: true, allowedToolSources: true, toolsFilter: true },
+        });
+        for (const agent of agentsWithSources) {
+          const agentToolsFilter = Array.isArray(agent.toolsFilter) ? agent.toolsFilter as string[] : [];
+          // 从 allowedToolSources 移除被删 skill 的名称和 id
+          const currentSources = Array.isArray(agent.allowedToolSources) ? agent.allowedToolSources as string[] : null;
+          const newSources = currentSources !== null
+            ? currentSources.filter(s => s !== id && s !== existing.name)
+            : null;
+          const computed = computeToolsFromAllowedSources(newSources, agentToolsFilter, agent.name);
           await prisma.agent.update({
             where: { id: agent.id },
             data: {
-              [filterField]: filter.length > 0 ? filter : Prisma.JsonNull,
+              allowedToolSources: newSources !== null ? newSources : Prisma.JsonNull,
+              [filterField]: Prisma.JsonNull,
               toolsProfile: computed.profile,
               toolsDeny: computed.deny ?? [],
               toolsAllow: computed.alsoAllow,
