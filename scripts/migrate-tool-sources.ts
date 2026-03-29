@@ -1,43 +1,54 @@
 /**
  * 一次性迁移：将所有 Agent 的 mcpFilter + skillsFilter 合并写入 allowedToolSources
- * 用法：npx tsx scripts/migrate-tool-sources.ts
+ * 用法：npx tsx scripts/migrate-tool-sources.ts [--dry-run]
  */
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
+const dryRun = process.argv.includes('--dry-run');
 
 async function main() {
+  if (dryRun) console.log('=== DRY RUN MODE (no changes will be written) ===\n');
+
   const agents = await prisma.agent.findMany();
-  let migrated = 0;
-  let skipped = 0;
+  const updates: Array<{ id: string; allowedToolSources: string[] | null }> = [];
 
   for (const agent of agents) {
-    // 已有 allowedToolSources 的跳过
     if (agent.allowedToolSources !== null && agent.allowedToolSources !== undefined) {
       console.log(`  Skip ${agent.id} — already has allowedToolSources`);
-      skipped++;
       continue;
     }
 
     const mcpFilter = (agent.mcpFilter as string[]) ?? [];
     const skillsFilter = (agent.skillsFilter as string[]) ?? [];
-
-    // 都为空 = 全部可用 → null
     const allowedToolSources = mcpFilter.length === 0 && skillsFilter.length === 0
       ? null
       : [...mcpFilter, ...skillsFilter];
 
-    await prisma.agent.update({
-      where: { id: agent.id },
-      data: { allowedToolSources: allowedToolSources ?? undefined },
-    });
-
+    updates.push({ id: agent.id, allowedToolSources });
     const display = allowedToolSources ? JSON.stringify(allowedToolSources) : 'null (all allowed)';
-    console.log(`  Migrated ${agent.id}: ${display}`);
-    migrated++;
+    console.log(`  ${dryRun ? '[DRY] ' : ''}Migrate ${agent.id}: ${display}`);
   }
 
-  console.log(`\nDone. Migrated: ${migrated}, Skipped: ${skipped}, Total: ${agents.length}`);
+  if (dryRun) {
+    console.log(`\nDry run complete. Would migrate ${updates.length}/${agents.length} agents.`);
+    return;
+  }
+
+  if (updates.length === 0) {
+    console.log('\nNothing to migrate.');
+    return;
+  }
+
+  // 事务包装，确保原子性
+  await prisma.$transaction(
+    updates.map(u => prisma.agent.update({
+      where: { id: u.id },
+      data: { allowedToolSources: u.allowedToolSources ?? undefined },
+    })),
+  );
+
+  console.log(`\nDone. Migrated: ${updates.length}, Total: ${agents.length}`);
 }
 
 main()

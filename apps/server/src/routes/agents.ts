@@ -101,10 +101,11 @@ export function createAgentsRouter(
   };
 
   /**
-   * 根据 agent 的 toolsFilter + mcpFilter 生成 TOOLS.md 并写入 agent workspace
+   * 根据 agent 的 allowedToolSources + toolsFilter 生成 TOOLS.md 并写入 agent workspace
    * 权限变化时调用，保持 TOOLS.md 与配置实时同步
+   * @param allowedSources 统一白名单（null = 全部可用）
    */
-  async function syncToolsMd(userId: string, agentName: string, mcpFilter: string[], toolsFilter?: string[]) {
+  async function syncToolsMd(userId: string, agentName: string, allowedSources: string[] | null, toolsFilter?: string[]) {
     if (!bridge?.isConnected) return;
     const nativeAgentId = TenantEngineAdapter.forUser(bridge!, userId).agentId(agentName);
 
@@ -131,13 +132,13 @@ export function createAgentsRouter(
         select: { id: true, name: true, description: true },
       });
 
-      // 4. 按 mcpFilter 过滤，构建 MCP 工具列表
-      const filterSet = new Set(mcpFilter);
+      // 4. 按 allowedSources 过滤，构建 MCP 工具列表（null = 全部可用）
+      const filterSet = allowedSources !== null ? new Set(allowedSources) : null;
 
       // 企业级工具
       const serverToolMap = new Map<string, { serverName: string; tools: Array<{ name: string; desc: string }> }>();
       for (const tool of cachedTools) {
-        if (!filterSet.has(tool.serverId) && !filterSet.has(tool.serverName)) continue;
+        if (filterSet !== null && !filterSet.has(tool.serverId) && !filterSet.has(tool.serverName)) continue;
         if (!serverToolMap.has(tool.serverId)) {
           serverToolMap.set(tool.serverId, { serverName: tool.serverName, tools: [] });
         }
@@ -156,7 +157,7 @@ export function createAgentsRouter(
 
       // 个人级工具（仅在 cache 中未找到时才作为兜底显示）
       for (const ps of personalServers) {
-        if (!filterSet.has(ps.id) && !filterSet.has(ps.name)) continue;
+        if (filterSet !== null && !filterSet.has(ps.id) && !filterSet.has(ps.name)) continue;
         // 如果 tools-cache 已有该 server 的详细工具，跳过兜底
         if (serverToolMap.has(ps.id)) continue;
         lines.push(`## ${ps.name}`);
@@ -326,9 +327,8 @@ export function createAgentsRouter(
           toolsFilter: toolsFilter ?? [],
           enabledAgentNames: enabledAgents.map(a => a.name),
         });
-        // 创建时同步 TOOLS.md（原生工具 + MCP 工具）
-        const syncMcpFilter = mcpFilter ?? (resolvedSources ?? []).filter(s => !skillsFilter?.includes(s));
-        await syncToolsMd(user.id, agent.name, syncMcpFilter, toolsFilter || []);
+        // 创建时同步 TOOLS.md（原生工具 + 允许的工具源）
+        await syncToolsMd(user.id, agent.name, resolvedSources, toolsFilter || []);
       } catch (e: unknown) {
         logger.error('[agents] Native sync failed:', { error: e instanceof Error ? e.message : String(e) });
         // 同步失败不阻塞响应（DB 已写入）
@@ -449,11 +449,11 @@ export function createAgentsRouter(
         );
       }
 
-      // mcpFilter / allowedToolSources / toolsFilter 变化时同步 TOOLS.md（增删工具实时写入）
-      if (mcpFilterChanged || allowedToolSourcesChanged || toolsFilterChanged) {
-        const finalMcpFilter = mcpFilter ?? (existing.mcpFilter as string[]) ?? [];
+      // allowedToolSources / toolsFilter 变化时同步 TOOLS.md（增删工具实时写入）
+      if (allowedToolSourcesChanged || toolsFilterChanged) {
+        const finalAllowed = (agent.allowedToolSources as string[] | null) ?? null;
         const finalToolsFilter = toolsFilter ?? (existing.toolsFilter as string[]) ?? [];
-        syncToolsMd(user.id, agent.name, finalMcpFilter, finalToolsFilter).catch((e: unknown) =>
+        syncToolsMd(user.id, agent.name, finalAllowed, finalToolsFilter).catch((e: unknown) =>
           logger.error('[agents] syncToolsMd failed:', { error: e instanceof Error ? e.message : String(e) }),
         );
       }

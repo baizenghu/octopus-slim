@@ -127,7 +127,7 @@ model Agent {
   memoryScope  Json?    @map("memory_scope")  /// 记忆隔离配置
   sandboxMode  String?  @map("sandbox_mode") @db.VarChar(20) /// "host" | "sandbox"
 
-  // — deprecated: 保留兼容，后续移除 —
+  // — deprecated since 2026-03-28, remove after 2026-06-01 —
   skillsFilter Json?    @map("skills_filter") /// @deprecated 使用 allowedToolSources
   mcpFilter    Json?    @map("mcp_filter")    /// @deprecated 使用 allowedToolSources
   toolsFilter  Json?    @map("tools_filter")  /// @deprecated 使用 toolsProfile + toolsAllow/toolsDeny

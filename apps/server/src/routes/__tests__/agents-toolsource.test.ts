@@ -1,26 +1,5 @@
 import { describe, it, expect } from 'vitest';
-
-/**
- * 旧字段 → allowedToolSources 迁移逻辑：
- * - 有 allowedToolSources → 直接使用
- * - 无 allowedToolSources，有旧字段 → 合并 mcpFilter + skillsFilter
- * - 全部为空 → null（全部可用）
- */
-export function resolveAllowedToolSources(
-  allowedToolSources: string[] | null | undefined,
-  mcpFilter: string[] | null | undefined,
-  skillsFilter: string[] | null | undefined,
-): string[] | null {
-  if (allowedToolSources !== undefined) {
-    return allowedToolSources;
-  }
-  const mcpNames = Array.isArray(mcpFilter) ? mcpFilter : [];
-  const skillNames = Array.isArray(skillsFilter) ? skillsFilter : [];
-  if (mcpNames.length === 0 && skillNames.length === 0) {
-    return null;
-  }
-  return [...mcpNames, ...skillNames];
-}
+import { resolveAllowedToolSources } from '../agents';
 
 describe('resolveAllowedToolSources', () => {
   it('uses allowedToolSources when provided as array', () => {
