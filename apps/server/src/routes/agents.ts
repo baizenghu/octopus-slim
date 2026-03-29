@@ -318,7 +318,7 @@ export function createAgentsRouter(
       // 同步到原生 Gateway（await 确保同步完成后再响应，#20 修复）
       try {
         await syncToNative(user.id, agent.name, null, agent.identity as { name?: string; emoji?: string; vibe?: string } | null, false, agent.description);
-        // 统一同步 allowAgents + model + tools 到 native agents.list
+        // 同步 agent 配置到引擎（通过 RPC）
         const enabledAgents = await prisma.agent.findMany({ where: { ownerId: user.id, enabled: true }, select: { name: true } });
         await syncAgentToEngine(bridge!, user.id, {
           agentName: agent.name,
@@ -420,7 +420,7 @@ export function createAgentsRouter(
         }
       }
 
-      // model / toolsFilter / skillsFilter / allowedToolSources / enabled 变化时统一同步到 native agents.list
+      // model / toolsFilter / allowedToolSources / enabled 变化时同步到引擎
       const modelChanged = model !== undefined &&
         (model?.trim() || null) !== (existing.model || null);
       const toolsFilterChanged = toolsFilter !== undefined &&
@@ -531,7 +531,7 @@ export function createAgentsRouter(
           logger.error('[agents] Workspace cleanup failed:', { error: e instanceof Error ? e.message : String(e) }),
         );
       }
-      // 清理 octopus.json 中 agents.list 的残留 entry + 更新 allowAgents（单次 config read/write）
+      // 通过 RPC 删除引擎侧 agent + 清理 memory scope
       if (bridge?.isConnected) {
         try {
           const enabledAgents = await prisma.agent.findMany({ where: { ownerId: user.id, enabled: true }, select: { name: true } });

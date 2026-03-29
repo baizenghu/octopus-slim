@@ -20,7 +20,7 @@ import { createAuthMiddleware, adminOnly, type AuthenticatedRequest } from '../m
 import { getRuntimeConfig } from '../config';
 import { EngineAdapter } from '../services/EngineAdapter';
 import { TenantEngineAdapter } from '../services/TenantEngineAdapter';
-import type { EngineConfig, EngineAgentListEntry } from '../types/engine';
+import { syncAgentToEngine } from '../services/AgentConfigSync';
 import { validatePassword } from '../utils/password';
 import { createLogger } from '../utils/logger';
 
@@ -359,28 +359,17 @@ export function createAdminRouter(
         }, 2000);
       }
 
-      // ── 从 octopus.json 的 agents.list 中移除该用户的 agent ──
+      // ── 通过 RPC 删除引擎侧 agent 配置 + memory scope ──
       if (bridge?.isConnected) {
-        try {
-          const { config: configRaw } = await bridge.configGetParsed();
-          const engineConfig = configRaw as EngineConfig;
-          const agentsList: EngineAgentListEntry[] = engineConfig?.agents?.list || [];
-          const userPrefix = tenant.agentId('');
-          const filtered = agentsList.filter((a) => !a.id?.startsWith(userPrefix));
-          if (filtered.length < agentsList.length) {
-            engineConfig.agents!.list = filtered;
-            // 同步清理其他 agent 的 allowAgents 引用
-            for (const a of filtered) {
-              const allow = a.subagents?.allowAgents;
-              if (Array.isArray(allow)) {
-                a.subagents!.allowAgents = allow.filter((aid: string) => !aid.startsWith(userPrefix));
-              }
-            }
-            await bridge.configApplyFull(configRaw);
-            logger.info(`[admin] Removed ${agentsList.length - filtered.length} agent(s) from octopus.json for ${id}`);
+        for (const ua of userAgents) {
+          try {
+            await syncAgentToEngine(bridge, id, {
+              deleteAgentName: ua.name,
+              enabledAgentNames: [], // 用户已删除，无活跃 agent
+            });
+          } catch (e: unknown) {
+            logger.error(`[admin] syncAgentToEngine delete failed for ${ua.name}:`, { error: e instanceof Error ? e.message : String(e) });
           }
-        } catch (e: unknown) {
-          logger.error(`[admin] Failed to clean octopus.json for ${id}:`, { error: e instanceof Error ? e.message : String(e) });
         }
       }
 
