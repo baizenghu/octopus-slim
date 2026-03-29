@@ -31,19 +31,26 @@ import type { ToolCallInfo, ChatMessage, Attachment } from '../types/chat';
 
 /** 将后端附件格式还原为前端显示格式 */
 function restoreAttachmentDisplay(content: string): string {
-  // 匹配: [用户上传了 N 个文件，已保存到工作空间]\n- files/xxx.pdf\n- files/yyy.docx\n\n实际消息
-  const match = content.match(/^\[用户上传了 \d+ 个文件，已保存到工作空间\]\n((?:- .+\n?)+)\n?([\s\S]*)$/);
-  if (!match) return content;
-  const fileLines = match[1].trim().split('\n');
-  const userMsg = (match[2] || '').trim();
-  const attachmentTags = fileLines
-    .map(line => {
+  // 格式1（新）: [附件: file1.pdf, file2.xlsx]\n消息内容
+  const newMatch = content.match(/^\[附件: (.+?)\]\n?([\s\S]*)$/);
+  if (newMatch) {
+    const files = newMatch[1].split(',').map(f => f.trim());
+    const userMsg = (newMatch[2] || '').trim();
+    const tags = files.map(f => `[附件] ${f}`).join('\n');
+    return userMsg ? `${tags}\n${userMsg}` : tags;
+  }
+  // 格式2（旧）: [用户上传了 N 个文件，已保存到工作空间]\n- files/xxx\n\n消息
+  const oldMatch = content.match(/^\[用户上传了 \d+ 个文件，已保存到工作空间\]\n((?:- .+\n?)+)\n?([\s\S]*)$/);
+  if (oldMatch) {
+    const fileLines = oldMatch[1].trim().split('\n');
+    const userMsg = (oldMatch[2] || '').trim();
+    const tags = fileLines.map(line => {
       const filePath = line.replace(/^- /, '').trim();
-      const fileName = filePath.split('/').pop() || filePath;
-      return `[附件] ${fileName}`;
-    })
-    .join('\n');
-  return userMsg ? `${attachmentTags}\n${userMsg}` : attachmentTags;
+      return `[附件] ${filePath.split('/').pop() || filePath}`;
+    }).join('\n');
+    return userMsg ? `${tags}\n${userMsg}` : tags;
+  }
+  return content;
 }
 
 /** 清理会话标题中的附件前缀 */
@@ -261,8 +268,11 @@ export default function ChatPage() {
 
     const token = localStorage.getItem('admin_token');
 
-    // 构建请求体（含附件）
-    const requestBody: any = { message: msg || '', sessionId: sid, agentId: currentAgentId };
+    // 构建请求体（含附件）— message 带上附件文件名，确保引擎历史记录中保留附件信息
+    const messageWithAttachments = currentAttachments.length > 0
+      ? `[附件: ${currentAttachments.map(a => a.name).join(', ')}]\n${msg || ''}`
+      : (msg || '');
+    const requestBody: any = { message: messageWithAttachments, sessionId: sid, agentId: currentAgentId };
     if (currentAttachments.length > 0) {
       requestBody.attachments = currentAttachments.map(a => ({
         name: a.name,
