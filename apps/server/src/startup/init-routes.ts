@@ -96,7 +96,15 @@ export async function initRoutes(params: {
       }
     }
 
-    const redisStatus = redisClient ? 'connected' : 'not configured';
+    let redisStatus: 'connected' | 'error' | 'not configured' = 'not configured';
+    if (redisClient) {
+      try {
+        await redisClient.ping();
+        redisStatus = 'connected';
+      } catch {
+        redisStatus = 'error';
+      }
+    }
     const nativeGatewayStatus = bridge?.isConnected ? 'running' : 'stopped';
     const pluginStatus = (_name: string) => {
       return bridge?.isConnected ? 'loaded' as const : 'not loaded' as const;
