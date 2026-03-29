@@ -47,7 +47,9 @@ describe('TenantEngineAdapter', () => {
         { id: 'ent_bob_default' },
         { id: 'ent_alice_helper' },
       ];
-      const engine = { agentsList: vi.fn().mockResolvedValue({ agents }) } as unknown as EngineAdapter;
+      const engine = {
+        call: vi.fn().mockResolvedValue({ agents }),
+      } as unknown as EngineAdapter;
       const tb = new TenantEngineAdapter(engine, 'alice', false);
       const result = await tb.listMyAgents();
       expect(result).toHaveLength(2);
@@ -59,7 +61,9 @@ describe('TenantEngineAdapter', () => {
         { id: 'ent_alice_default' },
         { id: 'ent_bob_default' },
       ];
-      const engine = { agentsList: vi.fn().mockResolvedValue({ agents }) } as unknown as EngineAdapter;
+      const engine = {
+        call: vi.fn().mockResolvedValue({ agents }),
+      } as unknown as EngineAdapter;
       const tb = new TenantEngineAdapter(engine, 'alice', true);
       const result = await tb.listMyAgents();
       expect(result).toHaveLength(2);
@@ -75,7 +79,9 @@ describe('TenantEngineAdapter', () => {
           { id: 'c3', agentId: 'ent_alice_helper' },
         ],
       };
-      const engine = { cronList: vi.fn().mockResolvedValue(result) } as unknown as EngineAdapter;
+      const engine = {
+        call: vi.fn().mockResolvedValue(result),
+      } as unknown as EngineAdapter;
       const tb = new TenantEngineAdapter(engine, 'alice', false);
       const out = await tb.listMyCrons() as any;
       expect(out.jobs).toHaveLength(2);
@@ -84,7 +90,9 @@ describe('TenantEngineAdapter', () => {
 
     it('admin 用户返回全量', async () => {
       const result = { jobs: [{ id: 'c1', agentId: 'ent_alice_default' }, { id: 'c2', agentId: 'ent_bob_default' }] };
-      const engine = { cronList: vi.fn().mockResolvedValue(result) } as unknown as EngineAdapter;
+      const engine = {
+        call: vi.fn().mockResolvedValue(result),
+      } as unknown as EngineAdapter;
       const tb = new TenantEngineAdapter(engine, 'alice', true);
       const out = await tb.listMyCrons() as any;
       expect(out.jobs).toHaveLength(2);
@@ -100,7 +108,9 @@ describe('TenantEngineAdapter', () => {
           { key: 'agent:ent_alice_helper:session:s3' },
         ],
       };
-      const engine = { sessionsList: vi.fn().mockResolvedValue(result) } as unknown as EngineAdapter;
+      const engine = {
+        call: vi.fn().mockResolvedValue(result),
+      } as unknown as EngineAdapter;
       const tb = new TenantEngineAdapter(engine, 'alice', false);
       const out = await tb.listMySessions() as any;
       expect(out.sessions).toHaveLength(2);
@@ -113,7 +123,9 @@ describe('TenantEngineAdapter', () => {
           { key: 'agent:ent_bob_default:session:s2' },
         ],
       };
-      const engine = { sessionsList: vi.fn().mockResolvedValue(result) } as unknown as EngineAdapter;
+      const engine = {
+        call: vi.fn().mockResolvedValue(result),
+      } as unknown as EngineAdapter;
       const tb = new TenantEngineAdapter(engine, 'alice', true);
       const out = await tb.listMySessions() as any;
       expect(out.sessions).toHaveLength(2);

@@ -7,7 +7,7 @@ import * as fsp from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
 import { WorkspaceManager } from '../src/WorkspaceManager';
-import { WORKSPACE_DIRS } from '../src/types';
+import { AGENT_WORKSPACE_SUBDIRS } from '../src/types';
 
 let tempDir: string;
 let manager: WorkspaceManager;
@@ -29,11 +29,10 @@ describe('WorkspaceManager', () => {
     it('should create full directory structure', async () => {
       await manager.initWorkspace('user-001', 'zhangsan');
 
-      // 验证所有子目录已创建
-      for (const dir of Object.values(WORKSPACE_DIRS)) {
-        const fullPath = path.join(tempDir, 'users', 'user-001', dir);
-        expect(fs.existsSync(fullPath)).toBe(true);
-      }
+      // 验证用户根目录和元数据已创建
+      const userRoot = path.join(tempDir, 'users', 'user-001');
+      expect(fs.existsSync(userRoot)).toBe(true);
+      expect(fs.existsSync(path.join(userRoot, 'metadata.json'))).toBe(true);
     });
 
     it('should write metadata.json', async () => {
@@ -65,7 +64,8 @@ describe('WorkspaceManager', () => {
     it('should return workspace path', async () => {
       const wsPath = await manager.initWorkspace('user-001', 'zhangsan');
       expect(wsPath).toContain('user-001');
-      expect(wsPath).toContain('workspace');
+      // initWorkspace returns the user root path (data/users/{userId})
+      expect(wsPath).toContain('users');
     });
   });
 
@@ -242,13 +242,18 @@ describe('WorkspaceManager', () => {
     });
   });
 
-  describe('getSubPath', () => {
-    it('should return correct sub-paths', () => {
-      expect(manager.getSubPath('user-001', 'SESSIONS')).toContain('workspace/sessions');
-      expect(manager.getSubPath('user-001', 'FILES')).toContain('workspace/files');
-      expect(manager.getSubPath('user-001', 'OUTPUTS')).toContain('workspace/outputs');
-      expect(manager.getSubPath('user-001', 'CACHE')).toContain('cache');
-      expect(manager.getSubPath('user-001', 'LOGS')).toContain('logs');
+  describe('getAgentSubPath', () => {
+    it('should return correct agent workspace sub-paths', () => {
+      // getAgentSubPath(userId, agentName, subDir) returns agents/{agentName}/workspace/{subDir}
+      expect(manager.getAgentSubPath('user-001', 'myagent', 'FILES')).toContain(
+        path.join('agents', 'myagent', 'workspace', AGENT_WORKSPACE_SUBDIRS.FILES),
+      );
+      expect(manager.getAgentSubPath('user-001', 'myagent', 'OUTPUTS')).toContain(
+        path.join('agents', 'myagent', 'workspace', AGENT_WORKSPACE_SUBDIRS.OUTPUTS),
+      );
+      expect(manager.getAgentSubPath('user-001', 'myagent', 'TEMP')).toContain(
+        path.join('agents', 'myagent', 'workspace', AGENT_WORKSPACE_SUBDIRS.TEMP),
+      );
     });
   });
 });
