@@ -103,8 +103,9 @@ export async function initRoutes(params: {
     };
     const overallStatus = (nativeGatewayStatus === 'stopped' || dbStatus === 'error')
       ? 'degraded' : 'ok';
+    const httpStatus = overallStatus === 'ok' ? 200 : 503;
 
-    res.json({
+    res.status(httpStatus).json({
       // 向后兼容字段
       status: overallStatus,
       nativeGateway: nativeGatewayStatus,
