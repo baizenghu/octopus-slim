@@ -41,6 +41,7 @@ import { getRuntimeConfig } from '../config';
 import { invalidatePromptCache } from '../services/SystemPromptBuilder';
 import { skillDirName, skillMdName, mcpDirName } from '../utils/skill-naming';
 import { mergeSkillMd, generateSkillMd } from '../utils/skill-md-generator';
+import { installSkillDeps } from '../utils/skill-deps-installer';
 import { createLogger } from '../utils/logger';
 
 const logger = createLogger('tool-sources');
@@ -1439,6 +1440,12 @@ export function createToolSourcesRouter(
       }
 
       await installWhlToSharedVenv(skillDir, deps, skillId);
+
+      // 自动安装 requirements.txt 依赖（非阻塞，失败不影响上传）
+      const depsResult = await installSkillDeps(skillDir);
+      if (depsResult.installed) {
+        logger.info(`Auto-installed deps for skill: ${skillId}`);
+      }
 
       const reportWithDeps = {
         ...(scanReport ? JSON.parse(JSON.stringify(scanReport)) : {}),
