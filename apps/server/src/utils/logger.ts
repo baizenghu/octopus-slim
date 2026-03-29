@@ -3,7 +3,28 @@
  *
  * 统一日志格式，便于后续接入日志收集系统（如 ELK、Loki）。
  * 目前基于 console 实现，可后续替换为 winston/pino。
+ * 生产环境同时输出 JSON 日志到文件（LOG_DIR 或 .dev-logs/octopus.log）。
  */
+
+import { appendFileSync, mkdirSync } from 'fs';
+import path from 'path';
+
+const LOG_DIR = process.env['LOG_DIR'] ?? path.join(process.cwd(), '.dev-logs');
+
+function writeToFile(level: string, module: string, message: string, data?: Record<string, unknown>): void {
+  if (process.env['NODE_ENV'] !== 'production') return;
+  try {
+    mkdirSync(LOG_DIR, { recursive: true });
+    const line = JSON.stringify({
+      ts: new Date().toISOString(),
+      level,
+      module,
+      message,
+      ...(data ? { data } : {}),
+    });
+    appendFileSync(path.join(LOG_DIR, 'octopus.log'), line + '\n');
+  } catch { /* best-effort file logging */ }
+}
 
 type LogLevel = 'info' | 'warn' | 'error' | 'debug';
 
@@ -53,6 +74,8 @@ export function createLogger(module: string) {
       default:
         console.log(formatted);
     }
+
+    writeToFile(level, module, message, data);
   }
 
   return {
