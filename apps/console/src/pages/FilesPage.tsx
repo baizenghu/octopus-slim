@@ -211,6 +211,29 @@ export default function FilesPage() {
         </TabsList>
 
         <TabsContent value="files">
+          {/* 上传工具栏 */}
+          <div
+            className={`mt-3 mb-4 flex items-center gap-3 p-3 rounded-lg border-2 border-dashed transition-colors ${
+              dragOver ? 'border-primary bg-primary/5' : 'border-muted-foreground/25 hover:border-muted-foreground/50'
+            }`}
+            onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={handleDrop}
+          >
+            <label className="cursor-pointer inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors text-sm font-medium">
+              {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+              {uploading ? '上传中...' : '上传文件'}
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                className="hidden"
+                onChange={(e) => handleUpload(e.target.files)}
+                disabled={uploading}
+              />
+            </label>
+            <span className="text-sm text-muted-foreground">或将文件拖拽到此处</span>
+          </div>
           {renderGroupedFiles(groups, totalFiles, loading, activeTab, collapsedAgents, toggleAgent, handlePreview, handleDownload, handleDelete)}
         </TabsContent>
 
