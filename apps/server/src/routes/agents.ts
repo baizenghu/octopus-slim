@@ -12,6 +12,7 @@
 
 import { Router } from 'express';
 import { randomUUID } from 'crypto';
+import { Prisma } from '@prisma/client';
 import * as fs from 'fs';
 import * as path from 'path';
 import type { AuthService } from '@octopus/auth';
@@ -19,7 +20,7 @@ import type { WorkspaceManager } from '@octopus/workspace';
 import { createAuthMiddleware, type AuthenticatedRequest } from '../middleware/auth';
 import { EngineAdapter } from '../services/EngineAdapter';
 import { TenantEngineAdapter } from '../services/TenantEngineAdapter';
-import { syncAgentToEngine, ensureAndSyncNativeAgent, computeToolsUpdate } from '../services/AgentConfigSync';
+import { syncAgentToEngine, ensureAndSyncNativeAgent, computeToolsFromAllowedSources } from '../services/AgentConfigSync';
 import { invalidatePromptCache } from '../services/SystemPromptBuilder';
 import { createAvatarUpload, mimeToExt } from '../utils/avatar';
 import { createLogger } from '../utils/logger';
@@ -42,6 +43,36 @@ async function filterEnabledSkills(prisma: AppPrismaClient, skillsFilter: string
     skillMdName(s.scope, s.name, s.ownerId),
   );
 }
+/**
+ * 将 string[] | null 转为 Prisma Json 字段可接受的值：
+ * null → Prisma.JsonNull（Prisma 要求显式 JsonNull），数组直接传递
+ */
+function toJsonValue(v: string[] | null): typeof Prisma.JsonNull | string[] {
+  return v === null ? Prisma.JsonNull : v;
+}
+
+/**
+ * 旧字段 → allowedToolSources 迁移逻辑（兼容旧 API 客户端）：
+ * - 有 allowedToolSources（包括 null）→ 直接使用
+ * - 无 allowedToolSources，有旧字段 → 合并 mcpFilter + skillsFilter
+ * - 全部为空 → null（全部可用）
+ */
+export function resolveAllowedToolSources(
+  allowedToolSources: string[] | null | undefined,
+  mcpFilter: string[] | null | undefined,
+  skillsFilter: string[] | null | undefined,
+): string[] | null {
+  if (allowedToolSources !== undefined) {
+    return allowedToolSources;
+  }
+  const mcpNames = Array.isArray(mcpFilter) ? mcpFilter : [];
+  const skillNames = Array.isArray(skillsFilter) ? skillsFilter : [];
+  if (mcpNames.length === 0 && skillNames.length === 0) {
+    return null;
+  }
+  return [...mcpNames, ...skillNames];
+}
+
 import { rm } from 'fs/promises';
 
 /** Agent workspace 中允许读写的配置文件白名单 */
@@ -187,8 +218,10 @@ export function createAgentsRouter(
     const defaultMcpFilter = mcpServers.map((s: { id: string }) => s.id);
     const defaultToolsFilter = ['read', 'write', 'exec'];
     const defaultSkillsFilter = skills.map((s: { name: string }) => s.name);
+    // 默认 agent：null = 全部可用（所有已启用的 MCP + Skills）
+    const defaultAllowedSources = resolveAllowedToolSources(undefined, defaultMcpFilter, defaultSkillsFilter);
     // 计算 tools deny/profile 写入 DB（引擎通过 AgentStore 从 DB 读取）
-    const defaultTools = computeToolsUpdate('default', defaultToolsFilter, defaultMcpFilter, defaultSkillsFilter, []);
+    const defaultTools = computeToolsFromAllowedSources(defaultAllowedSources, defaultToolsFilter, 'default');
     await prisma.agent.create({
       data: {
         id: TenantEngineAdapter.forUser(bridge!, userId).agentId('default'),
@@ -198,6 +231,7 @@ export function createAgentsRouter(
         enabled: true,
         isDefault: true,
         identity: { name: 'Octopus AI', emoji: '🐙' },
+        allowedToolSources: toJsonValue(defaultAllowedSources),
         toolsFilter: defaultToolsFilter,
         skillsFilter: defaultSkillsFilter,
         mcpFilter: defaultMcpFilter,
@@ -238,7 +272,7 @@ export function createAgentsRouter(
   router.post('/', authMiddleware, async (req: AuthenticatedRequest, res, next) => {
     try {
       const user = req.user!;
-      const { name, description, model, identity, skillsFilter, mcpFilter, toolsFilter, allowedConnections } = req.body;
+      const { name, description, model, identity, skillsFilter, mcpFilter, toolsFilter, allowedConnections, allowedToolSources } = req.body;
 
       if (!name || typeof name !== 'string' || !name.trim()) {
         res.status(400).json({ error: 'name is required' });
@@ -259,8 +293,11 @@ export function createAgentsRouter(
         return;
       }
 
+      // 解析 allowedToolSources：优先使用新字段，fallback 合并旧字段
+      const resolvedSources = resolveAllowedToolSources(allowedToolSources, mcpFilter, skillsFilter);
+
       // 计算 tools deny/profile/alsoAllow 写入 DB（引擎通过 AgentStore 从 DB 读取）
-      const computedTools = computeToolsUpdate(name.trim(), toolsFilter ?? [], mcpFilter ?? [], skillsFilter ?? [], []);
+      const computedTools = computeToolsFromAllowedSources(resolvedSources, toolsFilter ?? ['read', 'write', 'exec'], name.trim());
 
       // 使用引擎格式的 agentId（ent_{userId}_{agentName}），
       // 确保 DB 中的 id 与引擎运行时查询的 id 一致
@@ -274,8 +311,9 @@ export function createAgentsRouter(
           model: model?.trim() || null,
           systemPrompt: null,
           identity: identity || null,
-          // TODO(P2): 迁移到 allowedToolSources 统一白名单，删除 skillsFilter/mcpFilter/toolsFilter
-          // 参见 docs/plans/2026-03-27-enterprise-plugin-architecture.md Phase 4
+          // 新字段：统一工具源白名单
+          allowedToolSources: toJsonValue(resolvedSources),
+          // 旧字段双写保持兼容（deprecated，后续移除）
           skillsFilter: skillsFilter ?? [],
           mcpFilter: mcpFilter ?? [],
           toolsFilter: toolsFilter ?? [],
@@ -293,16 +331,19 @@ export function createAgentsRouter(
         await syncToNative(user.id, agent.name, null, agent.identity as { name?: string; emoji?: string; vibe?: string } | null, false, agent.description);
         // 统一同步 allowAgents + model + tools 到 native agents.list（单次 config read/write）
         const enabledAgents = await prisma.agent.findMany({ where: { ownerId: user.id, enabled: true }, select: { name: true } });
+        // syncAgentToEngine 仍需旧字段格式；从 resolvedSources 派生 mcpFilter/skillsFilter
+        const syncMcpFilter = mcpFilter ?? (resolvedSources ?? []).filter(s => !skillsFilter?.includes(s));
+        const syncSkillsFilter = skillsFilter ?? [];
         await syncAgentToEngine(bridge!, user.id, {
           agentName: agent.name,
           model: model?.trim() || null,
           toolsFilter: toolsFilter ?? [],
-          skillsFilter: await filterEnabledSkills(prisma, skillsFilter ?? []),
-          mcpFilter: mcpFilter ?? [],
+          skillsFilter: await filterEnabledSkills(prisma, syncSkillsFilter),
+          mcpFilter: syncMcpFilter,
           enabledAgentNames: enabledAgents.map(a => a.name),
         });
         // 创建时同步 TOOLS.md（原生工具 + MCP 工具）
-        await syncToolsMd(user.id, agent.name, mcpFilter || [], toolsFilter || []);
+        await syncToolsMd(user.id, agent.name, syncMcpFilter, toolsFilter || []);
       } catch (e: unknown) {
         logger.error('[agents] Native sync failed:', { error: e instanceof Error ? e.message : String(e) });
         // 同步失败不阻塞响应（DB 已写入）
@@ -331,7 +372,7 @@ export function createAgentsRouter(
         return;
       }
 
-      const { name, description, model, identity, skillsFilter, mcpFilter, toolsFilter, allowedConnections, enabled } = req.body;
+      const { name, description, model, identity, skillsFilter, mcpFilter, toolsFilter, allowedConnections, enabled, allowedToolSources } = req.body;
 
       const data: Record<string, any> = {};
       // Agent ID（name）创建后不可修改，修改会导致 native agent ID 变更、历史 session 丢失
@@ -342,8 +383,6 @@ export function createAgentsRouter(
       if (description !== undefined) data.description = description?.trim() || null;
       if (model !== undefined) data.model = model?.trim() || null;
       if (identity !== undefined) data.identity = identity;
-      // TODO(P2): 迁移到 allowedToolSources 统一白名单，删除 skillsFilter/mcpFilter/toolsFilter
-      // 参见 docs/plans/2026-03-27-enterprise-plugin-architecture.md Phase 4
       if (skillsFilter !== undefined) data.skillsFilter = skillsFilter;
       if (mcpFilter !== undefined) data.mcpFilter = mcpFilter;
       if (toolsFilter !== undefined) data.toolsFilter = toolsFilter;
@@ -351,14 +390,30 @@ export function createAgentsRouter(
       if (enabled !== undefined) data.enabled = Boolean(enabled);
 
       // 重新计算 tools deny/profile（引擎通过 AgentStore 从 DB 读取）
-      if (toolsFilter !== undefined || mcpFilter !== undefined || skillsFilter !== undefined) {
+      if (allowedToolSources !== undefined || toolsFilter !== undefined || mcpFilter !== undefined || skillsFilter !== undefined) {
         const finalToolsFilter = toolsFilter ?? existing.toolsFilter as string[] ?? [];
-        const finalMcpFilter = mcpFilter ?? existing.mcpFilter as string[] ?? [];
-        const finalSkillsFilter = skillsFilter ?? existing.skillsFilter as string[] ?? [];
-        const computed = computeToolsUpdate(existing.name, finalToolsFilter, finalMcpFilter, finalSkillsFilter, []);
-        data.toolsProfile = computed.profile;
-        data.toolsDeny = computed.deny ?? [];
-        data.toolsAllow = computed.alsoAllow;
+
+        if (allowedToolSources !== undefined) {
+          // 新字段优先：allowedToolSources 已是统一白名单，直接使用
+          data.allowedToolSources = allowedToolSources;
+          // 旧字段双写保持兼容（deprecated）
+          if (mcpFilter !== undefined) data.mcpFilter = mcpFilter;
+          if (skillsFilter !== undefined) data.skillsFilter = skillsFilter;
+          const computed = computeToolsFromAllowedSources(allowedToolSources, finalToolsFilter, existing.name);
+          data.toolsProfile = computed.profile;
+          data.toolsDeny = computed.deny ?? [];
+          data.toolsAllow = computed.alsoAllow;
+        } else {
+          // 旧字段 fallback：合并后生成 allowedToolSources 并双写
+          const finalMcpFilter = mcpFilter ?? existing.mcpFilter as string[] ?? [];
+          const finalSkillsFilter = skillsFilter ?? existing.skillsFilter as string[] ?? [];
+          const resolvedSources = resolveAllowedToolSources(undefined, finalMcpFilter, finalSkillsFilter);
+          data.allowedToolSources = resolvedSources;
+          const computed = computeToolsFromAllowedSources(resolvedSources, finalToolsFilter, existing.name);
+          data.toolsProfile = computed.profile;
+          data.toolsDeny = computed.deny ?? [];
+          data.toolsAllow = computed.alsoAllow;
+        }
       }
 
       const agent = await prisma.agent.update({
@@ -380,7 +435,7 @@ export function createAgentsRouter(
         }
       }
 
-      // model / toolsFilter / skillsFilter / enabled 变化时统一同步到 native agents.list
+      // model / toolsFilter / skillsFilter / allowedToolSources / enabled 变化时统一同步到 native agents.list
       const modelChanged = model !== undefined &&
         (model?.trim() || null) !== (existing.model || null);
       const toolsFilterChanged = toolsFilter !== undefined &&
@@ -389,14 +444,22 @@ export function createAgentsRouter(
         JSON.stringify(skillsFilter) !== JSON.stringify(existing.skillsFilter);
       const mcpFilterChanged = mcpFilter !== undefined &&
         JSON.stringify(mcpFilter) !== JSON.stringify(existing.mcpFilter);
-      if (modelChanged || toolsFilterChanged || skillsFilterChanged || mcpFilterChanged || enabledChanged) {
+      const allowedToolSourcesChanged = allowedToolSources !== undefined &&
+        JSON.stringify(allowedToolSources) !== JSON.stringify((existing as any).allowedToolSources);
+      const toolsChanged = toolsFilterChanged || skillsFilterChanged || mcpFilterChanged || allowedToolSourcesChanged;
+      if (modelChanged || toolsChanged || enabledChanged) {
         const syncOpts: Parameters<typeof syncAgentToEngine>[2] = {};
-        if (modelChanged || toolsFilterChanged || skillsFilterChanged || mcpFilterChanged) {
+        if (modelChanged || toolsChanged) {
           syncOpts.agentName = agent.name;
           if (modelChanged) syncOpts.model = model?.trim() || null;
           if (toolsFilterChanged) syncOpts.toolsFilter = toolsFilter ?? [];
-          if (skillsFilterChanged) syncOpts.skillsFilter = await filterEnabledSkills(prisma, skillsFilter ?? []);
-          if (mcpFilterChanged) syncOpts.mcpFilter = mcpFilter ?? [];
+          // 派生 mcpFilter/skillsFilter 供 syncAgentToEngine 使用（兼容旧接口）
+          if (toolsChanged) {
+            const finalMcp = mcpFilter ?? (existing.mcpFilter as string[]) ?? [];
+            const finalSkills = skillsFilter ?? (existing.skillsFilter as string[]) ?? [];
+            if (skillsFilterChanged || allowedToolSourcesChanged) syncOpts.skillsFilter = await filterEnabledSkills(prisma, finalSkills);
+            if (mcpFilterChanged || allowedToolSourcesChanged) syncOpts.mcpFilter = finalMcp;
+          }
         }
         if (enabledChanged) {
           const enabledAgents = await prisma.agent.findMany({ where: { ownerId: user.id, enabled: true }, select: { name: true } });
@@ -407,8 +470,8 @@ export function createAgentsRouter(
         );
       }
 
-      // mcpFilter 或 toolsFilter 变化时同步 TOOLS.md（增删工具实时写入）
-      if (mcpFilterChanged || toolsFilterChanged) {
+      // mcpFilter / allowedToolSources / toolsFilter 变化时同步 TOOLS.md（增删工具实时写入）
+      if (mcpFilterChanged || allowedToolSourcesChanged || toolsFilterChanged) {
         const finalMcpFilter = mcpFilter ?? (existing.mcpFilter as string[]) ?? [];
         const finalToolsFilter = toolsFilter ?? (existing.toolsFilter as string[]) ?? [];
         syncToolsMd(user.id, agent.name, finalMcpFilter, finalToolsFilter).catch((e: unknown) =>
