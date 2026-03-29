@@ -206,7 +206,8 @@ export function createChatRouter(
     attachments: Array<{ name: string; content: string; type?: string }>,
     wsRoot: string,
   ): Promise<{ savedPaths: string[]; error?: string }> {
-    const filesDir = path.join(wsRoot, 'files');
+    // wsRoot 已经是 files 目录（getAgentSubPath 返回 .../workspace/files/）
+    const filesDir = wsRoot;
     await fs.promises.mkdir(filesDir, { recursive: true });
 
     const savedPaths: string[] = [];
