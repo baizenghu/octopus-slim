@@ -21,7 +21,7 @@ import {
   Camera,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { adminApi, type AgentInfo, type SkillInfo, type McpServerInfo } from '../api';
+import { adminApi, type AgentInfo, type ToolSourceInfo } from '../api';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -122,16 +122,13 @@ export default function AgentsPage({ onConfigAgent }: AgentsPageProps) {
   const [formEnabled, setFormEnabled] = useState(true);
   const [formToolsFilterEnabled, setFormToolsFilterEnabled] = useState(true);
   const [formToolsFilter, setFormToolsFilter] = useState<string[]>([]);
-  const [formSkillsFilterEnabled, setFormSkillsFilterEnabled] = useState(true);
-  const [formSkillsFilter, setFormSkillsFilter] = useState<string[]>([]);
-  const [formMcpFilterEnabled, setFormMcpFilterEnabled] = useState(true);
-  const [formMcpFilter, setFormMcpFilter] = useState<string[]>([]);
+  const [formToolSourceFilterEnabled, setFormToolSourceFilterEnabled] = useState(false);
+  const [formAllowedToolSources, setFormAllowedToolSources] = useState<string[]>([]);
   const [formConnFilterEnabled, setFormConnFilterEnabled] = useState(false);
   const [formAllowedConnections, setFormAllowedConnections] = useState<string[]>([]);
 
-  // 可用的 Skills 和 MCP 选项
-  const [availableSkills, setAvailableSkills] = useState<SkillInfo[]>([]);
-  const [availableMcp, setAvailableMcp] = useState<McpServerInfo[]>([]);
+  // 可用工具源（统一 MCP + Skill）
+  const [allToolSources, setAllToolSources] = useState<ToolSourceInfo[]>([]);
   const [availableConnections, setAvailableConnections] = useState<{ name: string }[]>([]);
   const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
   const [agentAvatarUrl, setAgentAvatarUrl] = useState<string | null>(null);
@@ -149,19 +146,21 @@ export default function AgentsPage({ onConfigAgent }: AgentsPageProps) {
     setLoading(false);
   }, []);
 
-  // 加载可用 Skills 和 MCP 列表
+  // 加载可用工具源（统一 MCP + Skill）和数据库连接
   const loadOptions = useCallback(async () => {
     try {
-      const [skillsRes, mcpRes, connRes] = await Promise.all([
-        adminApi.getSkills(),
-        adminApi.getMcpServers(),
+      const [toolSourcesRes, connRes] = await Promise.all([
+        adminApi.getToolSources(),
         adminApi.getDbConnections(),
       ]);
-      // 过滤系统内置技能（lesson 属于记忆系统，不可禁用）
+      // 过滤系统内置技能（lesson 属于记忆系统，不可禁用）以及未启用的工具源
       const SYSTEM_SKILLS = ['lesson'];
-      setAvailableSkills((skillsRes.data || []).filter(s => s.enabled && !SYSTEM_SKILLS.includes(s.name)));
-      setAvailableMcp((mcpRes.data || []).filter(s => s.enabled));
-      setAvailableConnections((connRes.data || []).filter(c => c.enabled));
+      setAllToolSources(
+        (toolSourcesRes.data || []).filter(
+          ts => ts.enabled && !(ts.type === 'skill' && SYSTEM_SKILLS.includes(ts.name))
+        )
+      );
+      setAvailableConnections((connRes.data || []).filter((c: { enabled: boolean }) => c.enabled));
     } catch { /* ignore */ }
   }, []);
 
@@ -194,10 +193,8 @@ export default function AgentsPage({ onConfigAgent }: AgentsPageProps) {
     setFormEnabled(true);
     setFormToolsFilterEnabled(false);
     setFormToolsFilter([]);
-    setFormSkillsFilterEnabled(false);
-    setFormSkillsFilter([]);
-    setFormMcpFilterEnabled(false);
-    setFormMcpFilter([]);
+    setFormToolSourceFilterEnabled(false);
+    setFormAllowedToolSources([]);
     setFormConnFilterEnabled(false);
     setFormAllowedConnections([]);
     setAgentAvatarUrl(null);
@@ -208,19 +205,7 @@ export default function AgentsPage({ onConfigAgent }: AgentsPageProps) {
     resetForm();
     refreshModels();
     // 新建 agent 权限默认全部禁用，仅加载可用选项列表
-    try {
-      const [skillsRes, mcpRes, connRes] = await Promise.all([
-        adminApi.getSkills(),
-        adminApi.getMcpServers(),
-        adminApi.getDbConnections(),
-      ]);
-      const SYSTEM_SKILLS = ['lesson'];
-      setAvailableSkills((skillsRes.data || []).filter(s => s.enabled && !SYSTEM_SKILLS.includes(s.name)));
-      setAvailableMcp((mcpRes.data || []).filter(s => s.enabled));
-      setAvailableConnections((connRes.data || []).filter((c: any) => c.enabled));
-    } catch {
-      // 保持空列表
-    }
+    await loadOptions();
     setModalOpen(true);
   };
 
@@ -262,10 +247,9 @@ export default function AgentsPage({ onConfigAgent }: AgentsPageProps) {
     setFormEnabled(agent.enabled);
     setFormToolsFilterEnabled(Array.isArray(agent.toolsFilter) && agent.toolsFilter.length > 0);
     setFormToolsFilter(agent.toolsFilter || []);
-    setFormSkillsFilterEnabled(Array.isArray(agent.skillsFilter) && agent.skillsFilter.length > 0);
-    setFormSkillsFilter(agent.skillsFilter || []);
-    setFormMcpFilterEnabled(Array.isArray(agent.mcpFilter) && agent.mcpFilter.length > 0);
-    setFormMcpFilter(agent.mcpFilter || []);
+    const hasToolSourceFilter = Array.isArray(agent.allowedToolSources) && agent.allowedToolSources.length > 0;
+    setFormToolSourceFilterEnabled(hasToolSourceFilter);
+    setFormAllowedToolSources(agent.allowedToolSources || []);
     setFormConnFilterEnabled(Array.isArray(agent.allowedConnections) && agent.allowedConnections.length > 0);
     setFormAllowedConnections(agent.allowedConnections || []);
     // 加载 agent 头像
@@ -292,12 +276,8 @@ export default function AgentsPage({ onConfigAgent }: AgentsPageProps) {
       toast.error('请至少选择一个工作空间工具');
       return;
     }
-    if (formSkillsFilterEnabled && formSkillsFilter.length === 0) {
-      toast.error('请至少选择一个技能');
-      return;
-    }
-    if (formMcpFilterEnabled && formMcpFilter.length === 0) {
-      toast.error('请至少选择一个 MCP 服务器');
+    if (formToolSourceFilterEnabled && formAllowedToolSources.length === 0) {
+      toast.error('请至少选择一个工具源');
       return;
     }
 
@@ -312,8 +292,7 @@ export default function AgentsPage({ onConfigAgent }: AgentsPageProps) {
         model: formModel || null,
         identity,
         toolsFilter: formToolsFilterEnabled ? formToolsFilter : [],
-        skillsFilter: formSkillsFilterEnabled ? formSkillsFilter : [],
-        mcpFilter: formMcpFilterEnabled ? formMcpFilter : [],
+        allowedToolSources: formToolSourceFilterEnabled ? formAllowedToolSources : null,
         allowedConnections: formConnFilterEnabled ? formAllowedConnections : [],
       };
       // enabled 仅在实际变化时发送
@@ -423,20 +402,13 @@ export default function AgentsPage({ onConfigAgent }: AgentsPageProps) {
                   ) : (
                     <Badge variant="outline" className="text-xs text-red-600 border-red-200 bg-red-50">工具: 禁用</Badge>
                   )}
-                  {Array.isArray(agent.skillsFilter) && agent.skillsFilter.length > 0 ? (
+                  {Array.isArray(agent.allowedToolSources) && agent.allowedToolSources.length > 0 ? (
                     <Badge variant="outline" className="text-xs text-purple-600 border-purple-200 bg-purple-50">
-                      技能: {agent.skillsFilter.length}
+                      工具源: {agent.allowedToolSources.length}
                     </Badge>
-                  ) : (
-                    <Badge variant="outline" className="text-xs text-red-600 border-red-200 bg-red-50">技能: 禁用</Badge>
-                  )}
-                  {Array.isArray(agent.mcpFilter) && agent.mcpFilter.length > 0 ? (
-                    <Badge variant="outline" className="text-xs text-cyan-600 border-cyan-200 bg-cyan-50">
-                      MCP: {agent.mcpFilter.length}
-                    </Badge>
-                  ) : (
-                    <Badge variant="outline" className="text-xs text-red-600 border-red-200 bg-red-50">MCP: 禁用</Badge>
-                  )}
+                  ) : agent.allowedToolSources === null ? (
+                    <Badge variant="outline" className="text-xs text-green-600 border-green-200 bg-green-50">工具源: 全部</Badge>
+                  ) : null}
                   {Array.isArray(agent.allowedConnections) && agent.allowedConnections.length > 0 ? (
                     <Badge variant="outline" className="text-xs text-orange-600 border-orange-200 bg-orange-50">
                       连接: {agent.allowedConnections.join(', ')}
@@ -711,40 +683,21 @@ export default function AgentsPage({ onConfigAgent }: AgentsPageProps) {
                 )}
               </div>
 
-              {/* Skills 过滤 */}
+              {/* 工具源限制（统一 MCP + Skill） */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <Label>Skills 技能</Label>
-                  <Switch checked={formSkillsFilterEnabled} onCheckedChange={setFormSkillsFilterEnabled} />
+                  <Label>限制可用工具源</Label>
+                  <Switch checked={formToolSourceFilterEnabled} onCheckedChange={setFormToolSourceFilterEnabled} />
                 </div>
-                {formSkillsFilterEnabled && (
+                {formToolSourceFilterEnabled && (
                   <MultiCheckboxSelect
-                    options={availableSkills.map(s => ({
-                      value: s.name,
-                      label: `${s.name}${s.description ? ` -- ${s.description}` : ''} (${s.scope === 'enterprise' ? '企业' : '个人'})`,
+                    options={allToolSources.map(ts => ({
+                      value: ts.name,
+                      label: `[${ts.type.toUpperCase()}] ${ts.name}${ts.description ? ` — ${ts.description}` : ''} (${ts.scope === 'enterprise' ? '企业' : '个人'})`,
                     }))}
-                    selected={formSkillsFilter}
-                    onChange={setFormSkillsFilter}
-                    emptyText="暂无可用技能"
-                  />
-                )}
-              </div>
-
-              {/* MCP 过滤 */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <Label>MCP 服务器</Label>
-                  <Switch checked={formMcpFilterEnabled} onCheckedChange={setFormMcpFilterEnabled} />
-                </div>
-                {formMcpFilterEnabled && (
-                  <MultiCheckboxSelect
-                    options={availableMcp.map(s => ({
-                      value: s.id,
-                      label: `${s.name}${s.description ? ` -- ${s.description}` : ''} (${s.scope === 'enterprise' ? '企业' : '个人'})`,
-                    }))}
-                    selected={formMcpFilter}
-                    onChange={setFormMcpFilter}
-                    emptyText="暂无可用 MCP 服务器"
+                    selected={formAllowedToolSources}
+                    onChange={setFormAllowedToolSources}
+                    emptyText="暂无可用工具源"
                   />
                 )}
               </div>

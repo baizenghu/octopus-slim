@@ -153,10 +153,20 @@ export interface AgentInfo {
   mcpFilter?: string[] | null;
   toolsFilter?: string[] | null;
   allowedConnections?: string[] | null;
+  allowedToolSources?: string[] | null;
   enabled: boolean;
   isDefault: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface ToolSourceInfo {
+  id: string;
+  name: string;
+  type: 'mcp' | 'skill';
+  scope: 'enterprise' | 'personal';
+  description?: string;
+  enabled: boolean;
 }
 
 class AdminApi {
@@ -699,6 +709,13 @@ class AdminApi {
   }
 
   // ─── Agents ───
+
+  async getToolSources(params?: { type?: 'mcp' | 'skill' }) {
+    const qs = new URLSearchParams();
+    if (params?.type) qs.set('type', params.type);
+    const query = qs.toString() ? `?${qs.toString()}` : '';
+    return this.request<{ data: ToolSourceInfo[]; total: number }>(`/tool-sources${query}`);
+  }
 
   async getAgents() {
     return this.request<{ agents: AgentInfo[] }>('/agents');
