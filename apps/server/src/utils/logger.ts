@@ -6,7 +6,7 @@
  * 生产环境同时输出 JSON 日志到文件（LOG_DIR 或 .dev-logs/octopus.log）。
  */
 
-import { appendFileSync, mkdirSync } from 'fs';
+import { appendFile, mkdirSync } from 'fs';
 import path from 'path';
 
 const LOG_DIR = process.env['LOG_DIR'] ?? path.join(process.cwd(), '.dev-logs');
@@ -22,7 +22,7 @@ function writeToFile(level: string, module: string, message: string, data?: Reco
       message,
       ...(data ? { data } : {}),
     });
-    appendFileSync(path.join(LOG_DIR, 'octopus.log'), line + '\n');
+    appendFile(path.join(LOG_DIR, 'octopus.log'), line + '\n', () => { /* fire-and-forget */ });
   } catch { /* best-effort file logging */ }
 }
 
