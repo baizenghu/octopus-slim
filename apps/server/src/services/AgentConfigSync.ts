@@ -49,6 +49,63 @@ function computeMcpDenyTools(mcpFilter: string[] | null): string[] {
 }
 
 /**
+ * 基于统一 ToolSource 白名单计算 tools RPC 参数（profile + alsoAllow + deny）
+ *
+ * @param allowedSources  允许的 ToolSource 名称列表（null = 全部放行，[] = 全部禁止）
+ * @param toolsFilter     原生工具过滤（read/write/exec），保持现有逻辑
+ * @param agentName       agent 名，非 default 的专业 agent 会 deny subagents 等
+ */
+export function computeToolsFromAllowedSources(
+  allowedSources: string[] | null,
+  toolsFilter: string[] | null | undefined,
+  agentName: string,
+): { profile: string; alsoAllow: string[]; deny?: string[] } {
+  const isDefault = agentName === 'default';
+  const newProfile = 'coding';
+  const newAlsoAllow = isDefault
+    ? ['group:plugins', 'agents_list']
+    : ['group:plugins'];
+
+  // 1. 原生工具 deny（read/write/exec 组）
+  const toolsDeny = computeToolsDeny(toolsFilter ?? null);
+
+  // 2. 专业 agent 限制（非 default agent deny subagents 相关工具）
+  const specialistDeny = isDefault ? [] : ['sessions_spawn', 'subagents', 'agents_list', 'sessions_list', 'sessions_history', 'sessions_send'];
+
+  // 3 & 4. MCP deny + run_skill deny：基于 allowedSources 白名单
+  let mcpDeny: string[] = [];
+  let runSkillDeny: string[] = [];
+  if (allowedSources !== null) {
+    const allMcpTools = readMcpToolsCache();
+    const allMcpServerIds = new Set(allMcpTools.map(t => t.serverId));
+
+    // MCP deny：deny 所有不在 allowedSources 中的 MCP 工具
+    if (allMcpTools.length > 0) {
+      const allowedMcpServers = new Set(
+        allowedSources.filter(s => allMcpServerIds.has(s)),
+      );
+      mcpDeny = allMcpTools
+        .filter(t => !allowedMcpServers.has(t.serverId))
+        .map(t => t.nativeToolName);
+    }
+
+    // run_skill deny：allowedSources 中没有 skill 类型来源（非 MCP serverId）→ deny
+    const hasSkillSource = allowedSources.some(s => !allMcpServerIds.has(s));
+    if (!hasSkillSource) {
+      runSkillDeny = ['run_skill'];
+    }
+  }
+
+  const newDeny = [...new Set([...toolsDeny, ...specialistDeny, ...mcpDeny, ...runSkillDeny])];
+
+  return {
+    profile: newProfile,
+    alsoAllow: newAlsoAllow,
+    ...(newDeny.length > 0 ? { deny: newDeny } : {}),
+  };
+}
+
+/**
  * 计算 tools RPC 参数（profile + alsoAllow + deny）
  */
 export function computeToolsUpdate(
