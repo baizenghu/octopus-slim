@@ -541,15 +541,14 @@ export class IMRouter {
           let workspacePath: string, filesPath: string, outputsPath: string, tempPath: string;
           if (this.workspaceManager) {
             workspacePath = this.workspaceManager.getAgentWorkspacePath(userId, agentName);
-            filesPath = path.join(workspacePath, 'files');
-            outputsPath = path.join(workspacePath, 'outputs');
-            tempPath = path.join(workspacePath, 'temp');
+            filesPath = this.workspaceManager.getSubPath(userId, 'FILES');
+            outputsPath = this.workspaceManager.getSubPath(userId, 'OUTPUTS');
+            tempPath = this.workspaceManager.getSubPath(userId, 'TEMP');
           } else if (this.dataRoot) {
-            const base = path.join(this.dataRoot, 'users', userId, 'agents', agentName, 'workspace');
-            workspacePath = base;
-            filesPath = path.join(base, 'files');
-            outputsPath = path.join(base, 'outputs');
-            tempPath = path.join(base, 'temp');
+            workspacePath = path.join(this.dataRoot, 'users', userId, 'agents', agentName, 'workspace');
+            filesPath = path.join(this.dataRoot, 'users', userId, 'files');
+            outputsPath = path.join(this.dataRoot, 'users', userId, 'outputs');
+            tempPath = path.join(this.dataRoot, 'users', userId, 'temp');
           } else {
             throw new Error('no workspace info');
           }

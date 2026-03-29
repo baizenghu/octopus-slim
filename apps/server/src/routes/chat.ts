@@ -259,8 +259,8 @@ export function createChatRouter(
     // 处理附件
     let finalMessage = message?.trim() || '';
     if (Array.isArray(attachments) && attachments.length > 0) {
-      const wsRoot = workspaceManager.getAgentWorkspacePath(user.id, agentName);
-      const { savedPaths, error } = await processAttachments(attachments, wsRoot);
+      const filesDir = workspaceManager.getSubPath(user.id, 'FILES');
+      const { savedPaths, error } = await processAttachments(attachments, filesDir);
       if (error) { res.status(413).json({ error }); return; }
       if (savedPaths.length > 0) {
         const fileList = savedPaths.map(p => `- ${p}`).join('\n');
@@ -532,8 +532,8 @@ export function createChatRouter(
     // 处理附件
     let finalMsgNonStream = message?.trim() || '';
     if (Array.isArray(attNonStream) && attNonStream.length > 0) {
-      const wsRootNS = workspaceManager.getAgentWorkspacePath(user.id, agentNameNS);
-      const { savedPaths, error } = await processAttachments(attNonStream, wsRootNS);
+      const filesDirNS = workspaceManager.getSubPath(user.id, 'FILES');
+      const { savedPaths, error } = await processAttachments(attNonStream, filesDirNS);
       if (error) { res.status(413).json({ error }); return; }
       if (savedPaths.length > 0) {
         const fileList = savedPaths.map(p => `- ${p}`).join('\n');

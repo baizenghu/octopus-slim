@@ -93,7 +93,7 @@ export function createImInternalRouter(imService: IMService, workspaceManager?: 
       outputsDir = workspaceManager.getSubPath(userId, 'OUTPUTS');
     } else {
       const dataRoot = process.env.DATA_ROOT || './data';
-      outputsDir = path.join(dataRoot, 'users', userId, 'workspace', 'outputs');
+      outputsDir = path.join(dataRoot, 'users', userId, 'outputs');
     }
 
     const filePath = path.join(outputsDir, safeName);
