@@ -13,7 +13,10 @@
     "build": "turbo build",
     "test": "vitest run",
     "typecheck": "turbo typecheck",
-    "clean": "turbo clean"
+    "clean": "turbo clean",
+    "db:migrate": "prisma migrate deploy",
+    "db:migrate:create": "prisma migrate dev --name",
+    "db:push": "prisma db push"
   },
   "devDependencies": {
     "@prisma/client": "6",

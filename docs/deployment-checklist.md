@@ -12,7 +12,7 @@
   - `DB_ENCRYPTION_KEY` — 数据库字段加密 (`openssl rand -hex 32`)
 - [ ] 执行 `./setup.sh`
 - [ ] 执行 `pnpm db:migrate`（或开发环境 `pnpm db:push`）
-- [ ] 执行 `./start.sh` 或 `pm2 start ecosystem.config.js`
+- [ ] 执行 `./start.sh` 启动服务
 - [ ] 验证: `curl http://localhost:18790/health` -> `{"status":"ok"}`
 - [ ] 访问管理后台 `http://localhost:3001` 并创建管理员账号
 
@@ -23,7 +23,7 @@
 - [ ] `pnpm prisma generate` 重新生成 Prisma Client
 - [ ] `pnpm db:migrate` 应用新迁移
 - [ ] `pnpm build` 重新构建
-- [ ] 重启服务: `pm2 restart octopus` 或 `systemctl restart octopus`
+- [ ] 重启服务: `./start.sh`（或 `systemctl restart octopus`）
 - [ ] 验证健康检查
 
 ## 故障排查
