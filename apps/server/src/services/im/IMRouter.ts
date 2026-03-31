@@ -310,20 +310,25 @@ export class IMRouter {
   private async handleStatus(adapter: IMAdapter, msg: IMIncomingMessage): Promise<void> {
     const { imUserId, channel } = msg;
 
-    const binding = await this.prisma.iMUserBinding.findUnique({
-      where: {
-        channel_imUserId: { channel, imUserId },
-      },
-    });
-
-    if (binding) {
-      const user = await this.prisma.user.findUnique({
-        where: { userId: binding.userId },
-        select: { username: true, displayName: true },
+    try {
+      const binding = await this.prisma.iMUserBinding.findUnique({
+        where: {
+          channel_imUserId: { channel, imUserId },
+        },
       });
-      await adapter.sendText(imUserId, `已绑定账号: ${user?.displayName || user?.username || binding.userId}`);
-    } else {
-      await adapter.sendText(imUserId, '未绑定。请发送：/bind 用户名 密码');
+
+      if (binding) {
+        const user = await this.prisma.user.findUnique({
+          where: { userId: binding.userId },
+          select: { username: true, displayName: true },
+        });
+        await adapter.sendText(imUserId, `已绑定账号: ${user?.displayName || user?.username || binding.userId}`);
+      } else {
+        await adapter.sendText(imUserId, '未绑定。请发送：/bind 用户名 密码');
+      }
+    } catch (err) {
+      logger.error('[IMRouter] handleStatus failed:', { error: err instanceof Error ? err.message : String(err) });
+      await adapter.sendText(imUserId, '查询状态失败，请稍后重试');
     }
   }
 
@@ -417,7 +422,11 @@ export class IMRouter {
       // 确保 native agent 存在
       await this.ensureAgent(userId, targetName);
 
-      // 更新 Map 并持久化
+      // 更新 Map 并持久化（超出上限时清空，防止内存泄漏）
+      if (this.activeAgents.size > 10000) {
+        this.activeAgents.clear();
+        logger.warn('[IMRouter] activeAgents exceeded 10000, cleared');
+      }
       this.activeAgents.set(imKey, targetName);
       saveActiveAgents(this.activeAgents);
       logger.info(`[im-router] agentSwitch: imKey=${imKey}, set to ${targetName}, map size=${this.activeAgents.size}`);
