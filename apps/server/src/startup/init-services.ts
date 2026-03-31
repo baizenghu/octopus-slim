@@ -159,8 +159,10 @@ export async function initServices(config: AppConfig): Promise<Services> {
   }
 
   // ── EngineAdapter ──
+  // EngineAdapter 使用进程内调用（handleGatewayRequest），不走 WebSocket，不需要 token。
+  // Gateway token 仅用于 subagent 子进程通过 WebSocket 连接引擎（由引擎自动生成写入 octopus.json）。
   let bridge: EngineAdapter | undefined;
-  if (config.nativeGateway.token) {
+  {
     bridge = new EngineAdapter();
     try {
       await bridge.initialize(19791);
@@ -268,8 +270,6 @@ export async function initServices(config: AppConfig): Promise<Services> {
       logger.warn('Native Gateway: connection failed', { error: err instanceof Error ? err.message : String(err) });
       logger.warn('Chat will not work until native gateway is available');
     }
-  } else {
-    logger.warn('Native Gateway: OCTOPUS_GATEWAY_TOKEN not set, bridge disabled');
   }
 
   // ── MCP + Agent 模板 ──
