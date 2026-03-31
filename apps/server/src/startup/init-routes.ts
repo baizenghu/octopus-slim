@@ -168,6 +168,18 @@ export async function initRoutes(params: {
   });
   app.use('/api/chat', chatLimiter);
 
+  // ── 管理接口频率限制（防止资源耗尽）──
+  const adminLimiter = rateLimit({
+    windowMs: 60_000,
+    max: 60,
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: (req) => (req as any).user?.id || req.ip || 'anonymous',
+    message: { error: '操作过于频繁，请稍后再试' },
+  });
+  app.use('/api/admin', adminLimiter);
+  app.use('/api/tool-sources', adminLimiter);
+
   // Fail-fast: DB 连接失败时直接退出，避免路由运行时 TypeError
   if (!prismaClient) {
     logger.error('数据库连接失败，Gateway 无法启动');
