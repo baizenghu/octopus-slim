@@ -119,33 +119,19 @@ export async function initRoutes(params: {
         nativeGatewayStatus = 'stopped';
       }
     }
-    const pluginStatus = (_name: string) => {
-      return nativeGatewayStatus === 'running' ? 'loaded' as const : 'not loaded' as const;
-    };
     const overallStatus = (nativeGatewayStatus === 'stopped' || dbStatus === 'error')
       ? 'degraded' : 'ok';
     const httpStatus = overallStatus === 'ok' ? 200 : 503;
 
     res.status(httpStatus).json({
-      // 向后兼容字段
       status: overallStatus,
-      nativeGateway: nativeGatewayStatus,
-      // 新增结构化字段
-      version: '1.0.0',
       timestamp: new Date().toISOString(),
       uptime: Math.floor((Date.now() - startTime) / 1000),
       services: {
         nativeGateway: nativeGatewayStatus,
         database: dbStatus,
         redis: redisStatus,
-        mockLdap: config.mockLdap,
       },
-      plugins: {
-        'enterprise-audit': pluginStatus('enterprise-audit'),
-        'enterprise-mcp': pluginStatus('enterprise-mcp'),
-        'memory-lancedb-pro': pluginStatus('memory-lancedb-pro'),
-      },
-      model: 'configured in octopus.json',
     });
   });
 

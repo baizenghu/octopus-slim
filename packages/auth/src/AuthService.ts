@@ -70,8 +70,10 @@ export class MockLDAPProvider implements LDAPProvider {
     if (!user) {
       throw new Error(`Authentication failed: user '${username}' not found`);
     }
-    // 优先使用自定义密码，否则默认 'password123'
-    const expectedPassword = this.passwords.get(username) || 'password123';
+    const expectedPassword = this.passwords.get(username);
+    if (!expectedPassword) {
+      throw new Error(`Authentication failed: no password configured for '${username}'`);
+    }
     // 支持 bcrypt 哈希密码（以 $2a$/$2b$ 开头）和明文密码（向后兼容）
     let passwordValid: boolean;
     if (expectedPassword.startsWith('$2a$') || expectedPassword.startsWith('$2b$')) {
