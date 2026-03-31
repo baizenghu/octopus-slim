@@ -136,7 +136,12 @@ export async function initRoutes(params: {
   });
 
   // ── Prometheus metrics ──
-  app.get('/metrics', async (_req, res) => {
+  app.get('/metrics', async (req, res) => {
+    const remoteIp = req.socket.remoteAddress;
+    if (remoteIp !== '127.0.0.1' && remoteIp !== '::1' && remoteIp !== '::ffff:127.0.0.1') {
+      res.status(403).json({ error: 'Forbidden' });
+      return;
+    }
     res.setHeader('Content-Type', register.contentType);
     res.send(await register.metrics());
   });
