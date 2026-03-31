@@ -130,54 +130,54 @@ const ROUTE_ACTION_MAP: Array<{
     getResource: (req) => `agent:${req.path.split('/')[3] || 'unknown'}`,
   },
 
-  // ─── MCP 个人（具体 pattern 排前面） ───
+  // ─── MCP/ToolSource 个人（具体 pattern 排前面） ───
   {
     method: 'POST',
-    pattern: /^\/api\/mcp\/personal\/upload/,
+    pattern: /^\/api\/tool-sources\/personal\/upload/,
     action: AuditAction.MCP_PERSONAL_UPLOAD,
   },
   {
     method: 'POST',
-    pattern: /^\/api\/mcp\/personal\/?$/,
+    pattern: /^\/api\/tool-sources\/personal\/?$/,
     action: AuditAction.MCP_PERSONAL_CREATE,
   },
   {
     method: 'PUT',
-    pattern: /^\/api\/mcp\/personal\//,
+    pattern: /^\/api\/tool-sources\/personal\//,
     action: AuditAction.MCP_PERSONAL_UPDATE,
     getResource: (req) => `mcp:personal:${req.path.split('/').pop() || 'unknown'}`,
   },
   {
     method: 'DELETE',
-    pattern: /^\/api\/mcp\/personal\//,
+    pattern: /^\/api\/tool-sources\/personal\//,
     action: AuditAction.MCP_PERSONAL_DELETE,
     getResource: (req) => `mcp:personal:${req.path.split('/').pop() || 'unknown'}`,
   },
 
-  // ─── MCP 企业级 ───
+  // ─── MCP/ToolSource 企业级 ───
   {
     method: 'POST',
-    pattern: /^\/api\/mcp\/servers\/[^/]+\/test/,
+    pattern: /^\/api\/tool-sources\/[^/]+\/test/,
     action: AuditAction.MCP_SERVER_TEST,
-    getResource: (req) => `mcp:${req.path.split('/')[4] || 'unknown'}`,
+    getResource: (req) => `mcp:${req.path.split('/')[3] || 'unknown'}`,
   },
   {
     method: 'POST',
-    pattern: /^\/api\/mcp\/servers\/?$/,
+    pattern: /^\/api\/tool-sources\/?$/,
     action: AuditAction.MCP_SERVER_CREATE,
     getResource: (req) => `mcp:${req.body?.name || 'unknown'}`,
   },
   {
     method: 'PUT',
-    pattern: /^\/api\/mcp\/servers\//,
+    pattern: /^\/api\/tool-sources\/[^/]+\/?$/,
     action: AuditAction.MCP_SERVER_UPDATE,
-    getResource: (req) => `mcp:${req.path.split('/')[4] || 'unknown'}`,
+    getResource: (req) => `mcp:${req.path.split('/')[3] || 'unknown'}`,
   },
   {
     method: 'DELETE',
-    pattern: /^\/api\/mcp\/servers\//,
+    pattern: /^\/api\/tool-sources\/[^/]+\/?$/,
     action: AuditAction.MCP_SERVER_DELETE,
-    getResource: (req) => `mcp:${req.path.split('/')[4] || 'unknown'}`,
+    getResource: (req) => `mcp:${req.path.split('/')[3] || 'unknown'}`,
   },
 
   // ─── Skill 个人（具体 pattern 排前面） ───
