@@ -103,7 +103,7 @@ export function createAgentsRouter(
   /**
    * 根据 agent 的 allowedToolSources + toolsFilter 生成 TOOLS.md 并写入 agent workspace
    * 权限变化时调用，保持 TOOLS.md 与配置实时同步
-   * @param allowedSources 统一白名单（null = 全部可用）
+   * @param allowedSources 统一白名单（null/[] = 禁用，[...] = 指定放行）
    */
   async function syncToolsMd(userId: string, agentName: string, allowedSources: string[] | null, toolsFilter?: string[]) {
     if (!bridge?.isConnected) return;
@@ -132,13 +132,13 @@ export function createAgentsRouter(
         select: { id: true, name: true, description: true },
       });
 
-      // 4. 按 allowedSources 过滤，构建 MCP 工具列表（null = 全部可用）
-      const filterSet = allowedSources !== null ? new Set(allowedSources) : null;
+      // 4. 按 allowedSources 过滤，构建 MCP 工具列表（null/[] = 禁用）
+      const filterSet = new Set(allowedSources || []);
 
       // 企业级工具
       const serverToolMap = new Map<string, { serverName: string; tools: Array<{ name: string; desc: string }> }>();
       for (const tool of cachedTools) {
-        if (filterSet !== null && !filterSet.has(tool.serverId) && !filterSet.has(tool.serverName)) continue;
+        if (!filterSet.has(tool.serverId) && !filterSet.has(tool.serverName)) continue;
         if (!serverToolMap.has(tool.serverId)) {
           serverToolMap.set(tool.serverId, { serverName: tool.serverName, tools: [] });
         }
@@ -157,7 +157,7 @@ export function createAgentsRouter(
 
       // 个人级工具（仅在 cache 中未找到时才作为兜底显示）
       for (const ps of personalServers) {
-        if (filterSet !== null && !filterSet.has(ps.id) && !filterSet.has(ps.name)) continue;
+        if (!filterSet.has(ps.id) && !filterSet.has(ps.name)) continue;
         // 如果 tools-cache 已有该 server 的详细工具，跳过兜底
         if (serverToolMap.has(ps.id)) continue;
         lines.push(`## ${ps.name}`);
@@ -168,15 +168,35 @@ export function createAgentsRouter(
         mcpToolCount++;
       }
 
+      // 5. Skill 类型工具源（通过 run_skill 调用）
+      let skillCount = 0;
+      if (filterSet.size > 0) {
+        const skills = await prisma.toolSource.findMany({
+          where: { type: 'skill', enabled: true },
+          select: { name: true, description: true, scope: true, ownerId: true },
+        });
+        const allowedSkills = skills.filter(s => filterSet.has(s.name));
+        if (allowedSkills.length > 0) {
+          lines.push('## Skills');
+          lines.push('');
+          for (const skill of allowedSkills) {
+            lines.push(`- **${skill.name}**${skill.description ? ` — ${skill.description}` : ''}`);
+            lines.push(`  调用方式: \`run_skill(skill_name="${skill.name}", args="...")\``);
+            skillCount++;
+          }
+          lines.push('');
+        }
+      }
+
       const nativeCount = toolsFilter?.length || 0;
-      if (nativeCount === 0 && mcpToolCount === 0) {
+      if (nativeCount === 0 && mcpToolCount === 0 && skillCount === 0) {
         await bridge.call('agents.files.set', { agentId: nativeAgentId, name: 'TOOLS.md', content: '# 可用工具\n\n当前未配置任何工具。\n' });
         logger.info(`[agents] TOOLS.md cleared for ${nativeAgentId} (no tools)`);
         return;
       }
 
       await bridge.call('agents.files.set', { agentId: nativeAgentId, name: 'TOOLS.md', content: lines.join('\n') });
-      logger.info(`[agents] TOOLS.md synced for ${nativeAgentId} (native: ${nativeCount}, mcp: ${mcpToolCount})`);
+      logger.info(`[agents] TOOLS.md synced for ${nativeAgentId} (native: ${nativeCount}, mcp: ${mcpToolCount}, skill: ${skillCount})`);
     } catch (e: unknown) {
       logger.error(`[agents] syncToolsMd failed for ${agentName}:`, { error: e instanceof Error ? e.message : String(e) });
     }
@@ -211,30 +231,36 @@ export function createAgentsRouter(
     const defaultAllowedSources = resolveAllowedToolSources(undefined, defaultMcpFilter, defaultSkillsFilter);
     // 计算 tools deny/profile 写入 DB（引擎通过 AgentStore 从 DB 读取）
     const defaultTools = computeToolsFromAllowedSources(defaultAllowedSources, defaultToolsFilter, 'default');
-    await prisma.agent.create({
-      data: {
-        id: TenantEngineAdapter.forUser(bridge!, userId).agentId('default'),
-        name: 'default',
-        description: '主助手，处理各种通用任务',
-        ownerId: userId,
-        enabled: true,
-        isDefault: true,
-        identity: { name: 'Octopus AI', emoji: '🐙' },
-        allowedToolSources: toJsonValue(defaultAllowedSources),
-        toolsFilter: defaultToolsFilter,
-        skillsFilter: defaultSkillsFilter,
-        mcpFilter: defaultMcpFilter,
-        allowedConnections: connections.map((c: { name: string }) => c.name),
-        toolsProfile: defaultTools.profile,
-        toolsDeny: defaultTools.deny ?? [],
-        toolsAllow: defaultTools.alsoAllow,
-      },
-    });
+    try {
+      await prisma.agent.create({
+        data: {
+          id: TenantEngineAdapter.forUser(bridge!, userId).agentId('default'),
+          name: 'default',
+          description: '主助手，处理各种通用任务',
+          ownerId: userId,
+          enabled: true,
+          isDefault: true,
+          identity: { name: 'Octopus AI', emoji: '🐙' },
+          allowedToolSources: toJsonValue(defaultAllowedSources),
+          toolsFilter: defaultToolsFilter,
+          skillsFilter: defaultSkillsFilter,
+          mcpFilter: defaultMcpFilter,
+          allowedConnections: connections.map((c: { name: string }) => c.name),
+          toolsProfile: defaultTools.profile,
+          toolsDeny: defaultTools.deny ?? [],
+          toolsAllow: defaultTools.alsoAllow,
+        },
+      });
 
-    // 首次创建 default agent 时同步 TOOLS.md（包含原生工具 + MCP 工具）
-    syncToolsMd(userId, 'default', defaultMcpFilter, defaultToolsFilter).catch((e: unknown) =>
-      logger.error('[agents] syncToolsMd for new default agent failed:', { error: e instanceof Error ? e.message : String(e) }),
-    );
+      // 首次创建 default agent 时同步 TOOLS.md（包含原生工具 + MCP 工具）
+      syncToolsMd(userId, 'default', defaultMcpFilter, defaultToolsFilter).catch((e: unknown) =>
+        logger.error('[agents] syncToolsMd for new default agent failed:', { error: e instanceof Error ? e.message : String(e) }),
+      );
+    } catch (err: unknown) {
+      // 并发竞态：另一个请求已创建，忽略 UNIQUE 冲突
+      if (err instanceof Error && err.message.includes('Unique constraint')) return;
+      throw err;
+    }
   }
 
   /**
