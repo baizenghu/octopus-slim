@@ -117,9 +117,10 @@ export function createChatRouter(
         });
         const mcpId = mcpServer?.id || mcpArg;
         const mcpName = mcpServer?.name || mcpArg;
-        // 校验 agent 的 mcpFilter 白名单（null/[] = 全部禁用，有值数组 = 白名单）
-        const mcpAllow = agent?.mcpFilter as string[] | null | undefined;
-        if (!Array.isArray(mcpAllow) || mcpAllow.length === 0 || (!mcpAllow.includes(mcpId) && !mcpAllow.includes(mcpName))) {
+        // 校验 agent 的 allowedToolSources 统一白名单
+        const srcAllow = agent?.allowedToolSources as string[] | null | undefined;
+        // null/undefined = 全部放行（不设限 Agent），[] = 全部禁止，array = 白名单
+        if (Array.isArray(srcAllow) && (srcAllow.length === 0 || (!srcAllow.includes(mcpId) && !srcAllow.includes(mcpName)))) {
           return { reply: `当前 Agent 不允许使用 MCP 工具 \`${mcpName}\`` };
         }
         const prefs = sessionPrefs.get(sessionId) || { updatedAt: Date.now() };
@@ -159,9 +160,9 @@ export function createChatRouter(
         }
         const skillId = skillRecord.id;
         const skillName = skillRecord.name;
-        // 校验 agent 的 skillsFilter 白名单（null/[] = 全部禁用，有值数组 = 白名单）
-        const skillAllow = agent?.skillsFilter as string[] | null | undefined;
-        if (!Array.isArray(skillAllow) || skillAllow.length === 0 || (!skillAllow.includes(skillId) && !skillAllow.includes(skillName))) {
+        // 校验 agent 的 allowedToolSources 统一白名单
+        const skillSrcAllow = agent?.allowedToolSources as string[] | null | undefined;
+        if (Array.isArray(skillSrcAllow) && (skillSrcAllow.length === 0 || (!skillSrcAllow.includes(skillId) && !skillSrcAllow.includes(skillName)))) {
           return { reply: `当前 Agent 不允许使用 Skill \`${skillName}\`，请联系管理员授权` };
         }
         const prefs = sessionPrefs.get(sessionId) || { updatedAt: Date.now() };
