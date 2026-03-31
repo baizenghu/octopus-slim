@@ -128,9 +128,7 @@ export class PrismaAgentStore implements AgentStore {
     // workspace — 统一到 data/users/{userId}/agents/{name}/workspace/
     if (this.dataRoot && record.ownerId && record.name) {
       const wsPath = path.join(this.dataRoot, 'users', record.ownerId, 'agents', record.name, 'workspace');
-      if (!fs.existsSync(wsPath)) {
-        try { fs.mkdirSync(wsPath, { recursive: true, mode: 0o777 }); } catch { /* ignore */ }
-      }
+      // 目录创建已移至 create()/update()，此处仅做路径映射（避免同步 IO 阻塞事件循环）
       entry.workspace = wsPath;
     }
 
