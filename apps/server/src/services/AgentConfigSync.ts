@@ -179,7 +179,13 @@ export async function syncAgentToEngine(
             logger.info(`skills: ${targetId} → [${skillSources.join(', ')}]`);
           }
         }
-      } catch { /* DB 查询失败时跳过 tools 同步，不阻塞 model/subagents 更新 */ }
+      } catch (e: unknown) {
+        logger.warn('tools sync skipped due to DB error (model/subagents update continues)', {
+          error: e instanceof Error ? e.message : String(e),
+          userId,
+          agentName: opts.agentName,
+        });
+      }
     }
 
     try {
