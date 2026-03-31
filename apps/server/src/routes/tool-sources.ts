@@ -890,6 +890,13 @@ export function createToolSourcesRouter(
         return;
       }
 
+      // 未通过安全扫描的 Skill 不可审批
+      const scanReport = cfg['scanReport'] as { passed?: boolean } | undefined;
+      if (!scanReport?.passed) {
+        res.status(400).json({ error: '请先完成安全扫描且扫描通过后再审批' });
+        return;
+      }
+
       const source = await prisma.toolSource.update({
         where: { id },
         data: {
