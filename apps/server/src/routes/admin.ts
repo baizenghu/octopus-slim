@@ -138,16 +138,20 @@ export function createAdminRouter(
         },
       });
 
+      // 注册到 MockLDAP（在返回响应之前，确保创建完整）
+      try {
+        const registered = authService.registerMockUser(
+          { username, email, displayName: displayName || username, department: department || '' },
+          hashedPassword,
+        );
+        logger.info(`[admin] User '${username}' created. MockLDAP registered: ${registered}`);
+      } catch (e: unknown) {
+        logger.warn(`[admin] MockLDAP registration failed for '${username}':`, { error: e instanceof Error ? e.message : String(e) });
+      }
+
       // 排除 passwordHash，防止泄露到客户端
       const { passwordHash: _ph, ...safeUser } = user;
       res.status(201).json(safeUser);
-
-      // 注册到 MockLDAP（传入 bcrypt 哈希，与启动同步和 PUT 更新保持一致）
-      const registered = authService.registerMockUser(
-        { username, email, displayName: displayName || username, department: department || '' },
-        hashedPassword,
-      );
-      logger.info(`[admin] User '${username}' created. MockLDAP registered: ${registered}`);
     } catch (err: unknown) {
       next(err instanceof Error ? err : new Error(String(err)));
     }
@@ -352,7 +356,9 @@ export function createAdminRouter(
             try {
               await rm(stateDir, { recursive: true, force: true });
               logger.info(`[admin] Cleaned state dir: ${stateDir}`);
-            } catch { }
+            } catch (e: unknown) {
+              logger.warn(`[admin] Failed to clean state dir: ${stateDir}`, { error: e instanceof Error ? e.message : String(e) });
+            }
           }
         }, 2000);
       }
