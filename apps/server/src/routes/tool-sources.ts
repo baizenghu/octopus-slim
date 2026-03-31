@@ -1031,6 +1031,15 @@ export function createToolSourcesRouter(
         return;
       }
 
+      // SSRF 防护（与企业级一致）
+      if (transport === 'http' && url) {
+        const check = validateMcpUrl(url);
+        if (!check.valid) {
+          res.status(400).json({ error: check.error });
+          return;
+        }
+      }
+
       const id = `mcp-personal-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       const source = await prisma.toolSource.create({
         data: {
