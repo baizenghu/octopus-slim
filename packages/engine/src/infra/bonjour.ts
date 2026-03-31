@@ -96,7 +96,6 @@ export async function startGatewayBonjourAdvertiser(
   // Keep only the first label and normalize away a trailing `.local`.
   const hostnameRaw =
     process.env.OCTOPUS_MDNS_HOSTNAME?.trim() ||
-    process.env.CLAWDBOT_MDNS_HOSTNAME?.trim() ||
     "octopus";
   const hostname =
     hostnameRaw
