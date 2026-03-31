@@ -564,7 +564,9 @@ export function createSessionsRouter(
         const agent = await loadAgentFromDb(prisma, user.id, reqAgentId);
         const agentName = agent?.name || 'default';
         sessionKey = req.tenantBridge!.sessionKey(agentName, sessionId);
-      } else if (!validateSessionOwnership(sessionId, user.id)) {
+      }
+      // 统一校验 sessionKey 归属（短 ID 和长 ID 都需要）
+      if (sessionKey.startsWith('agent:') && !validateSessionOwnership(sessionKey, user.id)) {
         res.status(403).json({ error: 'Access denied' });
         return;
       }
