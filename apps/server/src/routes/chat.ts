@@ -32,7 +32,6 @@ import { validateSessionOwnership } from '../utils/ownership';
 import { sanitizeResponse } from '../utils/ContentSanitizer';
 import { stripReasoningTagsFromText } from '../utils/reasoning-tags';
 import { autoGenerateTitle, loadAgentFromDb } from './sessions';
-import { buildEnterpriseSystemPrompt } from '../services/SystemPromptBuilder';
 import { checkDueReminders } from './scheduler';
 import { createLogger } from '../utils/logger';
 
@@ -375,8 +374,8 @@ export function createChatRouter(
     // P0 fix: 递增放在 close handler 注册之后，保证任何异常路径都能递减
     activeStreams.set(user.id, currentStreams + 1);
 
-    // 构建企业级 extraSystemPrompt
-    const extraPrompt = await buildEnterpriseSystemPrompt(user, agent, { prisma, workspaceManager, dataRoot });
+    // 企业级上下文由 enterprise-mcp 插件的 before_prompt_build hook 统一注入
+    // 不再通过 extraSystemPrompt 传递，避免双重注入
 
     // 注入 session 级 skill/mcp 偏好到消息中（类似 CC 的 /skill 指令效果）
     const prefs = sessionPrefs.get(sid0);
@@ -399,13 +398,19 @@ export function createChatRouter(
     // 思考模式：追踪已发送的 thinking / answer 文本，分离推送
     let prevThinkingSent = '';
     let prevAnswerSent = '';
+
+    /** 安全写入 SSE：连接已关闭时静默跳过 */
+    function safeWrite(data: string): boolean {
+      if (streamDone || res.writableEnded) return false;
+      try { res.write(data); return true; } catch { streamDone = true; return false; }
+    }
+
     try {
       await bridge.callAgent(
         {
           message: finalMessage,
           agentId: nativeAgentId,
           sessionKey,
-          extraSystemPrompt: extraPrompt,
           deliver: false,
           isAdmin: isAdmin(user),
         },
@@ -427,7 +432,7 @@ export function createChatRouter(
                   : cleaned;
                 prevAnswerSent = cleaned;
                 if (delta) {
-                  res.write(`data: ${JSON.stringify({ content: delta, done: false })}\n\n`);
+                  safeWrite(`data: ${JSON.stringify({ content: delta, done: false })}\n\n`);
                 }
               } else {
                 // 思考模式：分离 thinking 和 answer
@@ -455,7 +460,7 @@ export function createChatRouter(
                   : thinkContent;
                 prevThinkingSent = thinkContent;
                 if (thinkDelta) {
-                  res.write(`data: ${JSON.stringify({ thinking: thinkDelta, done: false })}\n\n`);
+                  safeWrite(`data: ${JSON.stringify({ thinking: thinkDelta, done: false })}\n\n`);
                 }
 
                 // 推送 answer 增量
@@ -464,7 +469,7 @@ export function createChatRouter(
                   : answerContent;
                 prevAnswerSent = answerContent;
                 if (answerDelta) {
-                  res.write(`data: ${JSON.stringify({ content: answerDelta, done: false })}\n\n`);
+                  safeWrite(`data: ${JSON.stringify({ content: answerDelta, done: false })}\n\n`);
                 }
               }
               break;
@@ -474,7 +479,7 @@ export function createChatRouter(
                 hasDelegation = true;
                 logger.info(`[chat] sessions_spawn detected, hasDelegation=true`);
               }
-              res.write(`data: ${JSON.stringify({ content: '', toolCall: true, tools: [event.toolName], toolCallId: event.toolCallId, toolArgs: event.toolArgs, toolResult: event.toolResult, done: false })}\n\n`);
+              safeWrite(`data: ${JSON.stringify({ content: '', toolCall: true, tools: [event.toolName], toolCallId: event.toolCallId, toolArgs: event.toolArgs, toolResult: event.toolResult, done: false })}\n\n`);
               break;
             case 'thinking': {
               // 原生 thinking stream：直接推送思考内容增量
@@ -485,7 +490,7 @@ export function createChatRouter(
                   : thinkText;
                 prevThinkingSent = thinkText;
                 if (thinkDelta2) {
-                  res.write(`data: ${JSON.stringify({ thinking: thinkDelta2, done: false })}\n\n`);
+                  safeWrite(`data: ${JSON.stringify({ thinking: thinkDelta2, done: false })}\n\n`);
                 }
               }
               break;
@@ -494,20 +499,20 @@ export function createChatRouter(
               streamDone = true;
               // 返回完整 sessionKey（而非短 sid），前端轮询和后续请求需要完整 key
               logger.info(`[chat] done event: hasDelegation=${hasDelegation}, sessionKey=${sessionKey}`);
-              res.write(`data: ${JSON.stringify({ content: '', done: true, sessionId: sessionKey, ...(hasDelegation ? { delegated: true } : {}) })}\n\n`);
+              safeWrite(`data: ${JSON.stringify({ content: '', done: true, sessionId: sessionKey, ...(hasDelegation ? { delegated: true } : {}) })}\n\n`);
               clearInterval(heartbeat);
               clearInterval(reminderInterval);
-              res.end();
+              try { res.end(); } catch { /* already closed */ }
               // 异步生成标题（不阻塞响应）
               autoGenerateTitle(bridge!, sessionKey).catch(err => logger.error('[TitleGen] Failed:', { error: err instanceof Error ? err.message : String(err), stack: err instanceof Error ? err.stack : undefined }));
               break;
             }
             case 'error':
               streamDone = true;
-              res.write(`data: ${JSON.stringify({ error: event.error, done: true })}\n\n`);
+              safeWrite(`data: ${JSON.stringify({ error: event.error, done: true })}\n\n`);
               clearInterval(heartbeat);
               clearInterval(reminderInterval);
-              res.end();
+              try { res.end(); } catch { /* already closed */ }
               break;
           }
         },
@@ -592,7 +597,7 @@ export function createChatRouter(
       sessionKey = req.tenantBridge!.sessionKey(agentNameNS, sid);
     }
     await ensureNativeAgent(user.id, agentNameNS);
-    const extraPrompt = await buildEnterpriseSystemPrompt(user, agentNS, { prisma, workspaceManager, dataRoot });
+    // 企业级上下文由 before_prompt_build hook 统一注入
 
     // 注入 session 级 skill/mcp 偏好
     const prefsNS = sessionPrefs.get(sid0);
@@ -610,7 +615,7 @@ export function createChatRouter(
     try {
       await new Promise<void>((resolve, reject) => {
         bridge!.callAgent(
-          { message: finalMsgNonStream, agentId: nativeAgentId, sessionKey, extraSystemPrompt: extraPrompt, deliver: false, isAdmin: isAdmin(user) },
+          { message: finalMsgNonStream, agentId: nativeAgentId, sessionKey, deliver: false, isAdmin: isAdmin(user) },
           (event) => {
             // native data.text 是累积全量文本（不是增量片段），直接替换
             if (event.type === 'text_delta') fullContent = event.content || fullContent;
