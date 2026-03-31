@@ -473,7 +473,7 @@ export function createSessionsRouter(
    * 轻量级会话状态检查（委派轮询优化）
    * 只返回 completed + messageCount，避免每次轮询都拉全量历史
    */
-  router.get('/sessions/:sessionId/status', authMiddleware, async (req: AuthenticatedRequest, res) => {
+  router.get('/sessions/:sessionId/status', authMiddleware, async (req: AuthenticatedRequest, res, next) => {
     const user = req.user!;
     let sessionId = req.params.sessionId;
     if (!sessionId.startsWith('agent:')) {
@@ -498,7 +498,7 @@ export function createSessionsRouter(
       const completed = !lastMsg || lastMsg.role === 'assistant';
       res.json({ completed, messageCount: userAssistantMsgs.length });
     } catch (err: unknown) {
-      res.status(500).json({ error: (err as Error).message });
+      next(err);
     }
   });
 

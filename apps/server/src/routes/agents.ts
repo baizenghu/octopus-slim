@@ -834,7 +834,7 @@ export function createAgentsRouter(
   /**
    * 获取 Agent 头像（无需 JWT，用于 img src 直接引用）
    */
-  router.get('/:id/avatar', async (req, res) => {
+  router.get('/:id/avatar', async (req, res, next) => {
     try {
       const { id } = req.params;
 
@@ -859,7 +859,7 @@ export function createAgentsRouter(
 
       res.status(404).json({ error: '头像不存在' });
     } catch (err: unknown) {
-      res.status(500).json({ error: (err as Error).message || '获取头像失败' });
+      next(err);
     }
   });
 

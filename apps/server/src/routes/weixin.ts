@@ -87,7 +87,7 @@ export function createWeixinRoutes(params: {
   });
 
   // 内部 API：CLI 扫码成功后通知 gateway 热加载
-  router.post('/reload', async (req, res) => {
+  router.post('/reload', async (req, res, next) => {
     const internalToken = process.env.INTERNAL_TOKEN || process.env.OCTOPUS_GATEWAY_TOKEN || '';
     const reqToken = req.headers['x-internal-token'] as string || '';
     if (!internalToken || reqToken !== internalToken) {
@@ -103,7 +103,7 @@ export function createWeixinRoutes(params: {
       await weixinManager.startUser(userId);
       res.json({ success: true, message: `Adapter started for ${userId}` });
     } catch (e: unknown) {
-      res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
+      next(e);
     }
   });
 

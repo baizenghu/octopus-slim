@@ -129,7 +129,7 @@ export function createAuthRouter(authService: AuthService, workspaceManager: Wor
   /**
    * 登出
    */
-  router.post('/logout', authMiddleware, async (req: AuthenticatedRequest, res) => {
+  router.post('/logout', authMiddleware, async (req: AuthenticatedRequest, res, next) => {
     try {
       const token = req.headers.authorization?.substring(7);
       if (token) {
@@ -137,14 +137,14 @@ export function createAuthRouter(authService: AuthService, workspaceManager: Wor
       }
       res.json({ message: 'Logged out' });
     } catch (err: unknown) {
-      res.status(500).json({ error: err instanceof Error ? err.message : 'Logout failed' });
+      next(err);
     }
   });
 
   /**
    * 修改密码（当前用户）
    */
-  router.put('/password', authMiddleware, async (req: AuthenticatedRequest, res) => {
+  router.put('/password', authMiddleware, async (req: AuthenticatedRequest, res, next) => {
     try {
       const user = req.user!;
       const { oldPassword, newPassword } = req.body;
@@ -194,7 +194,7 @@ export function createAuthRouter(authService: AuthService, workspaceManager: Wor
 
       res.json({ message: '密码修改成功' });
     } catch (err: unknown) {
-      res.status(500).json({ error: err instanceof Error ? err.message : '密码修改失败' });
+      next(err);
     }
   });
 
@@ -218,7 +218,7 @@ export function createAuthRouter(authService: AuthService, workspaceManager: Wor
   /**
    * 上传用户头像
    */
-  router.post('/avatar', authMiddleware, (req, res) => {
+  router.post('/avatar', authMiddleware, (req, res, next) => {
     createAvatarUpload().single('avatar')(req, res, (err: unknown) => {
       if (err) {
         res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
@@ -261,7 +261,7 @@ export function createAuthRouter(authService: AuthService, workspaceManager: Wor
 
           res.json({ ok: true, avatarUrl: `/api/auth/avatar/${user.id}` });
         } catch (err: unknown) {
-          res.status(500).json({ error: err instanceof Error ? err.message : '头像上传失败' });
+          next(err);
         }
       })();
     });
@@ -270,7 +270,7 @@ export function createAuthRouter(authService: AuthService, workspaceManager: Wor
   /**
    * 获取用户头像（无需 JWT，用于 img src 直接引用）
    */
-  router.get('/avatar/:userId', async (req, res) => {
+  router.get('/avatar/:userId', async (req, res, next) => {
     try {
       const { userId } = req.params;
 
@@ -299,7 +299,7 @@ export function createAuthRouter(authService: AuthService, workspaceManager: Wor
 
       res.status(404).json({ error: '头像不存在' });
     } catch (err: unknown) {
-      res.status(500).json({ error: err instanceof Error ? err.message : '获取头像失败' });
+      next(err);
     }
   });
 
