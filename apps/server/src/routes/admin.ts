@@ -262,6 +262,12 @@ export function createAdminRouter(
         }
       }
 
+      // ── userId 格式白名单校验（防止命令注入） ──
+      if (!/^user-[a-zA-Z0-9.\-]+$/.test(id)) {
+        res.status(400).json({ error: '用户 ID 格式不合法' });
+        return;
+      }
+
       // ── 清理该用户的所有 agent（原生 gateway + memory scope） ──
       const userAgents = await prisma.agent.findMany({
         where: { ownerId: id },
@@ -286,12 +292,6 @@ export function createAdminRouter(
         bridge.call('agents.delete', { agentId: defaultNativeId, deleteFiles: true }).catch(() => { });
       }
       // memory scope 无需清理
-
-      // ── userId 格式白名单校验（防止命令注入） ──
-      if (!/^user-[a-zA-Z0-9.\-]+$/.test(id)) {
-        res.status(400).json({ error: '用户 ID 格式不合法' });
-        return;
-      }
 
       // ── 清理用户的 Docker sandbox 容器 ──
       try {
