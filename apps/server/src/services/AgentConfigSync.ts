@@ -32,11 +32,6 @@ function computeToolsDeny(toolsFilter: string[] | null): string[] {
   return deny;
 }
 
-/** 从 tools-cache.json 读取所有 MCP 工具，返回 { serverId, nativeToolName }[] */
-function readMcpToolsCache(): Array<{ serverId: string; nativeToolName: string }> {
-  return readToolsCache();
-}
-
 /**
  * 基于统一 ToolSource 白名单计算 tools RPC 参数（profile + alsoAllow + deny）
  *
@@ -65,7 +60,7 @@ export function computeToolsFromAllowedSources(
   let mcpDeny: string[] = [];
   let runSkillDeny: string[] = [];
   if (allowedSources !== null) {
-    const allMcpTools = readMcpToolsCache();
+    const allMcpTools = readToolsCache();
     const allMcpServerIds = new Set(allMcpTools.map(t => t.serverId));
 
     // MCP deny：deny 所有不在 allowedSources 中的 MCP 工具

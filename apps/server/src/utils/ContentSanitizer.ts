@@ -16,7 +16,6 @@ const SKILL_INJECT_RE = /^\[请(?:使用|严格按照|优先使用)\s+[^\]]*(?:\
 const LESSON_PREFIX_RE = /^\/lesson\s+/m;
 const ATTACHMENT_PREFIX_RE = /^\[用户上传了 \d+ 个文件，已保存到工作空间\]\n(?:- .+\n?)+\n?/m;
 // Legacy: 保留用于清理旧 session 中残留的 reminder 标签，新提醒走 cron 工具
-// Legacy: 保留用于清理旧 session 中残留的 reminder 标签，新提醒走 cron 工具
 const REMINDER_TAG_RE = /<enterprise-reminder[^>]*\/?>(<\/enterprise-reminder>)?/g;
 const RUNTIME_CONTEXT_RE = /Octopus runtime context/;
 const INTERNAL_EVENT_RE = /\[Internal task completion event\]/;

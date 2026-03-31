@@ -18,9 +18,6 @@
 
 import { Router } from 'express';
 import type { AuthService } from '@octopus/auth';
-import type { WorkspaceManager } from '@octopus/workspace';
-import type { AuditLogger } from '@octopus/audit';
-import type { GatewayConfig } from '../config';
 import { createAuthMiddleware, type AuthenticatedRequest } from '../middleware/auth';
 import { EngineAdapter } from '../services/EngineAdapter';
 import { validateSessionOwnership } from '../utils/ownership';
@@ -133,12 +130,9 @@ export async function loadAgentFromDb(
 }
 
 export function createSessionsRouter(
-  _config: GatewayConfig,
   authService: AuthService,
-  _workspaceManager: WorkspaceManager,
   bridge: EngineAdapter | undefined,
   prisma?: AppPrismaClient,
-  _auditLogger?: AuditLogger,
 ): Router {
   const router = Router();
   const authMiddleware = createAuthMiddleware(authService, prisma, bridge);

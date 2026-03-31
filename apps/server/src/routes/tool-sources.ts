@@ -1079,7 +1079,6 @@ export function createToolSourcesRouter(
   router.post('/personal/upload', authMiddleware, mcpUpload.single('file'), async (req: AuthenticatedRequest, res, next) => {
     const uploadedFile = req.file;
     let tempFile: string | null = null;
-    let projectDir: string | null = null;
 
     try {
       const user = req.user!;
@@ -1105,9 +1104,6 @@ export function createToolSourcesRouter(
         res.status(400).json({ error: '无法识别文件类型，请指定 type=mcp 或 type=skill' });
       }
     } catch (err) {
-      if (projectDir && fs.existsSync(projectDir)) {
-        try { fs.rmSync(projectDir, { recursive: true, force: true }); } catch { /* ignore */ }
-      }
       next(err);
     } finally {
       if (tempFile && fs.existsSync(tempFile)) {
@@ -1635,33 +1631,4 @@ export function createToolSourcesRouter(
   });
 
   return router;
-}
-
-// ─── 导出辅助函数（供其他模块使用，如 SystemPromptBuilder） ──────────────────
-
-/**
- * 获取用户可用的 MCP 类型工具源（企业级 + 个人级）
- * 替代原 getMergedMCPServers
- */
-export async function getMergedMCPServers(
-  prisma: AppPrismaClient,
-  userId: string,
-  agentMcpFilter: string[] | null = null,
-) {
-  const sources = await prisma.toolSource.findMany({
-    where: {
-      type: 'mcp',
-      enabled: true,
-      OR: [
-        { scope: 'enterprise' },
-        { scope: 'personal', ownerId: userId },
-      ],
-    },
-  });
-
-  if (agentMcpFilter !== null) {
-    return sources.filter((s) => agentMcpFilter.includes(s.name) || agentMcpFilter.includes(s.id));
-  }
-
-  return sources;
 }

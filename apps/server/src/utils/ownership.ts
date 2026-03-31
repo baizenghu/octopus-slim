@@ -16,11 +16,3 @@ export function validateSessionOwnership(sessionId: string, userId: string): boo
   // 短 ID 格式（仅 UUID）— 无法校验归属
   return false;
 }
-
-/**
- * 校验 agent ID 是否属于指定用户
- * agent ID 格式: ent_{userId}_{agentName}
- */
-export function validateAgentOwnership(agentId: string, userId: string): boolean {
-  return agentId.startsWith(`ent_${userId}_`);
-}

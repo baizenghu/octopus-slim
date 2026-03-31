@@ -24,7 +24,6 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as fsp from 'fs/promises';
 import { randomBytes } from 'crypto';
-import type { GatewayConfig } from '../config';
 import { getRuntimeConfig } from '../config';
 import { createAuthMiddleware, type AuthenticatedRequest } from '../middleware/auth';
 import type { AuthService } from '@octopus/auth';
@@ -71,7 +70,6 @@ function parseAgentPath(relativePath: string): { agentName: string; rest: string
 }
 
 export function createFilesRouter(
-  _config: GatewayConfig,
   authService: AuthService,
   workspaceManager: WorkspaceManager,
   prismaClient?: AppPrismaClient,

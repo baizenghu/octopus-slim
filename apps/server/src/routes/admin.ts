@@ -14,7 +14,6 @@ import * as path from 'path';
 import { rm } from 'fs/promises';
 import bcrypt from 'bcryptjs';
 import type { AuthService } from '@octopus/auth';
-import type { AuditLogger } from '@octopus/audit';
 import type { WorkspaceManager } from '@octopus/workspace';
 import { createAuthMiddleware, adminOnly, type AuthenticatedRequest } from '../middleware/auth';
 import { getRuntimeConfig } from '../config';
@@ -30,7 +29,6 @@ const logger = createLogger('admin');
 
 export function createAdminRouter(
   authService: AuthService,
-  _auditLogger: AuditLogger,
   prisma: AppPrismaClient,
   workspaceManager?: WorkspaceManager,
   bridge?: EngineAdapter,

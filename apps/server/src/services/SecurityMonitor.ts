@@ -5,7 +5,7 @@ import { createLogger } from '../utils/logger';
 const logger = createLogger('SecurityMonitor');
 
 interface SecurityEvent {
-  type: 'login_failure_burst' | 'suspicious_api_pattern' | 'sandbox_anomaly' | 'auth_bypass_attempt';
+  type: 'login_failure_burst' | 'suspicious_api_pattern' | 'auth_bypass_attempt';
   severity: 'warning' | 'critical';
   message: string;
   details: Record<string, any>;
@@ -86,19 +86,6 @@ export class SecurityMonitor extends EventEmitter {
       });
       this.apiCallCounts.delete(key);
     }
-  }
-
-  /**
-   * 记录认证绕过尝试（如使用过期/伪造 token）
-   */
-  recordAuthBypassAttempt(ip: string, reason: string): void {
-    this.raiseAlert({
-      type: 'auth_bypass_attempt',
-      severity: 'critical',
-      message: `认证绕过尝试：IP ${ip}，原因: ${reason}`,
-      details: { ip, reason },
-      timestamp: new Date(),
-    });
   }
 
   /**

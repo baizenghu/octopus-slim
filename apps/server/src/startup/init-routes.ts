@@ -177,13 +177,13 @@ export async function initRoutes(params: {
   // ── API 路由 ──
   app.use('/api/auth', createAuthRouter(authService, workspaceManager, prismaClient, config.workspace.dataRoot));
   app.use('/api/chat', createChatRouter(config, authService, workspaceManager, bridge, prismaClient, auditLogger));
-  app.use('/api/chat', createSessionsRouter(config, authService, workspaceManager, bridge, prismaClient, auditLogger));
+  app.use('/api/chat', createSessionsRouter(authService, bridge, prismaClient));
   app.use('/api/audit', createAuditRouter(authService, auditLogger, prismaClient));
-  app.use('/api/admin', createAdminRouter(authService, auditLogger, prismaClient!, workspaceManager, bridge));
+  app.use('/api/admin', createAdminRouter(authService, prismaClient!, workspaceManager, bridge));
   if (bridge) {
     app.use('/api/admin/config', createSystemConfigRouter(authService, bridge, prismaClient));
   }
-  app.use('/api/files', createFilesRouter(config, authService, workspaceManager, prismaClient));
+  app.use('/api/files', createFilesRouter(authService, workspaceManager, prismaClient));
   const toolSourcesRouter = createToolSourcesRouter(authService, prismaClient!, mcpRegistry, mcpExecutor, config.workspace.dataRoot, bridge);
   app.use('/api/tool-sources', toolSourcesRouter);
   app.use('/api/skills', toolSourcesRouter);  // 前端兼容别名
