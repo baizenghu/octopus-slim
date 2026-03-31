@@ -380,12 +380,13 @@ export class AuthService {
 
     if (!user) {
       // Gateway 重启后 InMemoryUserStore 丢失数据，从 JWT 恢复
+      // roles 强制降级为 ['user']，防止 JWT 伪造提权；admin 需重新登录获取
       user = await this.userStore.create({
         id: payload.userId,
         username: payload.username,
         email: `${payload.username}@sgcc.com.cn`,
         department: payload.department || '',
-        roles: payload.roles || ['user'],
+        roles: ['user'],
         quotas: DEFAULT_QUOTAS.default,
         status: 'active',
         lastLoginAt: new Date(),
