@@ -198,7 +198,7 @@ export class EngineAdapter extends EventEmitter {
     };
 
     // Promise 包装 respond 回调
-    return new Promise<T>((resolve, reject) => {
+    const rpcPromise = new Promise<T>((resolve, reject) => {
       let responded = false;
 
       void handleGatewayRequest({
@@ -237,6 +237,20 @@ export class EngineAdapter extends EventEmitter {
         }
       });
     });
+
+    // agent 方法超时由 SSE 层控制（30 分钟），此处只保护短时 RPC
+    if (method === 'agent') {
+      return rpcPromise;
+    }
+    const RPC_TIMEOUT_MS = 60_000;
+    const timeoutPromise = new Promise<T>((_, reject) => {
+      const timer = setTimeout(
+        () => reject(new Error(`RPC timeout after ${RPC_TIMEOUT_MS}ms: ${method}`)),
+        RPC_TIMEOUT_MS,
+      );
+      if (timer.unref) timer.unref();
+    });
+    return Promise.race([rpcPromise, timeoutPromise]);
   }
 
   // ---- Agent 调用 ----
