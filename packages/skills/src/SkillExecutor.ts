@@ -264,6 +264,8 @@ export class SkillExecutor {
       let stdout = '';
       let stderr = '';
       let killed = false;
+      let outputKilled = false;
+      const MAX_OUTPUT_SIZE = 1024 * 1024; // 1MB，与 executeInProcess 一致
 
       const child = spawn('docker', dockerArgs, {
         stdio: ['ignore', 'pipe', 'pipe'],
@@ -271,10 +273,20 @@ export class SkillExecutor {
 
       child.stdout?.on('data', (data: Buffer) => {
         stdout += data.toString();
+        if (!outputKilled && stdout.length + stderr.length > MAX_OUTPUT_SIZE) {
+          outputKilled = true;
+          killed = true;
+          child.kill('SIGKILL');
+        }
       });
 
       child.stderr?.on('data', (data: Buffer) => {
         stderr += data.toString();
+        if (!outputKilled && stdout.length + stderr.length > MAX_OUTPUT_SIZE) {
+          outputKilled = true;
+          killed = true;
+          child.kill('SIGKILL');
+        }
       });
 
       const timer = setTimeout(() => {
