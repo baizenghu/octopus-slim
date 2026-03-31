@@ -237,6 +237,12 @@ export function createAdminRouter(
         return;
       }
 
+      // ── userId 格式白名单校验（防止命令注入，必须在所有副作用之前） ──
+      if (!/^user-[a-zA-Z0-9.\-]+$/.test(id)) {
+        res.status(400).json({ error: '用户 ID 格式不合法' });
+        return;
+      }
+
       // 先查用户名（用于 MockLDAP 移除）
       const userToDelete = await prisma.user.findUnique({ where: { userId: id }, select: { username: true } });
       if (!userToDelete) {
@@ -258,12 +264,6 @@ export function createAdminRouter(
         } catch (e: unknown) {
           logger.error(`[admin] Cron cleanup failed for ${id}:`, { error: e instanceof Error ? e.message : String(e) });
         }
-      }
-
-      // ── userId 格式白名单校验（防止命令注入） ──
-      if (!/^user-[a-zA-Z0-9.\-]+$/.test(id)) {
-        res.status(400).json({ error: '用户 ID 格式不合法' });
-        return;
       }
 
       // ── 清理该用户的所有 agent（原生 gateway + memory scope） ──

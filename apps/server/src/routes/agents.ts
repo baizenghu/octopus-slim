@@ -212,12 +212,8 @@ export function createAgentsRouter(
     // 防止内存无限增长（超限时清空重来，最多导致多查一次 DB）
     if (defaultCheckedUsers.size > 5000) defaultCheckedUsers.clear();
     defaultCheckedUsers.add(userId);
-    const existing = await prisma.agent.findFirst({
-      where: { ownerId: userId, name: 'default' },
-    });
-    if (existing) return;
 
-    // 默认 agent 权限全部开启：查询所有已启用的 MCP/Skills/Connections
+    // 查询创建默认 agent 所需数据
     const [mcpServers, skills, connections] = await Promise.all([
       prisma.toolSource.findMany({ where: { type: 'mcp', enabled: true }, select: { id: true } }),
       prisma.toolSource.findMany({ where: { type: 'skill', enabled: true }, select: { name: true } }),
@@ -227,39 +223,38 @@ export function createAgentsRouter(
     const defaultMcpFilter = mcpServers.map((s: { id: string }) => s.id);
     const defaultToolsFilter = ['read', 'write', 'exec'];
     const defaultSkillsFilter = skills.map((s: { name: string }) => s.name);
-    // 默认 agent：null = 全部可用（所有已启用的 MCP + Skills）
-    const defaultAllowedSources = resolveAllowedToolSources(undefined, defaultMcpFilter, defaultSkillsFilter);
     // 计算 tools deny/profile 写入 DB（引擎通过 AgentStore 从 DB 读取）
-    const defaultTools = computeToolsFromAllowedSources(defaultAllowedSources, defaultToolsFilter, 'default');
-    try {
-      await prisma.agent.create({
-        data: {
-          id: TenantEngineAdapter.forUser(bridge!, userId).agentId('default'),
-          name: 'default',
-          description: '主助手，处理各种通用任务',
-          ownerId: userId,
-          enabled: true,
-          isDefault: true,
-          identity: { name: 'Octopus AI', emoji: '🐙' },
-          allowedToolSources: toJsonValue(defaultAllowedSources),
-          toolsFilter: defaultToolsFilter,
-          skillsFilter: defaultSkillsFilter,
-          mcpFilter: defaultMcpFilter,
-          allowedConnections: connections.map((c: { name: string }) => c.name),
-          toolsProfile: defaultTools.profile,
-          toolsDeny: defaultTools.deny ?? [],
-          toolsAllow: defaultTools.alsoAllow,
-        },
-      });
+    // defaultAllowedSources = null，表示全部放行（不限制工具源）
+    const defaultTools = computeToolsFromAllowedSources(null, defaultToolsFilter, 'default');
+    const agentId = TenantEngineAdapter.forUser(bridge!, userId).agentId('default');
+    const isNewAgent = !(await prisma.agent.findUnique({ where: { id: agentId }, select: { id: true } }));
+    await prisma.agent.upsert({
+      where: { id: agentId },
+      update: {},  // 已存在则不更新
+      create: {
+        id: agentId,
+        name: 'default',
+        description: '主助手，处理各种通用任务',
+        ownerId: userId,
+        enabled: true,
+        isDefault: true,
+        identity: { name: 'Octopus AI', emoji: '🐙' },
+        allowedToolSources: Prisma.JsonNull,  // null = 全部放行
+        toolsFilter: defaultToolsFilter,
+        skillsFilter: defaultSkillsFilter,
+        mcpFilter: defaultMcpFilter,
+        allowedConnections: connections.map((c: { name: string }) => c.name),
+        toolsProfile: defaultTools.profile,
+        toolsDeny: defaultTools.deny ?? [],
+        toolsAllow: defaultTools.alsoAllow,
+      },
+    });
 
-      // 首次创建 default agent 时同步 TOOLS.md（包含原生工具 + MCP 工具）
+    // 首次创建 default agent 时同步 TOOLS.md（包含原生工具 + MCP 工具）
+    if (isNewAgent) {
       syncToolsMd(userId, 'default', defaultMcpFilter, defaultToolsFilter).catch((e: unknown) =>
         logger.error('[agents] syncToolsMd for new default agent failed:', { error: e instanceof Error ? e.message : String(e) }),
       );
-    } catch (err: unknown) {
-      // 并发竞态：另一个请求已创建，忽略 UNIQUE 冲突
-      if (err instanceof Error && err.message.includes('Unique constraint')) return;
-      throw err;
     }
   }
 

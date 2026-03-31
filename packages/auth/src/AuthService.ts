@@ -50,19 +50,12 @@ export interface AuthServiceConfig {
 
 /**
  * Mock LDAP 提供者（开发环境用）
- * 
- * 预置用户列表，密码统一为 'password123'
+ *
+ * 无预置用户，所有用户通过管理后台 registerMockUser() 创建
  */
 export class MockLDAPProvider implements LDAPProvider {
-  private mockUsers: Map<string, LDAPUserInfo> = new Map([
-    ['admin', { username: 'admin', email: 'admin@sgcc.com.cn', displayName: '系统管理员', department: '信息中心' }],
-    ['zhangsan', { username: 'zhangsan', email: 'zhangsan@sgcc.com.cn', displayName: '张三', department: '调度中心' }],
-    ['lisi', { username: 'lisi', email: 'lisi@sgcc.com.cn', displayName: '李四', department: '运维部门' }],
-    ['wangwu', { username: 'wangwu', email: 'wangwu@sgcc.com.cn', displayName: '王五', department: '营销部门' }],
-    ['zhaoliu', { username: 'zhaoliu', email: 'zhaoliu@sgcc.com.cn', displayName: '赵六', department: '财务部门' }],
-  ]);
+  private mockUsers: Map<string, LDAPUserInfo> = new Map();
 
-  /** 用户密码表（默认 password123） */
   private passwords: Map<string, string> = new Map();
 
   async authenticate(username: string, password: string): Promise<LDAPUserInfo> {
@@ -371,26 +364,14 @@ export class AuthService {
   /**
    * 验证 Token 并返回用户信息
    *
-   * 如果 InMemoryUserStore 中找不到用户（Gateway 重启后），
-   * 则从 JWT payload 重建用户对象并写回 store
+   * 找不到用户时抛出错误，要求重新登录（消除 JWT payload 信任问题）
    */
   async verifyToken(token: string): Promise<User> {
     const payload = await this.tokenManager.verifyToken(token);
-    let user = await this.userStore.findById(payload.userId);
+    const user = await this.userStore.findById(payload.userId);
 
     if (!user) {
-      // Gateway 重启后 InMemoryUserStore 丢失数据，从 JWT 恢复
-      // roles 强制降级为 ['user']，防止 JWT 伪造提权；admin 需重新登录获取
-      user = await this.userStore.create({
-        id: payload.userId,
-        username: payload.username,
-        email: `${payload.username}@sgcc.com.cn`,
-        department: payload.department || '',
-        roles: ['user'],
-        quotas: DEFAULT_QUOTAS.default,
-        status: 'active',
-        lastLoginAt: new Date(),
-      });
+      throw new Error('Session expired: please re-login');
     }
 
     if (user.status !== 'active') {

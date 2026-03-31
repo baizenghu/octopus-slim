@@ -268,9 +268,9 @@ export function createAuthRouter(authService: AuthService, workspaceManager: Wor
   });
 
   /**
-   * 获取用户头像（无需 JWT，用于 img src 直接引用）
+   * 获取用户头像
    */
-  router.get('/avatar/:userId', async (req, res, next) => {
+  router.get('/avatar/:userId', authMiddleware, async (req: AuthenticatedRequest, res, next) => {
     try {
       const { userId } = req.params;
 
