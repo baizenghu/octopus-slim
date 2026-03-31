@@ -103,7 +103,7 @@ export function createAgentsRouter(
   /**
    * 根据 agent 的 allowedToolSources + toolsFilter 生成 TOOLS.md 并写入 agent workspace
    * 权限变化时调用，保持 TOOLS.md 与配置实时同步
-   * @param allowedSources 统一白名单（null/[] = 禁用，[...] = 指定放行）
+   * @param allowedSources 统一白名单（null = 全部放行，[] = 全部禁止，[...] = 指定放行）
    */
   async function syncToolsMd(userId: string, agentName: string, allowedSources: string[] | null, toolsFilter?: string[]) {
     if (!bridge?.isConnected) return;
@@ -132,13 +132,15 @@ export function createAgentsRouter(
         select: { id: true, name: true, description: true },
       });
 
-      // 4. 按 allowedSources 过滤，构建 MCP 工具列表（null/[] = 禁用）
-      const filterSet = new Set(allowedSources || []);
+      // 4. 按 allowedSources 过滤，构建 MCP 工具列表
+      //    null = 全部放行（不过滤），[] = 全部禁止，[...] = 白名单过滤
+      const shouldFilter = allowedSources !== null;
+      const filterSet = shouldFilter ? new Set(allowedSources) : null;
 
       // 企业级工具
       const serverToolMap = new Map<string, { serverName: string; tools: Array<{ name: string; desc: string }> }>();
       for (const tool of cachedTools) {
-        if (!filterSet.has(tool.serverId) && !filterSet.has(tool.serverName)) continue;
+        if (shouldFilter && !filterSet!.has(tool.serverId) && !filterSet!.has(tool.serverName)) continue;
         if (!serverToolMap.has(tool.serverId)) {
           serverToolMap.set(tool.serverId, { serverName: tool.serverName, tools: [] });
         }
@@ -157,7 +159,7 @@ export function createAgentsRouter(
 
       // 个人级工具（仅在 cache 中未找到时才作为兜底显示）
       for (const ps of personalServers) {
-        if (!filterSet.has(ps.id) && !filterSet.has(ps.name)) continue;
+        if (shouldFilter && !filterSet!.has(ps.id) && !filterSet!.has(ps.name)) continue;
         // 如果 tools-cache 已有该 server 的详细工具，跳过兜底
         if (serverToolMap.has(ps.id)) continue;
         lines.push(`## ${ps.name}`);
@@ -170,12 +172,12 @@ export function createAgentsRouter(
 
       // 5. Skill 类型工具源（通过 run_skill 调用）
       let skillCount = 0;
-      if (filterSet.size > 0) {
+      if (!shouldFilter || filterSet!.size > 0) {
         const skills = await prisma.toolSource.findMany({
           where: { type: 'skill', enabled: true },
           select: { name: true, description: true, scope: true, ownerId: true },
         });
-        const allowedSkills = skills.filter(s => filterSet.has(s.name));
+        const allowedSkills = shouldFilter ? skills.filter(s => filterSet!.has(s.name)) : skills;
         if (allowedSkills.length > 0) {
           lines.push('## Skills');
           lines.push('');
