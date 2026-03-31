@@ -372,7 +372,7 @@ export function createSchedulerRouter(
           res.status(ownership.status).json({ error: ownership.error });
           return;
         }
-        await bridge.call('cron.remove', { id }).catch(err => logger.warn(`[scheduler] 删除旧 cron 任务失败 ${id}`, { error: err?.message || String(err) }));
+        // 先创建新 job，成功后删除旧 job（避免 add 失败导致任务丢失）
         const { name, cron: cronExpr, taskConfig } = req.body;
         const nativeAgentId = req.tenantBridge!.agentId('default');
         const job = await bridge.call('cron.add', { job: {
@@ -382,6 +382,8 @@ export function createSchedulerRouter(
           sessionTarget: 'isolated',
           payload: { kind: 'agentTurn', message: taskConfig?.message || `执行定时任务: ${name}` },
         } });
+        // 新 job 创建成功后才删除旧 job
+        await bridge.call('cron.remove', { id }).catch(err => logger.warn(`[scheduler] 删除旧 cron 任务失败 ${id}`, { error: err?.message || String(err) }));
         res.json({ task: job });
       } else {
         if (!dbTask) { res.status(404).json({ error: 'Task not found' }); return; }
