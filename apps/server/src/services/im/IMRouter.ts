@@ -66,13 +66,28 @@ export class IMRouter {
     private dataRoot?: string,
     private workspaceManager?: WorkspaceManager,
     private auditLogger?: AuditLogger,
-  ) {}
+  ) {
+    this.startBindCleanup();
+  }
 
   /** IM 用户当前选中的 agent（启动时从文件恢复，变更时持久化） */
   private activeAgents = loadActiveAgents();
 
   /** /bind 频率限制：key = imUserId, value = { count, firstAttempt } */
   private bindAttempts = new Map<string, { count: number; firstAttempt: number }>();
+
+  /** 清理过期的 bind 尝试记录，防止内存无限增长 */
+  private startBindCleanup(): void {
+    const interval = setInterval(() => {
+      const now = Date.now();
+      for (const [key, entry] of this.bindAttempts) {
+        if (now - entry.firstAttempt > IMRouter.BIND_WINDOW_MS * 2) {
+          this.bindAttempts.delete(key);
+        }
+      }
+    }, 60_000); // 每分钟清理一次
+    if (interval.unref) interval.unref();
+  }
 
   /** 活跃的 agent 调用跟踪（用于 /cancel 取消） */
   private activeRuns = new Map<string, { sessionKey: string; aborted: boolean }>();
