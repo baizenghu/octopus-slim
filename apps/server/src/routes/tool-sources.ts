@@ -146,11 +146,13 @@ export function createToolSourcesRouter(
 
   // ─── MCP multer: Python 项目上传 ───
 
+  const UPLOAD_FILE_SIZE_LIMIT = 200 * 1024 * 1024; // 200MB
+
   const mcpUploadDir = path.join(os.tmpdir(), 'octopus-mcp-uploads');
   fs.mkdirSync(mcpUploadDir, { recursive: true });
   const mcpUpload = multer({
     dest: mcpUploadDir,
-    limits: { fileSize: 200 * 1024 * 1024 },
+    limits: { fileSize: UPLOAD_FILE_SIZE_LIMIT },
     fileFilter: (_req, file, cb) => {
       const ext = path.extname(file.originalname).toLowerCase();
       if (ext === '.zip' || ext === '.gz' || file.originalname.endsWith('.tar.gz')) {
@@ -754,6 +756,10 @@ export function createToolSourcesRouter(
       // 所有权校验
       if (row.scope === 'personal' && row.ownerId !== req.user!.id && !isAdmin(req.user)) {
         res.status(403).json({ error: '无权操作此工具源' });
+        return;
+      }
+      if (row.scope === 'enterprise' && !isAdmin(req.user)) {
+        res.status(403).json({ error: '仅管理员可测试企业级工具源' });
         return;
       }
 

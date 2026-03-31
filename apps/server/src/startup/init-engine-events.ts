@@ -55,7 +55,7 @@ export function initEngineEvents(params: {
               if (sent > 0) logger.info(`Alert pushed to ${uid} via IM`);
             }).catch((e2: any) => logger.warn(`IM push to ${uid} failed`, { error: e2.message }));
           }
-        }).catch(() => { /* DB 查询失败不阻塞 */ });
+        }).catch((e: unknown) => logger.warn('[init-engine-events] DB query failed:', { error: e instanceof Error ? e.message : String(e) }));
         return; // 异步处理，提前返回
       }
       const alertText = `🚨 心跳巡检告警\n时间: ${new Date().toLocaleString('zh-CN')}\n\n${content.slice(0, 2000)}`;

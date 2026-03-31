@@ -8,7 +8,7 @@ interface SecurityEvent {
   type: 'login_failure_burst' | 'suspicious_api_pattern' | 'auth_bypass_attempt';
   severity: 'warning' | 'critical';
   message: string;
-  details: Record<string, any>;
+  details: Record<string, string | number | boolean>;
   timestamp: Date;
 }
 
@@ -34,6 +34,7 @@ export class SecurityMonitor extends EventEmitter {
   constructor() {
     super();
     this.cleanupTimer = setInterval(() => this.cleanup(), this.CLEANUP_INTERVAL);
+    this.cleanupTimer.unref();
   }
 
   /**

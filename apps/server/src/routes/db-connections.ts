@@ -45,6 +45,13 @@ export function createDbConnectionsRouter(authService: AuthService, prisma: AppP
         res.status(400).json({ error: '所有字段必填' });
         return;
       }
+      // port 范围校验
+      const portNum = Number(port);
+      if (!Number.isInteger(portNum) || portNum < 1 || portNum > 65535) {
+        res.status(400).json({ error: 'port 必须为 1-65535 的整数' });
+        return;
+      }
+
       // 校验 host 不是内网地址
       const hostCheck = validateMcpUrl(`http://${host}:${port}`);
       if (!hostCheck.valid) {
@@ -95,7 +102,14 @@ export function createDbConnectionsRouter(authService: AuthService, prisma: AppP
         }
         updateData.host = host;
       }
-      if (port !== undefined) updateData.port = Number(port);
+      if (port !== undefined) {
+        const portNum = Number(port);
+        if (!Number.isInteger(portNum) || portNum < 1 || portNum > 65535) {
+          res.status(400).json({ error: 'port 必须为 1-65535 的整数' });
+          return;
+        }
+        updateData.port = portNum;
+      }
       if (dbUser !== undefined) updateData.dbUser = dbUser;
       if (dbPassword !== undefined && dbPassword !== '••••••') updateData.dbPassword = encryptPassword(dbPassword);
       if (dbName !== undefined) updateData.dbName = dbName;

@@ -84,9 +84,17 @@ export class PrismaAgentStore implements AgentStore {
 
   async update(agentId: string, patch: Partial<AgentStoreEntry>): Promise<void> {
     try {
-      const data = this.toDbRecord({ id: agentId, ...patch });
+      // 使用 hasOwnProperty 过滤：只写入 patch 中显式提供的字段，
+      // 避免 spread 后 undefined 值覆盖已有数据
+      const fullRecord = this.toDbRecord(patch);
+      const data: Record<string, unknown> = {};
+      for (const key of Object.keys(fullRecord)) {
+        if (Object.prototype.hasOwnProperty.call(fullRecord, key)) {
+          data[key] = fullRecord[key];
+        }
+      }
       // id is the primary key — remove it from the update payload
-      delete (data as Record<string, unknown>).id;
+      delete data.id;
       await this.prisma.agent.update({ where: { id: agentId }, data });
       logger.info(`Agent updated: ${agentId}`);
     } catch (err) {

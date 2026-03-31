@@ -220,17 +220,21 @@ export class FileCleanupService {
         if (!fs.existsSync(outputsDir)) continue;
 
         const entries = await fsp.readdir(outputsDir);
+
+        // 批量查询替代 N+1：一次获取该用户所有已跟踪文件路径
+        const allTrackedFiles = await prisma.generatedFile.findMany({
+          where: { userId: user.name, status: 'active' },
+          select: { filePath: true },
+        });
+        const trackedPaths = new Set(allTrackedFiles.map((f) => f.filePath));
+
         for (const fileName of entries) {
           const fullPath = path.join(outputsDir, fileName);
           try {
             const stat = await fsp.stat(fullPath);
             if (stat.mtimeMs > cutoffTime) continue;
 
-            const record = await prisma.generatedFile.findFirst({
-              where: { userId: user.name, filePath: `outputs/${fileName}`, status: 'active' },
-            });
-
-            if (!record) {
+            if (!trackedPaths.has(`outputs/${fileName}`)) {
               if (stat.isDirectory()) {
                 await fsp.rm(fullPath, { recursive: true, force: true });
               } else {
