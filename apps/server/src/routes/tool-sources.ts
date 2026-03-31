@@ -670,34 +670,37 @@ export function createToolSourcesRouter(
           where: { id: { in: referencingAgents.map(a => a.id) } },
           select: { id: true, name: true, allowedToolSources: true, toolsFilter: true },
         });
-        for (const agent of agentsWithSources) {
-          const agentToolsFilter = Array.isArray(agent.toolsFilter) ? agent.toolsFilter as string[] : [];
-          // 从 allowedToolSources 移除被删 skill 的名称和 id
-          const currentSources = Array.isArray(agent.allowedToolSources) ? agent.allowedToolSources as string[] : null;
-          const newSources = currentSources !== null
-            ? currentSources.filter(s => s !== id && s !== existing.name)
-            : null;
-          const computed = computeToolsFromAllowedSources(newSources, agentToolsFilter, agent.name);
-          await prisma.agent.update({
-            where: { id: agent.id },
-            data: {
-              allowedToolSources: newSources !== null ? newSources : Prisma.JsonNull,
-              [filterField]: Prisma.JsonNull,
-              toolsProfile: computed.profile,
-              toolsDeny: computed.deny ?? [],
-              toolsAllow: computed.alsoAllow,
-            },
-          });
+        // 事务：agent 更新 + toolSource 删除原子执行，防止部分失败产生脏数据
+        await prisma.$transaction(async (tx) => {
+          for (const agent of agentsWithSources) {
+            const agentToolsFilter = Array.isArray(agent.toolsFilter) ? agent.toolsFilter as string[] : [];
+            // 从 allowedToolSources 移除被删 skill 的名称和 id
+            const currentSources = Array.isArray(agent.allowedToolSources) ? agent.allowedToolSources as string[] : null;
+            const newSources = currentSources !== null
+              ? currentSources.filter(s => s !== id && s !== existing.name)
+              : null;
+            const computed = computeToolsFromAllowedSources(newSources, agentToolsFilter, agent.name);
+            await tx.agent.update({
+              where: { id: agent.id },
+              data: {
+                allowedToolSources: newSources !== null ? newSources : Prisma.JsonNull,
+                [filterField]: Prisma.JsonNull,
+                toolsProfile: computed.profile,
+                toolsDeny: computed.deny ?? [],
+                toolsAllow: computed.alsoAllow,
+              },
+            });
+          }
+          await tx.toolSource.delete({ where: { id } });
+        });
+      } else {
+        // MCP 或无关联的 Skill：断开连接后直接删除
+        if (existing.type === 'mcp') {
+          if (mcpExecutor.isConnected(id)) mcpExecutor.disconnect(id);
+          mcpRegistry.unregister(id);
         }
+        await prisma.toolSource.delete({ where: { id } });
       }
-
-      // MCP: 断开连接
-      if (existing.type === 'mcp') {
-        if (mcpExecutor.isConnected(id)) mcpExecutor.disconnect(id);
-        mcpRegistry.unregister(id);
-      }
-
-      await prisma.toolSource.delete({ where: { id } });
 
       // MCP: 通知
       if (existing.type === 'mcp') {
