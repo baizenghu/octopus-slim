@@ -69,28 +69,35 @@ async function uploadBufferToCdn(params: {
 
   for (let attempt = 1; attempt <= UPLOAD_MAX_RETRIES; attempt++) {
     try {
-      const res = await fetch(cdnUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/octet-stream' },
-        body: new Uint8Array(ciphertext),
-      });
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 15000);
+      try {
+        const res = await fetch(cdnUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/octet-stream' },
+          body: new Uint8Array(ciphertext),
+          signal: controller.signal,
+        });
 
-      // 4xx client error: abort immediately
-      if (res.status >= 400 && res.status < 500) {
-        const errMsg = res.headers.get('x-error-message') ?? (await res.text());
-        throw new Error(`CDN upload client error ${res.status}: ${errMsg}`);
-      }
+        // 4xx client error: abort immediately
+        if (res.status >= 400 && res.status < 500) {
+          const errMsg = res.headers.get('x-error-message') ?? (await res.text());
+          throw new Error(`CDN upload client error ${res.status}: ${errMsg}`);
+        }
 
-      if (res.status !== 200) {
-        const errMsg = res.headers.get('x-error-message') ?? `status ${res.status}`;
-        throw new Error(`CDN upload server error: ${errMsg}`);
-      }
+        if (res.status !== 200) {
+          const errMsg = res.headers.get('x-error-message') ?? `status ${res.status}`;
+          throw new Error(`CDN upload server error: ${errMsg}`);
+        }
 
-      downloadParam = res.headers.get('x-encrypted-param') ?? undefined;
-      if (!downloadParam) {
-        throw new Error('CDN upload response missing x-encrypted-param header');
+        downloadParam = res.headers.get('x-encrypted-param') ?? undefined;
+        if (!downloadParam) {
+          throw new Error('CDN upload response missing x-encrypted-param header');
+        }
+        break;
+      } finally {
+        clearTimeout(timeout);
       }
-      break;
     } catch (err) {
       lastError = err;
       if (err instanceof Error && err.message.includes('client error')) throw err;

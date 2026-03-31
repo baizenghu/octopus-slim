@@ -32,11 +32,17 @@ interface StatusResponse {
 async function fetchQRCode(baseUrl: string): Promise<QRCodeResponse> {
   const base = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
   const url = new URL(`ilink/bot/get_bot_qrcode?bot_type=${BOT_TYPE}`, base);
-  const res = await fetch(url.toString());
-  if (!res.ok) {
-    throw new Error(`获取二维码失败: ${res.status} ${res.statusText}`);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10000);
+  try {
+    const res = await fetch(url.toString(), { signal: controller.signal });
+    if (!res.ok) {
+      throw new Error(`获取二维码失败: ${res.status} ${res.statusText}`);
+    }
+    return await res.json() as QRCodeResponse;
+  } finally {
+    clearTimeout(timeout);
   }
-  return await res.json() as QRCodeResponse;
 }
 
 async function pollQRStatus(baseUrl: string, qrcode: string): Promise<StatusResponse> {
