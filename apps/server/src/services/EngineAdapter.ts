@@ -250,6 +250,8 @@ export class EngineAdapter extends EventEmitter {
       );
       if (timer.unref) timer.unref();
     });
+    // 超时后 rpcPromise 可能仍会 reject，加 noop catch 防 unhandled rejection
+    rpcPromise.catch(() => {});
     return Promise.race([rpcPromise, timeoutPromise]);
   }
 

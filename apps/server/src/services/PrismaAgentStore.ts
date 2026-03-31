@@ -7,7 +7,7 @@
  * 类型来源: @octopus/engine/plugin-sdk (packages/engine/src/agents/store.ts)
  */
 
-import fs from 'fs';
+import fs from 'fs/promises';
 import path from 'path';
 import type { PrismaClient } from '@prisma/client';
 import type { AgentStore, AgentStoreEntry } from '@octopus/engine/plugin-sdk';
@@ -75,6 +75,13 @@ export class PrismaAgentStore implements AgentStore {
       if (!data.name) data.name = entry.name ?? entry.id;
 
       await this.prisma.agent.create({ data });
+      // 异步创建 workspace 目录（不阻塞响应）
+      if (this.dataRoot && data.ownerId && data.name) {
+        const wsPath = path.join(this.dataRoot, 'users', data.ownerId as string, 'agents', data.name as string, 'workspace');
+        fs.mkdir(wsPath, { recursive: true }).catch((err) =>
+          logger.warn(`Failed to create workspace dir for ${entry.id}: ${err}`),
+        );
+      }
       logger.info(`Agent created: ${entry.id}`);
     } catch (err) {
       logger.error(`Failed to create agent ${entry.id}: ${err}`);
