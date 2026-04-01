@@ -1003,7 +1003,7 @@ export default function compactionSafeguardExtension(api: ExtensionAPI): void {
       const boundaryLine = createCompactBoundaryLine({
         trigger: customInstructions ? "manual" : "auto",
         preTokens: preparation.tokensBefore,
-        messagesSummarized: preparation.messageCount - (preservedRecentTurns?.length ?? 0),
+        messagesSummarized: messagesToSummarize.length - (preservedRecentMessages?.length ?? 0),
       });
 
       return {

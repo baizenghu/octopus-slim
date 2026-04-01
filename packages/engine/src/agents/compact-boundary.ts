@@ -28,7 +28,7 @@ export function createCompactBoundaryLine(
 }
 
 export function isCompactBoundaryMessage(message: AgentMessage): boolean {
-  const octopus = (message as Record<string, unknown>).__octopus as
+  const octopus = (message as unknown as Record<string, unknown>).__octopus as
     | { kind?: string }
     | undefined;
   return octopus?.kind === COMPACT_BOUNDARY_TYPE;
@@ -45,5 +45,6 @@ export function getMessagesAfterCompactBoundary(
   messages: AgentMessage[],
 ): AgentMessage[] {
   const boundaryIndex = findLastCompactBoundaryIndex(messages);
-  return boundaryIndex === -1 ? messages : messages.slice(boundaryIndex);
+  // Slice from boundaryIndex + 1: exclude the boundary marker itself from API messages
+  return boundaryIndex === -1 ? messages : messages.slice(boundaryIndex + 1);
 }

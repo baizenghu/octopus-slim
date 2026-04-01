@@ -81,7 +81,7 @@ describe("getMessagesAfterCompactBoundary", () => {
     expect(result).toEqual(messages);
   });
 
-  it("returns only messages after the last boundary (inclusive)", () => {
+  it("returns only messages after the last boundary (exclusive of boundary itself)", () => {
     const messages = [
       makeUser("old question"),
       makeAssistant("old answer"),
@@ -91,8 +91,9 @@ describe("getMessagesAfterCompactBoundary", () => {
       makeAssistant("new answer"),
     ];
     const result = getMessagesAfterCompactBoundary(messages);
-    expect(result.length).toBe(4);
-    expect(isCompactBoundaryMessage(result[0])).toBe(true);
+    // Boundary excluded — only the 3 messages after it
+    expect(result.length).toBe(3);
+    expect(isCompactBoundaryMessage(result[0])).toBe(false);
   });
 
   it("handles multiple boundaries — uses the last one", () => {
@@ -104,7 +105,8 @@ describe("getMessagesAfterCompactBoundary", () => {
       makeUser("v3"),
     ];
     const result = getMessagesAfterCompactBoundary(messages);
-    expect(result.length).toBe(2);
-    expect(isCompactBoundaryMessage(result[0])).toBe(true);
+    // Only v3 after the last boundary
+    expect(result.length).toBe(1);
+    expect(isCompactBoundaryMessage(result[0])).toBe(false);
   });
 });
