@@ -110,6 +110,24 @@ export function readSessionMessages(
             id: typeof parsed.id === "string" ? parsed.id : undefined,
           },
         });
+        continue;
+      }
+
+      // Compact boundary markers — non-destructive compaction boundaries.
+      // Messages before the last boundary are excluded from API calls but preserved for UI scrollback.
+      if (parsed?.type === "compact_boundary") {
+        const ts = typeof parsed.timestamp === "string" ? Date.parse(parsed.timestamp) : Number.NaN;
+        const timestamp = Number.isFinite(ts) ? ts : Date.now();
+        messages.push({
+          role: "system",
+          content: [{ type: "text", text: "Conversation compacted" }],
+          timestamp,
+          __octopus: {
+            kind: "compact_boundary",
+            id: typeof parsed.id === "string" ? parsed.id : undefined,
+            metadata: parsed.metadata,
+          },
+        });
       }
     } catch {
       // ignore bad lines
