@@ -27,8 +27,9 @@ model User {
   createdAt   DateTime  @default(now()) @map("created_at")
   updatedAt   DateTime  @updatedAt @map("updated_at")
 
-  auditLogs AuditLog[]
-  sessions  UserSession[]
+  auditLogs  AuditLog[]
+  sessions   UserSession[]
+  agentTasks AgentTask[]
 
   @@index([department])
   @@index([status])
@@ -98,6 +99,10 @@ model ToolSource {
   description String?  @db.Text
   tools       Json?    /// 工具列表缓存
   config      Json?    /// 额外配置
+
+  // 工具使用指导元数据（Phase 4: 借鉴 Claude Code 的 when_to_use 机制）
+  riskLevel   String?  @map("risk_level") @db.VarChar(20) /// "safe" | "moderate" | "dangerous"
+  whenToUse   String?  @map("when_to_use") @db.Text       /// LLM 可读的使用场景描述
 
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
@@ -218,6 +223,29 @@ model DatabaseConnection {
   @@unique([userId, name])
   @@index([userId])
   @@map("database_connections")
+}
+
+/// 异步 Agent 任务表
+model AgentTask {
+  taskId      String    @id @map("task_id") @db.VarChar(64)
+  userId      String    @map("user_id") @db.VarChar(64)
+  agentName   String    @map("agent_name") @db.VarChar(255)
+  message     String    @db.Text
+  status      String    @default("pending") @db.VarChar(20)
+  progress    Json      @default("[]")
+  result      String?   @db.LongText
+  error       String?   @db.Text
+  runId       String?   @map("run_id") @db.VarChar(128)
+  sessionKey  String?   @map("session_key") @db.VarChar(255)
+  createdAt   DateTime  @default(now()) @map("created_at")
+  startedAt   DateTime? @map("started_at")
+  completedAt DateTime? @map("completed_at")
+
+  user User @relation(fields: [userId], references: [userId], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@index([createdAt])
+  @@map("agent_tasks")
 }
 
 /// 生成文件注册表（文件生命周期管理）

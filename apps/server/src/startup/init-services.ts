@@ -16,7 +16,8 @@ import { TenantEngineAdapter } from '../services/TenantEngineAdapter';
 import { syncAgentToEngine } from '../services/AgentConfigSync';
 import { ensureAgentTemplates } from '../services/SoulTemplate';
 import { buildHeartbeatRunPrompt, parseEveryToMs } from '../routes/scheduler';
-import { loadAndRegisterMarkdownAgents, resolveAgentsDir } from './load-markdown-agents';
+import { loadAndRegisterMarkdownAgents, watchAgentsDir, resolveAgentsDir } from './load-markdown-agents';
+import { asyncAgentRegistry } from '../services/AsyncAgentRegistry';
 import { initRuntimeConfig } from '../config';
 import type { AppPrismaClient } from '../types/prisma';
 import type { loadConfig } from '../config';
@@ -289,6 +290,12 @@ export async function initServices(config: AppConfig): Promise<Services> {
         error: err instanceof Error ? err.message : String(err),
       });
     });
+    watchAgentsDir(prismaClient, agentsDir);
+
+    // ── AsyncAgentRegistry DB 恢复（重启后将 running/pending 任务标记为 failed）──
+    asyncAgentRegistry.restoreFromDB(prismaClient).catch((e: unknown) =>
+      logger.warn('AsyncAgentRegistry DB restore failed', { error: String(e) }),
+    );
   }
 
   const enterpriseMcpDir = path.join(config.workspace.dataRoot, 'mcp-servers');

@@ -1,9 +1,19 @@
 /**
  * AsyncAgentRegistry — 异步后台 Agent 任务注册表（服务端单例）
  *
- * 内存存储：重启后丢失，无需 DB 迁移。
+ * 内存存储主路径，重启通过 restoreFromDB 将 running/pending 任务标记为 failed。
  * 通过 subscribe/emit 支持 SSE 推送。
  */
+
+import { getRuntimeConfig } from '../config';
+import type { AppPrismaClient } from '../types/prisma';
+
+// logger 轻量封装：避免循环依赖
+const _log = {
+  warn: (msg: string, meta?: Record<string, unknown>) =>
+    // eslint-disable-next-line no-console
+    console.warn(`[AsyncAgentRegistry] ${msg}`, meta ?? ''),
+};
 
 export type AsyncAgentStatus =
   | 'pending'
@@ -40,10 +50,87 @@ function generateTaskId(): string {
 export class AsyncAgentRegistry {
   private tasks = new Map<string, AsyncAgentTask>();
   private listeners = new Map<string, Array<(task: AsyncAgentTask) => void>>();
+  private prisma?: AppPrismaClient;
+
+  // ── DB 依赖注入 ──────────────────────────────────────────────────────────
+
+  setPrisma(prisma: AppPrismaClient): void {
+    this.prisma = prisma;
+  }
+
+  // ── Persistence ──────────────────────────────────────────────────────────
+
+  private async persistTask(task: AsyncAgentTask): Promise<void> {
+    if (!this.prisma) return;
+    await this.prisma.agentTask.upsert({
+      where: { taskId: task.taskId },
+      create: {
+        taskId: task.taskId,
+        userId: task.userId,
+        agentName: task.agentName,
+        message: task.message,
+        status: task.status,
+        progress: task.progress,
+        result: task.result ?? null,
+        error: task.error ?? null,
+        runId: task.runId ?? null,
+        sessionKey: task.sessionKey ?? null,
+        createdAt: task.createdAt,
+        startedAt: task.startedAt ?? null,
+        completedAt: task.completedAt ?? null,
+      },
+      update: {
+        status: task.status,
+        progress: task.progress,
+        result: task.result ?? null,
+        error: task.error ?? null,
+        runId: task.runId ?? null,
+        sessionKey: task.sessionKey ?? null,
+        startedAt: task.startedAt ?? null,
+        completedAt: task.completedAt ?? null,
+      },
+    });
+  }
+
+  /**
+   * 服务启动时调用：
+   * 1. 注入 Prisma 实例（供后续写入）
+   * 2. 将 DB 中残留的 running/pending 任务标记为 failed（服务重启意味任务中断）
+   */
+  async restoreFromDB(prisma: AppPrismaClient): Promise<void> {
+    this.setPrisma(prisma);
+    const staleTasks = await prisma.agentTask.findMany({
+      where: { status: { in: ['running', 'pending'] } },
+    });
+    for (const t of staleTasks) {
+      await prisma.agentTask.update({
+        where: { taskId: t.taskId },
+        data: { status: 'failed', error: '服务重启，任务中断' },
+      });
+    }
+    if (staleTasks.length > 0) {
+      _log.warn(`restoreFromDB: marked ${staleTasks.length} stale task(s) as failed`);
+    }
+  }
+
+  // ── CRUD ─────────────────────────────────────────────────────────────────
 
   create(
     params: Omit<AsyncAgentTask, 'taskId' | 'status' | 'progress' | 'createdAt'>,
   ): AsyncAgentTask {
+    // Per-user 配额检查
+    const perUserLimit = (getRuntimeConfig() as any).agents?.maxAsyncTasksPerUser ?? 2;
+    const running = this.listByUser(params.userId).filter(
+      (t) => t.status === 'running' || t.status === 'pending',
+    );
+    if (running.length >= perUserLimit) {
+      const err = new Error(
+        `并发后台任务已达上限（${perUserLimit}），请等待当前任务完成`,
+      );
+      (err as any).code = 'USER_TASK_LIMIT_EXCEEDED';
+      throw err;
+    }
+
     const taskId = generateTaskId();
     const task: AsyncAgentTask = {
       ...params,
@@ -53,6 +140,12 @@ export class AsyncAgentRegistry {
       createdAt: new Date(),
     };
     this.tasks.set(taskId, task);
+
+    // fire-and-forget DB 写入
+    this.persistTask(task).catch((e: unknown) =>
+      _log.warn('DB write failed on create', { error: String(e) }),
+    );
+
     return task;
   }
 
@@ -85,6 +178,9 @@ export class AsyncAgentRegistry {
     task.completedAt = new Date();
     if (!task.startedAt) task.startedAt = new Date();
     this.emit(taskId);
+    this.persistTask(task).catch((e: unknown) =>
+      _log.warn('DB sync failed on complete', { error: String(e) }),
+    );
   }
 
   fail(taskId: string, error: string): void {
@@ -95,6 +191,9 @@ export class AsyncAgentRegistry {
     task.completedAt = new Date();
     if (!task.startedAt) task.startedAt = new Date();
     this.emit(taskId);
+    this.persistTask(task).catch((e: unknown) =>
+      _log.warn('DB sync failed on fail', { error: String(e) }),
+    );
   }
 
   cancel(taskId: string): void {
@@ -104,7 +203,12 @@ export class AsyncAgentRegistry {
     task.status = 'cancelled';
     task.completedAt = new Date();
     this.emit(taskId);
+    this.persistTask(task).catch((e: unknown) =>
+      _log.warn('DB sync failed on cancel', { error: String(e) }),
+    );
   }
+
+  // ── Subscription ─────────────────────────────────────────────────────────
 
   /**
    * 订阅任务状态变更事件（完成/失败/取消时触发）。
