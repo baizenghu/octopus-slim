@@ -7,7 +7,8 @@ import { todayDateStr } from './utils';
 const AUDIT_HMAC_KEY = process.env.AUDIT_HMAC_KEY;
 
 if (!AUDIT_HMAC_KEY) {
-  throw new Error('[FATAL] AUDIT_HMAC_KEY 环境变量未设置。审计签名链无法工作，拒绝启动。请在 .env 中配置: AUDIT_HMAC_KEY=$(openssl rand -hex 32)');
+  // 模块加载时仅告警，不阻止启动；write() 中若无 key 则跳过 HMAC 签名
+  console.warn('[enterprise-audit] AUDIT_HMAC_KEY not set — HMAC signing disabled. Set AUDIT_HMAC_KEY in .env for production.');
 }
 
 /**
@@ -80,17 +81,22 @@ export class AuditFileWriter {
       };
 
       // HMAC-SHA256 签名链：每条记录包含前一条的 hash，可检测篡改和删除
-      const hmac = createHmac('sha256', AUDIT_HMAC_KEY);
-      hmac.update(this.prevHash);
-      hmac.update(JSON.stringify(enriched));
-      const hash = hmac.digest('hex');
-
-      const signed = {
-        ...enriched,
-        _prevHash: this.prevHash,
-        _hash: hash,
-      };
-      this.prevHash = hash;
+      let signed: Record<string, unknown>;
+      if (AUDIT_HMAC_KEY) {
+        const hmac = createHmac('sha256', AUDIT_HMAC_KEY);
+        hmac.update(this.prevHash);
+        hmac.update(JSON.stringify(enriched));
+        const hash = hmac.digest('hex');
+        signed = {
+          ...enriched,
+          _prevHash: this.prevHash,
+          _hash: hash,
+        };
+        this.prevHash = hash;
+      } else {
+        // HMAC 未配置时跳过签名，entry.hmac 留空
+        signed = enriched;
+      }
 
       const line = JSON.stringify(signed);
       this.stream!.write(line + '\n');
