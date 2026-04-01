@@ -24,6 +24,11 @@ const Actions = {
   SESSION_CREATE: 'session:create',
   SESSION_END: 'session:end',
   AGENT_END: 'agent:end',
+  // Coordinator / 异步任务审计
+  COORDINATOR_DISPATCH: 'coordinator:dispatch',  // Coordinator 派发子任务
+  COORDINATOR_COMPLETE: 'coordinator:complete',  // Coordinator 子任务结束
+  ASYNC_TASK_START: 'async_task:start',          // 异步任务开始
+  ASYNC_TASK_COMPLETE: 'async_task:complete',    // 异步任务完成（含失败）
 } as const;
 
 interface PluginConfig {
@@ -288,6 +293,77 @@ export default function enterpriseAuditPlugin(api: any) {
       durationMs: event.durationMs,
     });
   });
+
+  // ─── Hook: subagent_spawned (Coordinator 派发子任务) ─────────────────
+  try {
+    api.on('subagent_spawned', (
+      event: {
+        runId: string;
+        childSessionKey: string;
+        agentId: string;
+        label?: string;
+        mode: string;
+      },
+      ctx: { runId?: string; childSessionKey?: string; requesterSessionKey?: string }
+    ) => {
+      const userId = extractUserId(event.agentId);
+      audit({
+        userId,
+        action: Actions.COORDINATOR_DISPATCH,
+        resource: `subagent:${event.childSessionKey}`,
+        details: {
+          runId: event.runId,
+          label: event.label || undefined,
+          mode: event.mode,
+          requesterSessionKey: ctx.requesterSessionKey || undefined,
+        },
+        success: true,
+      }).catch((err: unknown) =>
+        api.logger.warn(`[enterprise-audit] subagent_spawned audit failed: ${err instanceof Error ? err.message : String(err)}`),
+      );
+    });
+  } catch {
+    // engine 未暴露此 hook，跳过
+  }
+
+  // ─── Hook: subagent_ended (Coordinator 子任务结束) ────────────────────
+  try {
+    api.on('subagent_ended', (
+      event: {
+        targetSessionKey: string;
+        targetKind: string;
+        reason: string;
+        runId?: string;
+        outcome?: string;
+        error?: string;
+        endedAt?: number;
+      },
+      ctx: { runId?: string; childSessionKey?: string; requesterSessionKey?: string }
+    ) => {
+      // subagent_ended 没有直接的 userId，从 requesterSessionKey 中提取
+      const userId = extractUserId(ctx.requesterSessionKey);
+      const success = !event.error && event.outcome !== 'error'
+        && event.outcome !== 'timeout' && event.outcome !== 'killed';
+      audit({
+        userId,
+        action: Actions.COORDINATOR_COMPLETE,
+        resource: `subagent:${event.targetSessionKey}`,
+        details: {
+          runId: event.runId || undefined,
+          targetKind: event.targetKind,
+          outcome: event.outcome || undefined,
+          reason: event.reason,
+        },
+        success,
+        errorMessage: event.error || undefined,
+        durationMs: event.endedAt ? undefined : undefined,
+      }).catch((err: unknown) =>
+        api.logger.warn(`[enterprise-audit] subagent_ended audit failed: ${err instanceof Error ? err.message : String(err)}`),
+      );
+    });
+  } catch {
+    // engine 未暴露此 hook，跳过
+  }
 
   // ─── 清理：gateway 停止时断开 DB ────────────────────
   api.on('gateway_stop', async () => {
