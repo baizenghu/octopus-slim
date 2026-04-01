@@ -652,7 +652,10 @@ export class EngineAdapter extends EventEmitter {
 
     // 后台执行：不 await，错误通过 registry.fail 记录
     const runBackground = async () => {
-      let resultText = '';
+      // event.content = data.text = 累积文本（每次含之前所有内容）
+      // 需要按文本段（text block）分别收集，工具调用时文本段结束
+      const textBlocks: string[] = [];
+      let currentBlockText = '';
       let timedOut = false;
 
       // backgroundAfterMs 超时计时器：超时后 resolve，但任务继续后台运行
@@ -690,16 +693,22 @@ export class EngineAdapter extends EventEmitter {
           if (t && !t.runId) t.runId = event.runId;
         }
 
-        // 收集文本结果
+        // 收集文本结果：content 是累积文本，每段用 replace 而非 +=
+        // 工具调用开始时结束当前文本段（tool_call 无 toolResult 时）
         if (event.type === 'text_delta' && event.content) {
-          resultText += event.content;
+          currentBlockText = event.content;
+        }
+        if (event.type === 'tool_call' && !event.toolResult && currentBlockText) {
+          textBlocks.push(currentBlockText);
+          currentBlockText = '';
         }
 
         // 任务完成
         if (event.type === 'done') {
           if (bgTimer) clearTimeout(bgTimer);
           if (!cancelled) {
-            asyncAgentRegistry.complete(taskId, resultText.trim());
+            if (currentBlockText) textBlocks.push(currentBlockText);
+            asyncAgentRegistry.complete(taskId, textBlocks.join('\n').trim());
           }
           if (bgResolve) bgResolve();
         }
