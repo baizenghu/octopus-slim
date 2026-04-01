@@ -43,6 +43,7 @@ import { skillDirName, skillMdName, mcpDirName } from '../utils/skill-naming';
 import { mergeSkillMd, generateSkillMd } from '../utils/skill-md-generator';
 import { installSkillDeps } from '../utils/skill-deps-installer';
 import { createLogger } from '../utils/logger';
+import { checkShellInjection } from '../utils/shell-safety';
 
 const logger = createLogger('tool-sources');
 const execFileAsync = promisify(execFile);
@@ -212,7 +213,7 @@ export function createToolSourcesRouter(
     return { depsType: 'none', depsInfo: '无外部依赖' };
   }
 
-  function parseSkillMd(skillDir: string): { name?: string; description?: string; version?: string; command?: string; scriptPath?: string } {
+  function parseSkillMd(skillDir: string): { name?: string; description?: string; version?: string; command?: string; scriptPath?: string; author?: string; triggers?: string[] } {
     const mdPath = path.join(skillDir, 'SKILL.md');
     if (!fs.existsSync(mdPath)) return {};
     const content = fs.readFileSync(mdPath, 'utf-8').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
@@ -221,6 +222,12 @@ export function createToolSourcesRouter(
 
     const yaml = match[1];
     const result: Record<string, string> = {};
+    // 解析多行 triggers 列表
+    const triggersMatch = yaml.match(/^triggers:\s*\n((?:\s+-\s+.+\n?)*)/m);
+    const parsedTriggers = triggersMatch
+      ? triggersMatch[1].split('\n').map((l) => l.replace(/^\s+-\s+/, '').trim()).filter(Boolean)
+      : undefined;
+
     for (const line of yaml.split('\n')) {
       const kv = line.match(/^(\w+)\s*:\s*(.+)$/);
       if (kv) result[kv[1].trim()] = kv[2].trim().replace(/^["']|["']$/g, '');
@@ -231,6 +238,8 @@ export function createToolSourcesRouter(
       version: result['version'],
       command: result['command'],
       scriptPath: result['script_path'] || result['scriptPath'] || result['entry'],
+      author: result['author'],
+      triggers: parsedTriggers,
     };
   }
 
@@ -378,6 +387,14 @@ export function createToolSourcesRouter(
           res.status(400).json({ error: 'stdio 模式需要 command' });
           return;
         }
+        // shell 注入检测
+        if (transport === 'stdio' && command) {
+          const safety = await checkShellInjection(command);
+          if (!safety.safe) {
+            res.status(400).json({ error: `command 存在安全风险：${safety.reason}` });
+            return;
+          }
+        }
         // 路径安全
         if (transport === 'stdio' && args && args.length > 0) {
           const tempConfig: MCPServerConfig = {
@@ -466,7 +483,7 @@ export function createToolSourcesRouter(
         return;
       }
 
-      const { name: bodyName, description: bodyDesc, command: bodyCommand, scriptPath: bodyScriptPath } = req.body;
+      const { name: bodyName, description: bodyDesc, command: bodyCommand, scriptPath: bodyScriptPath, author: bodyAuthor, triggers: bodyTriggers } = req.body;
 
       const skillId = `skill-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       const dirName = skillDirName('enterprise', skillId, null);
@@ -481,6 +498,8 @@ export function createToolSourcesRouter(
       const finalCommand = bodyCommand || meta.command || null;
       const finalScriptPath = bodyScriptPath || meta.scriptPath || null;
       const finalVersion = meta.version || '1.0.0';
+      const finalAuthor = bodyAuthor?.trim() || meta.author || null;
+      const finalTriggers = Array.isArray(bodyTriggers) ? bodyTriggers : (meta.triggers ?? null);
 
       // 确保 SKILL.md frontmatter
       const skillMdPath = path.join(skillDir, 'SKILL.md');
@@ -489,12 +508,14 @@ export function createToolSourcesRouter(
         const mergedMd = mergeSkillMd(existingMd, {
           name: finalName, description: finalDesc || '', scope: 'enterprise',
           ownerId: null, command: finalCommand, scriptPath: finalScriptPath, version: finalVersion,
+          author: finalAuthor, triggers: finalTriggers,
         });
         fs.writeFileSync(skillMdPath, mergedMd, 'utf-8');
       } else {
         const newMd = generateSkillMd({
           name: finalName, description: finalDesc || '', scope: 'enterprise',
           ownerId: null, command: finalCommand, scriptPath: finalScriptPath, version: finalVersion,
+          author: finalAuthor, triggers: finalTriggers,
         });
         fs.writeFileSync(skillMdPath, newMd, 'utf-8');
       }
@@ -570,7 +591,18 @@ export function createToolSourcesRouter(
     try {
       const { id } = req.params;
       const { name, description, transport, command, args, url, env, enabled,
-        scriptPath, runtime } = req.body;
+        scriptPath, runtime, riskLevel, whenToUse } = req.body;
+
+      // 值域校验：riskLevel 和 whenToUse
+      const VALID_RISK_LEVELS = ['safe', 'moderate', 'dangerous'];
+      if (riskLevel !== undefined && (typeof riskLevel !== 'string' || !VALID_RISK_LEVELS.includes(riskLevel))) {
+        res.status(400).json({ error: `riskLevel 只允许: ${VALID_RISK_LEVELS.join(', ')}` });
+        return;
+      }
+      if (whenToUse !== undefined && (typeof whenToUse !== 'string' || whenToUse.length > 2000)) {
+        res.status(400).json({ error: 'whenToUse 必须是字符串且不超过 2000 字符' });
+        return;
+      }
 
       const existing = await prisma.toolSource.findUnique({ where: { id } });
       if (!existing) {
@@ -620,6 +652,8 @@ export function createToolSourcesRouter(
           ...(enabled !== undefined && { enabled }),
           ...(scriptPath !== undefined && { scriptPath }),
           ...(runtime !== undefined && { runtime }),
+          ...(riskLevel !== undefined && { riskLevel }),
+          ...(whenToUse !== undefined && { whenToUse }),
         },
       });
 
@@ -669,6 +703,23 @@ export function createToolSourcesRouter(
         const filter = (a as Record<string, unknown>)[filterField] as string[] | null;
         return Array.isArray(filter) && (filter.includes(id) || filter.includes(existing.name));
       });
+
+      // 补充检查 allowedToolSources（新统一字段），防止悬空引用
+      if (existing.type === 'mcp') {
+        const newStyleRef = await prisma.agent.findFirst({
+          where: {
+            OR: [
+              { allowedToolSources: { path: '$', array_contains: existing.name } },
+              { allowedToolSources: { path: '$', array_contains: existing.id } },
+            ],
+          },
+          select: { name: true },
+        });
+        if (newStyleRef) {
+          res.status(409).json({ error: `仍有 Agent 引用此工具源（${newStyleRef.name}），请先解除引用再删除` });
+          return;
+        }
+      }
 
       if (existing.type === 'mcp' && referencingAgents.length > 0) {
         // MCP: 阻止删除
@@ -1041,6 +1092,21 @@ export function createToolSourcesRouter(
         return;
       }
 
+      // stdio 模式 command 必填
+      if (transport === 'stdio' && !command?.trim()) {
+        res.status(400).json({ error: 'stdio 模式需要 command' });
+        return;
+      }
+
+      // shell 注入检测
+      if (transport === 'stdio' && command?.trim()) {
+        const safety = await checkShellInjection(command.trim());
+        if (!safety.safe) {
+          res.status(400).json({ error: `command 存在安全风险：${safety.reason}` });
+          return;
+        }
+      }
+
       // 检查同名个人 MCP 是否已存在
       const existingByName = await prisma.toolSource.findFirst({
         where: { name, type: 'mcp', scope: 'personal', ownerId: user.id },
@@ -1312,7 +1378,7 @@ export function createToolSourcesRouter(
     _uploadedFile: Express.Multer.File,
     tmpFile: string,
   ) {
-    const { name: bodyName, description: bodyDesc, command: bodyCommand, scriptPath: bodyScriptPath } = req.body;
+    const { name: bodyName, description: bodyDesc, command: bodyCommand, scriptPath: bodyScriptPath, author: bodyAuthor, triggers: bodyTriggers } = req.body;
 
     const skillId = `skill-personal-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const dirName = skillDirName('personal', skillId, user.id);
@@ -1327,6 +1393,8 @@ export function createToolSourcesRouter(
       const finalCommand = bodyCommand || meta.command || null;
       const finalScriptPath = bodyScriptPath || meta.scriptPath || null;
       const finalVersion = meta.version || '1.0.0';
+      const finalAuthor = bodyAuthor?.trim() || meta.author || null;
+      const finalTriggers = Array.isArray(bodyTriggers) ? bodyTriggers : (meta.triggers ?? null);
 
       // 确保 SKILL.md frontmatter
       const skillMdPath = path.join(skillDir, 'SKILL.md');
@@ -1335,12 +1403,14 @@ export function createToolSourcesRouter(
         const mergedMd = mergeSkillMd(existingMd, {
           name: finalName, description: finalDesc || '', scope: 'personal',
           ownerId: user.id, command: finalCommand, scriptPath: finalScriptPath, version: finalVersion,
+          author: finalAuthor, triggers: finalTriggers,
         });
         fs.writeFileSync(skillMdPath, mergedMd, 'utf-8');
       } else {
         const newMd = generateSkillMd({
           name: finalName, description: finalDesc || '', scope: 'personal',
           ownerId: user.id, command: finalCommand, scriptPath: finalScriptPath, version: finalVersion,
+          author: finalAuthor, triggers: finalTriggers,
         });
         fs.writeFileSync(skillMdPath, newMd, 'utf-8');
       }
@@ -1427,7 +1497,7 @@ export function createToolSourcesRouter(
       }
 
       const { name, description, transport, command, args, url, env, enabled,
-        scriptPath, runtime } = req.body;
+        scriptPath, runtime, riskLevel, whenToUse } = req.body;
 
       // MCP: 路径校验
       if (existing.type === 'mcp' && args && args.length > 0) {
@@ -1460,6 +1530,8 @@ export function createToolSourcesRouter(
           ...(enabled !== undefined && { enabled }),
           ...(scriptPath !== undefined && { scriptPath }),
           ...(runtime !== undefined && { runtime }),
+          ...(riskLevel !== undefined && { riskLevel }),
+          ...(whenToUse !== undefined && { whenToUse }),
         },
       });
 
