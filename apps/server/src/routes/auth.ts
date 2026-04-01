@@ -192,7 +192,20 @@ export function createAuthRouter(authService: AuthService, workspaceManager: Wor
         hashedPassword,
       );
 
-      res.json({ message: '密码修改成功' });
+      // 将当前 Token 加入黑名单（等保合规：密码变更后会话失效）
+      const currentToken = req.headers.authorization?.replace(/^Bearer\s+/i, '');
+      if (currentToken) {
+        try {
+          await authService.logout(currentToken);
+        } catch (e: unknown) {
+          // 黑名单失败不阻断响应，但记录告警
+          logger.warn('[auth] Failed to blacklist token after password change', {
+            error: e instanceof Error ? e.message : String(e),
+          });
+        }
+      }
+
+      res.json({ message: '密码已修改，请重新登录' });
     } catch (err: unknown) {
       next(err);
     }
