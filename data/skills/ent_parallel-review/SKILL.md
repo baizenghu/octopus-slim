@@ -29,3 +29,8 @@ timeout: 300
 ## 输出格式
 
 每个 Agent 输出以 `[X-NNN]` 编号标识问题，最终汇总去重生成综合报告。
+
+## 升级说明
+
+此技能已升级为 `code-review-team`（使用 Coordinator 模式真正并行）。
+建议使用 `/skill code-review-team` 代替此技能。
