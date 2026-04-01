@@ -13,7 +13,6 @@ import type { AuthService } from '@octopus/auth';
 import { createAuthMiddleware, type AuthenticatedRequest } from '../middleware/auth';
 import type { AppPrismaClient } from '../types/prisma';
 import { encryptPassword } from '../utils/crypto';
-import { invalidatePromptCache } from '../services/SystemPromptBuilder';
 import { validateMcpUrl } from '../utils/url-validator';
 
 export function createDbConnectionsRouter(authService: AuthService, prisma: AppPrismaClient): Router {
@@ -70,7 +69,6 @@ export function createDbConnectionsRouter(authService: AuthService, prisma: AppP
       const conn = await prisma.databaseConnection.create({
         data: { id: randomUUID(), userId, name, dbType, host, port: Number(port), dbUser, dbPassword: encryptPassword(dbPassword), dbName },
       });
-      invalidatePromptCache(userId);
 
       res.json({ data: { ...conn, dbPassword: '••••••' } });
     } catch (err: unknown) {
@@ -115,7 +113,6 @@ export function createDbConnectionsRouter(authService: AuthService, prisma: AppP
       if (dbName !== undefined) updateData.dbName = dbName;
       if (enabled !== undefined) updateData.enabled = enabled;
       const conn = await prisma.databaseConnection.update({ where: { id }, data: updateData });
-      invalidatePromptCache(userId);
 
       res.json({ data: { ...conn, dbPassword: '••••••' } });
     } catch (err: unknown) {
@@ -150,7 +147,6 @@ export function createDbConnectionsRouter(authService: AuthService, prisma: AppP
       }
 
       await prisma.databaseConnection.delete({ where: { id } });
-      invalidatePromptCache(userId);
 
       res.json({ ok: true });
     } catch (err: unknown) {

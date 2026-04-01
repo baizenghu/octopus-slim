@@ -72,6 +72,7 @@ export async function checkDueReminders(
   userId: string,
 ): Promise<Array<{ id: string; title: string; firedAt: string }>> {
   if (!bridge?.isConnected) return [];
+  // TODO(A-010): 当引擎 cron.list 支持 prefix 参数时，传入 prefix: `ent-reminder:${userId}:` 做服务端过滤，减少全量传输
   const result = await bridge.call<EngineCronListResponse>('cron.list', { includeDisabled: true });
   const allJobs: EngineCronJob[] = result?.jobs ?? [];
   const prefix = `ent-reminder:${userId}:`;

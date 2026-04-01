@@ -38,7 +38,6 @@ import { createAuthMiddleware, adminOnly, isAdmin, type AuthenticatedRequest } f
 import type { AppPrismaClient } from '../types/prisma';
 import { validateMcpUrl } from '../utils/url-validator';
 import { getRuntimeConfig } from '../config';
-import { invalidatePromptCache } from '../services/SystemPromptBuilder';
 import { skillDirName, skillMdName, mcpDirName } from '../utils/skill-naming';
 import { mergeSkillMd, generateSkillMd } from '../utils/skill-md-generator';
 import { installSkillDeps } from '../utils/skill-deps-installer';
@@ -1165,7 +1164,6 @@ export function createToolSourcesRouter(
 
       mcpRegistry.register(toMCPConfig(source as unknown as ToolSourceRow));
       notifyMCPRegistryChanged();
-      invalidatePromptCache(user.id);
 
       res.json({ message: '个人 MCP 已注册', source });
     } catch (err) {
@@ -1357,7 +1355,6 @@ export function createToolSourcesRouter(
 
     mcpRegistry.register(toMCPConfig(source as unknown as ToolSourceRow));
     notifyMCPRegistryChanged();
-    invalidatePromptCache(opts.ownerId || '');
     cleanupTmp(opts.tempFile);
 
     res.json({
@@ -1553,7 +1550,6 @@ export function createToolSourcesRouter(
         notifyMCPRegistryChanged();
       }
 
-      invalidatePromptCache(user.id);
       res.json({ message: '个人工具源已更新', source });
     } catch (err) {
       next(err);
@@ -1608,7 +1604,6 @@ export function createToolSourcesRouter(
         rmDir(targetDir);
       }
 
-      invalidatePromptCache(user.id);
       res.json({ message: '个人工具源已删除' });
     } catch (err) {
       next(err);

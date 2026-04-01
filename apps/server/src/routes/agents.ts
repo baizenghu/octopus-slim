@@ -21,7 +21,6 @@ import { createAuthMiddleware, type AuthenticatedRequest } from '../middleware/a
 import { EngineAdapter } from '../services/EngineAdapter';
 import { TenantEngineAdapter } from '../services/TenantEngineAdapter';
 import { syncAgentToEngine, ensureAndSyncNativeAgent, computeToolsFromAllowedSources } from '../services/AgentConfigSync';
-import { invalidatePromptCache } from '../services/SystemPromptBuilder';
 import { createAvatarUpload, mimeToExt } from '../utils/avatar';
 import { createLogger } from '../utils/logger';
 import { readToolsCacheAsync } from '../utils/tools-cache';
@@ -502,9 +501,6 @@ export function createAgentsRouter(
           logger.error('[agents] syncToolsMd failed:', { error: e instanceof Error ? e.message : String(e) }),
         );
       }
-
-      // Agent 配置变更后清除 prompt 缓存，下次对话重新构建
-      invalidatePromptCache(user.id);
 
       res.json({ agent });
     } catch (err) {
