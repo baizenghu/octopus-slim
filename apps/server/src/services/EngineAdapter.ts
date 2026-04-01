@@ -52,6 +52,7 @@ export interface AgentStreamEvent {
   toolCallId?: string;
   toolArgs?: string;
   toolResult?: string;
+  warning?: string;   // 破坏性命令警告（bash/exec 类工具），undefined 表示安全
   phase?: string;
   error?: string;
   runId?: string;
@@ -297,12 +298,26 @@ export class EngineAdapter extends EventEmitter {
         if (phase === 'start' && toolCallId) {
           // 存入 pending，同时发一个不含 result 的事件（让前端感知工具开始执行）
           pendingToolCalls.set(toolCallId, { name: toolName, args: data['args'] });
-          onEvent({
-            type: 'tool_call',
-            toolCallId,
-            toolName,
-            toolArgs: data['args'] ? (typeof data['args'] === 'string' ? data['args'] : JSON.stringify(data['args'])) : undefined,
-            runId: evt.runId,
+          const toolArgsStr = data['args'] ? (typeof data['args'] === 'string' ? data['args'] : JSON.stringify(data['args'])) : undefined;
+          // fire-and-forget：警告检测不阻塞事件发送
+          this.enrichToolCallWarning(toolName, toolArgsStr).then((warning) => {
+            onEvent({
+              type: 'tool_call',
+              toolCallId,
+              toolName,
+              toolArgs: toolArgsStr,
+              warning,
+              runId: evt.runId,
+            });
+          }).catch(() => {
+            // 警告检测失败时降级，不含 warning 字段
+            onEvent({
+              type: 'tool_call',
+              toolCallId,
+              toolName,
+              toolArgs: toolArgsStr,
+              runId: evt.runId,
+            });
           });
           return;
         }
@@ -386,6 +401,23 @@ export class EngineAdapter extends EventEmitter {
       cleanup();
       throw err;
     }
+  }
+
+  // ---- 安全警告检测 ----
+
+  private static readonly EXEC_TOOLS = new Set(['bash', 'exec', 'run_shell', 'run_command', 'execute_command']);
+
+  /**
+   * 检测工具调用是否包含破坏性命令，返回警告文本或 undefined
+   * 动态导入引擎安全模块（模块加载后缓存，后续调用极快）
+   */
+  private async enrichToolCallWarning(toolName: string, toolArgs?: string): Promise<string | undefined> {
+    if (!EngineAdapter.EXEC_TOOLS.has(toolName.toLowerCase())) return undefined;
+    const command = toolArgs ?? '';
+    // Non-literal path to prevent TypeScript rootDir error
+    const destructiveModulePath: string = '../../../../packages/engine/src/agents/pi-extensions/safety/destructive-command-warning.js';
+    const mod = await import(destructiveModulePath) as { detectDestructiveCommand: (cmd: string) => string | null };
+    return mod.detectDestructiveCommand(command) ?? undefined;
   }
 
   // ---- 引擎事件映射 ----
