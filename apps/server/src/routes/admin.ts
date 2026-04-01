@@ -275,32 +275,40 @@ export function createAdminRouter(
         }
       }
 
-      // ── 清理该用户的所有 agent（原生 gateway + memory scope） ──
+      // ── 提前收集 nativeAgentIds（DB 事务后清理引擎需要，事务后 agents 表已删除） ──
       const userAgents = await prisma.agent.findMany({
         where: { ownerId: id },
         select: { id: true, name: true },
       }).catch(() => []);
 
-      // 收集所有需要清理 state 目录的 nativeAgentId
       const nativeAgentIds: string[] = [];
-
       for (const agent of userAgents) {
-        const nativeAgentId = tenant.agentId(agent.name);
-        nativeAgentIds.push(nativeAgentId);
-        if (bridge?.isConnected) {
-          bridge.call('agents.delete', { agentId: nativeAgentId, deleteFiles: true }).catch(() => { });
-        }
-        // memory scope 无需清理：默认行为不依赖 agentAccess 配置
+        nativeAgentIds.push(tenant.agentId(agent.name));
       }
-      // 默认 agent 不在 agents 表中，也需要清理原生 gateway
-      const defaultNativeId = tenant.agentId('default');
-      nativeAgentIds.push(defaultNativeId);
-      if (bridge?.isConnected) {
-        bridge.call('agents.delete', { agentId: defaultNativeId, deleteFiles: true }).catch(() => { });
-      }
-      // memory scope 无需清理
+      nativeAgentIds.push(tenant.agentId('default'));
 
-      // ── 清理用户的 Docker sandbox 容器 ──
+      // ── 清理数据库关联记录（事务优先，DB 提交后再清理外部资源，保证一致性） ──
+      await prisma.$transaction(async (tx: any) => {
+        await tx.agent.deleteMany({ where: { ownerId: id } });
+        await tx.scheduledTask.deleteMany({ where: { userId: id } });
+        await tx.databaseConnection.deleteMany({ where: { userId: id } });
+        await tx.toolSource.deleteMany({ where: { ownerId: id } });
+        await tx.generatedFile.deleteMany({ where: { userId: id } });
+        await tx.iMUserBinding.deleteMany({ where: { userId: id } });
+        await tx.mailLog.deleteMany({ where: { userId: id } });
+        // ── 删除用户记录 ──
+        await tx.user.delete({ where: { userId: id } });
+      });
+
+      // ── 清理该用户的所有 agent（原生 gateway，best-effort，DB 已提交） ──
+      for (const nativeAgentId of nativeAgentIds) {
+        if (bridge?.isConnected) {
+          bridge.call('agents.delete', { agentId: nativeAgentId, deleteFiles: true })
+            .catch((e: unknown) => logger.warn(`[admin] engine agent cleanup failed: ${nativeAgentId}`, { error: String(e) }));
+        }
+      }
+
+      // ── 清理用户的 Docker sandbox 容器（best-effort，DB 已提交） ──
       try {
         const containerPrefix = `octopus-sbx-agent-${tenant.agentId('')}`;
         const containers = execFileSync('docker', [
@@ -319,19 +327,6 @@ export function createAdminRouter(
       } catch (e: unknown) {
         logger.warn(`[admin] Failed to cleanup sandbox containers for ${id}:`, { error: e instanceof Error ? e.message : String(e) });
       }
-
-      // ── 清理数据库关联记录（事务保证原子性） ──
-      await prisma.$transaction(async (tx: any) => {
-        await tx.agent.deleteMany({ where: { ownerId: id } });
-        await tx.scheduledTask.deleteMany({ where: { userId: id } });
-        await tx.databaseConnection.deleteMany({ where: { userId: id } });
-        await tx.toolSource.deleteMany({ where: { ownerId: id } });
-        await tx.generatedFile.deleteMany({ where: { userId: id } });
-        await tx.iMUserBinding.deleteMany({ where: { userId: id } });
-        await tx.mailLog.deleteMany({ where: { userId: id } });
-        // ── 删除用户记录 ──
-        await tx.user.delete({ where: { userId: id } });
-      });
 
       // ── 从 MockLDAP 移除 ──
       authService.removeMockUser(userToDelete.username);
