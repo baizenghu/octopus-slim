@@ -24,6 +24,7 @@ import { createFilesRouter } from '../routes/files';
 import { createToolSourcesRouter } from '../routes/tool-sources';
 import { createAgentsRouter } from '../routes/agents';
 import { createSchedulerRouter } from '../routes/scheduler';
+import { createAgentTasksRouter } from '../routes/agent-tasks';
 import { createDbConnectionsRouter } from '../routes/db-connections';
 import { createImInternalRouter } from '../routes/im-internal';
 import { createChatInternalRouter } from '../routes/chat-internal';
@@ -157,6 +158,7 @@ export async function initRoutes(params: {
   app.use('/api/tool-sources', createToolSourcesRouter(authService, prismaClient!, mcpRegistry, mcpExecutor, config.workspace.dataRoot, bridge));
   app.use('/api/agents', createAgentsRouter(authService, prismaClient!, workspaceManager, bridge, config.workspace.dataRoot));
   app.use('/api/scheduler', createSchedulerRouter(authService, prismaClient!, bridge, imService));
+  app.use('/api/agent-tasks', createAgentTasksRouter(authService, prismaClient!, bridge));
   app.use('/api/user/db-connections', createDbConnectionsRouter(authService, prismaClient));
   if (imService?.weixinManager) {
     app.use('/api/user/weixin', createWeixinRoutes({ authService, prisma: prismaClient, weixinManager: imService.weixinManager }));

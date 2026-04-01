@@ -15,6 +15,8 @@ import { ConfigBatcher } from '../utils/config-batcher';
 import { getRuntimeConfig } from '../config';
 import { createLogger } from '../utils/logger';
 import type { EngineRawEvent } from '../types/engine';
+import { asyncAgentRegistry } from './AsyncAgentRegistry';
+import { ProgressTracker, type ProgressEntry } from './ProgressTracker';
 
 const logger = createLogger('EngineAdapter');
 
@@ -512,5 +514,144 @@ export class EngineAdapter extends EventEmitter {
   static parseSessionKeyUserId(sessionKey: string): string | null {
     const match = sessionKey.match(/^agent:ent_([^_]+)_/);
     return match ? match[1] : null;
+  }
+
+  // ---- 异步后台 Agent 调用 ----
+
+  /**
+   * 异步调用 Agent，立即返回 taskId。
+   * 任务在后台运行，完成后更新 asyncAgentRegistry。
+   *
+   * 自动后台化触发条件：
+   * - 显式传入 background: true
+   * - 或运行超过 backgroundAfterMs（默认 120_000ms）仍未完成时，
+   *   调用者不再等待（Promise 已 resolve），但引擎继续后台执行直到收到 done/error。
+   *
+   * @param params       Agent 调用参数（含可选 background / backgroundAfterMs）
+   * @param onProgress   可选进度回调，每次有新进度条目时触发
+   * @returns            taskId（注册表中的任务 ID）和 cancel 函数
+   */
+  async callAgentAsync(
+    params: AgentCallParams & { background?: boolean; backgroundAfterMs?: number },
+    onProgress?: (entry: ProgressEntry) => void,
+  ): Promise<{ taskId: string; cancel: () => void }> {
+    const { background: _background, backgroundAfterMs = 120_000, ...agentParams } = params;
+
+    const agentName = agentParams.agentId.replace(/^ent_[^_]+_/, '');
+
+    // 在注册表中创建任务（status: pending）
+    const task = asyncAgentRegistry.create({
+      userId: EngineAdapter.parseSessionKeyUserId(agentParams.sessionKey) ?? agentParams.agentId,
+      agentName,
+      message: agentParams.message,
+      sessionKey: agentParams.sessionKey,
+    });
+
+    const taskId = task.taskId;
+    const tracker = new ProgressTracker(20);
+    let cancelled = false;
+
+    const cancel = () => {
+      cancelled = true;
+      asyncAgentRegistry.cancel(taskId);
+    };
+
+    // 后台执行：不 await，错误通过 registry.fail 记录
+    const runBackground = async () => {
+      let resultText = '';
+      let timedOut = false;
+
+      // backgroundAfterMs 超时计时器：超时后 resolve，但任务继续后台运行
+      let bgResolve: (() => void) | null = null;
+      const bgTimer = backgroundAfterMs > 0
+        ? setTimeout(() => {
+            timedOut = true;
+            if (bgResolve) bgResolve();
+          }, backgroundAfterMs)
+        : null;
+
+      const runPromise = this.callAgent(agentParams, (event) => {
+        if (cancelled) return;
+
+        // 进度追踪
+        tracker.onEvent(event);
+        const recent = tracker.getRecent();
+        const latest = recent[recent.length - 1];
+        if (latest) {
+          asyncAgentRegistry.updateProgress(taskId, latest.summary);
+          if (onProgress) {
+            try {
+              onProgress(latest);
+            } catch (err: unknown) {
+              logger.warn('callAgentAsync onProgress callback error', {
+                error: err instanceof Error ? err.message : String(err),
+              });
+            }
+          }
+        }
+
+        // 更新 runId
+        if (event.runId) {
+          const t = asyncAgentRegistry.get(taskId);
+          if (t && !t.runId) t.runId = event.runId;
+        }
+
+        // 收集文本结果
+        if (event.type === 'text_delta' && event.content) {
+          resultText += event.content;
+        }
+
+        // 任务完成
+        if (event.type === 'done') {
+          if (bgTimer) clearTimeout(bgTimer);
+          if (!cancelled) {
+            asyncAgentRegistry.complete(taskId, resultText.trim());
+          }
+          if (bgResolve) bgResolve();
+        }
+
+        // 任务失败
+        if (event.type === 'error') {
+          if (bgTimer) clearTimeout(bgTimer);
+          if (!cancelled) {
+            asyncAgentRegistry.fail(taskId, event.error ?? 'unknown error');
+          }
+          if (bgResolve) bgResolve();
+        }
+      });
+
+      if (bgTimer) {
+        // 同时等待 agent 完成 或 backgroundAfterMs 超时
+        await Promise.race([
+          runPromise,
+          new Promise<void>((resolve) => { bgResolve = resolve; }),
+        ]);
+
+        if (timedOut) {
+          logger.info('callAgentAsync: backgroundAfterMs exceeded, running in background', { taskId });
+          // 任务继续后台运行（runPromise 仍在执行）
+          runPromise.catch((err: unknown) => {
+            if (!cancelled) {
+              const msg = err instanceof Error ? err.message : String(err);
+              logger.error('callAgentAsync background run error', { taskId, error: msg });
+              asyncAgentRegistry.fail(taskId, msg);
+            }
+          });
+        }
+      } else {
+        await runPromise;
+      }
+    };
+
+    runBackground().catch((err: unknown) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      logger.error('callAgentAsync runBackground error', { taskId, error: msg });
+      const t = asyncAgentRegistry.get(taskId);
+      if (t && t.status !== 'completed' && t.status !== 'cancelled') {
+        asyncAgentRegistry.fail(taskId, msg);
+      }
+    });
+
+    return { taskId, cancel };
   }
 }
