@@ -1,6 +1,10 @@
 import type { ContextEvent, ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
+import { tokenCountWithEstimation } from "../../token-estimation.js";
+import { createSubsystemLogger } from "../../../logging/subsystem.js";
 import { pruneContextMessages } from "./pruner.js";
 import { getContextPruningRuntime } from "./runtime.js";
+
+const log = createSubsystemLogger("context-pruning");
 
 export default function contextPruningExtension(api: ExtensionAPI): void {
   api.on("context", (event: ContextEvent, ctx: ExtensionContext) => {
@@ -30,6 +34,18 @@ export default function contextPruningExtension(api: ExtensionAPI): void {
 
     if (next === event.messages) {
       return undefined;
+    }
+
+    // Log token-level context usage when pruning occurs (uses API usage anchor for precision)
+    const contextWindowTokens = runtime.contextWindowTokens ?? ctx.model?.contextWindow;
+    if (contextWindowTokens && contextWindowTokens > 0) {
+      const beforeTokens = tokenCountWithEstimation(event.messages);
+      const afterTokens = tokenCountWithEstimation(next);
+      log.info(
+        `context-pruning (${runtime.settings.mode}): ` +
+        `${beforeTokens} → ${afterTokens} tokens ` +
+        `(${Math.round((beforeTokens / contextWindowTokens) * 100)}% → ${Math.round((afterTokens / contextWindowTokens) * 100)}% of ${contextWindowTokens} window)`,
+      );
     }
 
     if (runtime.settings.mode === "cache-ttl") {

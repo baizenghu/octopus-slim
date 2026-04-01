@@ -110,6 +110,21 @@ export function readSessionMessages(
             id: typeof parsed.id === "string" ? parsed.id : undefined,
           },
         });
+        // Extract embedded compact boundary from details (written by compaction-safeguard)
+        const boundary = parsed.details?.compactBoundary;
+        if (boundary && boundary.type === "compact_boundary") {
+          const bTs = typeof boundary.timestamp === "string" ? Date.parse(boundary.timestamp) : Number.NaN;
+          messages.push({
+            role: "system",
+            content: [{ type: "text", text: "Conversation compacted" }],
+            timestamp: Number.isFinite(bTs) ? bTs : timestamp,
+            __octopus: {
+              kind: "compact_boundary",
+              id: typeof boundary.id === "string" ? boundary.id : undefined,
+              metadata: boundary.metadata,
+            },
+          });
+        }
         continue;
       }
 
