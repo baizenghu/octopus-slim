@@ -153,6 +153,11 @@ export function createAdminRouter(
       const { passwordHash: _ph, ...safeUser } = user;
       res.status(201).json(safeUser);
     } catch (err: unknown) {
+      const prismaError = err as { code?: string };
+      if (prismaError.code === 'P2002') {
+        res.status(409).json({ error: '用户名或邮箱已存在' });
+        return;
+      }
       next(err instanceof Error ? err : new Error(String(err)));
     }
   });
