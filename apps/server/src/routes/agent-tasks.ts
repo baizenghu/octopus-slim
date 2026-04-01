@@ -1,13 +1,14 @@
 /**
  * 异步 Agent 任务路由
  *
+ * POST   /api/agent-tasks                     — 触发一个异步 Agent 任务（202 Accepted）
  * GET    /api/agent-tasks                     — 列出当前用户的后台任务
  * GET    /api/agent-tasks/:taskId             — 获取指定任务状态
  * GET    /api/agent-tasks/:taskId/events      — SSE 流，任务完成/失败/取消时推送
  * DELETE /api/agent-tasks/:taskId             — 取消任务
  */
 
-import { Router } from 'express';
+import { Router, type Response, type NextFunction } from 'express';
 import type { AuthService } from '@octopus/auth';
 import { createAuthMiddleware, type AuthenticatedRequest } from '../middleware/auth';
 import { asyncAgentRegistry, type AsyncAgentTask } from '../services/AsyncAgentRegistry';
@@ -17,6 +18,22 @@ import type { AppPrismaClient } from '../types/prisma';
 
 const logger = createLogger('agent-tasks');
 
+/**
+ * 统一处理限流错误（COORDINATOR_LIMIT_EXCEEDED / USER_TASK_LIMIT_EXCEEDED）。
+ * 若识别为限流错误，写入 429 响应并返回 true；否则返回 false，由调用方继续处理。
+ */
+function handleRateLimitError(err: unknown, res: Response, _next: NextFunction): boolean {
+  const code = (err as any)?.code;
+  if (code === 'COORDINATOR_LIMIT_EXCEEDED' || code === 'USER_TASK_LIMIT_EXCEEDED') {
+    res
+      .status(429)
+      .set('Retry-After', '30')
+      .json({ error: (err as Error).message, retryAfterSeconds: 30, code });
+    return true;
+  }
+  return false;
+}
+
 export function createAgentTasksRouter(
   authService: AuthService,
   prisma: AppPrismaClient,
@@ -24,6 +41,42 @@ export function createAgentTasksRouter(
 ): Router {
   const router = Router();
   const authMiddleware = createAuthMiddleware(authService, prisma, bridge);
+
+  /**
+   * POST /api/agent-tasks
+   * 触发一个异步 Agent 任务，立即返回 taskId（HTTP 202 Accepted）。
+   * Body: { agentName?: string; message: string; coordinatorConfig?: unknown }
+   */
+  router.post('/', authMiddleware, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    const { agentName, message, coordinatorConfig: _coordinatorConfig } = req.body as {
+      agentName?: string;
+      message: string;
+      coordinatorConfig?: unknown;
+    };
+
+    if (!message?.trim()) {
+      res.status(400).json({ error: 'message 不能为空' });
+      return;
+    }
+
+    if (!bridge) {
+      res.status(503).json({ error: '引擎未就绪，请稍后重试' });
+      return;
+    }
+
+    try {
+      const { taskId } = await bridge.callAgentAsync({
+        agentId: agentName ?? 'default',
+        message: message.trim(),
+        sessionKey: `async:${req.user!.id}:${Date.now()}`,
+      });
+      logger.info('agent task triggered via POST', { taskId, userId: req.user!.id, agentName });
+      res.status(202).json({ taskId, status: 'pending' });
+    } catch (err: unknown) {
+      if (handleRateLimitError(err, res, next)) return;
+      next(err);
+    }
+  });
 
   /**
    * GET /api/agent-tasks
