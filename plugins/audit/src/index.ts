@@ -146,12 +146,13 @@ export default function enterpriseAuditPlugin(api: any) {
   }
 
   // ─── Hook: before_tool_call ──────────────────────────
-  api.on('before_tool_call', async (
+  api.on('before_tool_call', (
     event: { toolName: string; params: Record<string, unknown> },
     ctx: { agentId?: string; sessionKey?: string }
   ) => {
     const userId = extractUserId(ctx.agentId);
-    await audit({
+    // fire-and-forget：DB 写入失败不阻塞工具调用
+    audit({
       userId,
       action: Actions.TOOL_CALL,
       resource: `tool:${event.toolName}`,
@@ -161,7 +162,9 @@ export default function enterpriseAuditPlugin(api: any) {
         paramKeys: Object.keys(event.params || {}),
       },
       success: true,
-    });
+    }).catch((err: unknown) =>
+      api.logger.warn(`[enterprise-audit] before_tool_call audit failed: ${err instanceof Error ? err.message : String(err)}`),
+    );
   });
 
   // ─── Hook: after_tool_call ───────────────────────────
