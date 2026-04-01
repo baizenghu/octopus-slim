@@ -1,0 +1,29 @@
+{
+  "coordinatorName": "code-review-coordinator",
+  "description": "协调 4 个专项审查 Agent 并行执行，汇总结果生成报告",
+  "maxWorkers": 4,
+  "workerTimeoutSeconds": 240,
+  "workerAgents": [
+    {
+      "agentId": "code-reviewer-business",
+      "role": "业务逻辑",
+      "description": "负责 API 语义、数据流、业务规则审查"
+    },
+    {
+      "agentId": "code-reviewer-quality",
+      "role": "代码质量",
+      "description": "负责重复代码、死代码、可维护性审查"
+    },
+    {
+      "agentId": "code-reviewer-stability",
+      "role": "稳定性",
+      "description": "负责内存泄漏、异常处理、资源清理审查"
+    },
+    {
+      "agentId": "code-reviewer-security",
+      "role": "安全",
+      "description": "负责注入风险、认证鉴权、数据泄露审查"
+    }
+  ],
+  "aggregationInstruction": "所有 Worker 完成后，将结果按严重级别（Critical>High>Medium>Low）排序，相同文件+行的问题合并，生成结构化 Markdown 报告"
+}
