@@ -340,6 +340,8 @@ export function createChatRouter(
 
     // 流式状态标记：客户端断连后停止写入
     let streamDone = false;
+    // callAgent cleanup 函数，SSE close 时调用，防止事件监听器泄漏
+    let agentCleanupFn: (() => void) | undefined;
 
     // 心跳保活
     const heartbeat = setInterval(() => {
@@ -363,6 +365,7 @@ export function createChatRouter(
         // 客户端断开连接，通知引擎终止生成
         bridge?.call('chat.abort', { sessionKey }).catch(() => {});
       }
+      agentCleanupFn?.(); // 主动释放 callAgent 监听器，防止 OOM
       clearInterval(heartbeat);
       clearInterval(reminderInterval);
       // 递减活跃流计数
@@ -406,7 +409,7 @@ export function createChatRouter(
     }
 
     try {
-      await bridge.callAgent(
+      const { cleanup: capturedCleanup } = await bridge.callAgent(
         {
           message: finalMessage,
           agentId: nativeAgentId,
@@ -517,6 +520,7 @@ export function createChatRouter(
           }
         },
       );
+      agentCleanupFn = capturedCleanup;
     } catch (err) {
       clearInterval(heartbeat);
       clearInterval(reminderInterval);
@@ -613,6 +617,8 @@ export function createChatRouter(
 
     let fullContent = '';
     try {
+      let nsCleanup: (() => void) | undefined;
+      req.on('close', () => nsCleanup?.());
       await new Promise<void>((resolve, reject) => {
         bridge!.callAgent(
           { message: finalMsgNonStream, agentId: nativeAgentId, sessionKey, deliver: false, isAdmin: isAdmin(user) },
@@ -622,7 +628,7 @@ export function createChatRouter(
             if (event.type === 'done') resolve();
             if (event.type === 'error') reject(new Error(event.error || 'Agent error'));
           },
-        ).catch(reject);
+        ).then(({ cleanup }) => { nsCleanup = cleanup; }).catch(reject);
       });
 
       // 响应净化

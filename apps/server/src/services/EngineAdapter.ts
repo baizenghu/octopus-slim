@@ -34,6 +34,8 @@ export interface AgentCallParams {
   sessionKey: string;
   idempotencyKey?: string;
   extraSystemPrompt?: string;
+  /** Context information injected as <context-note> tag before user message (dual-channel injection) */
+  contextNote?: string;
   thinking?: string;
   timeout?: number;
   label?: string;
@@ -260,7 +262,7 @@ export class EngineAdapter extends EventEmitter {
   async callAgent(
     params: AgentCallParams,
     onEvent: (event: AgentStreamEvent) => void,
-  ): Promise<{ runId: string }> {
+  ): Promise<{ runId: string; cleanup: () => void }> {
     const idempotencyKey = params.idempotencyKey || randomUUID();
     this.trackedRunIds.add(idempotencyKey);
     // 不透明导入事件监听
@@ -271,10 +273,12 @@ export class EngineAdapter extends EventEmitter {
     let cleaned = false;
     // 追踪 pending tool calls，只在 result 阶段发出合并后的事件
     const pendingToolCalls = new Map<string, { name: string; args: unknown }>();
+    let forcedCleanupTimer: ReturnType<typeof setTimeout> | undefined;
     const cleanup = () => {
       if (cleaned) return;
       cleaned = true;
       pendingToolCalls.clear();
+      if (forcedCleanupTimer) clearTimeout(forcedCleanupTimer);
       unsubscribe();
       this.off('_agent_async_error', asyncErrorHandler);
     };
@@ -355,6 +359,16 @@ export class EngineAdapter extends EventEmitter {
     };
     this.on('_agent_async_error', asyncErrorHandler);
 
+    // 30min 强制兜底：SSE close 未触发时自动释放监听器，防止 OOM
+    const FORCED_CLEANUP_DELAY_MS = 30 * 60 * 1000 + 5_000;
+    forcedCleanupTimer = setTimeout(() => {
+      if (!cleaned) {
+        logger.warn('[callAgent] forced cleanup triggered, possible listener leak', { runId: idempotencyKey });
+        cleanup();
+      }
+    }, FORCED_CLEANUP_DELAY_MS);
+    (forcedCleanupTimer as NodeJS.Timeout).unref();
+
     try {
       const { isAdmin, ...rpcParams } = params;
       const result = await this.call<{ runId?: string; accepted?: boolean }>('agent', {
@@ -366,7 +380,7 @@ export class EngineAdapter extends EventEmitter {
 
       serverRunId = result.runId || idempotencyKey;
       this.trackedRunIds.add(serverRunId);
-      return { runId: serverRunId };
+      return { runId: serverRunId, cleanup };
     } catch (err) {
       this.trackedRunIds.delete(idempotencyKey);
       cleanup();
