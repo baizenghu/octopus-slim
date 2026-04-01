@@ -44,10 +44,14 @@ const MAX_UNTRUSTED_INSTRUCTION_CHARS = 4000;
 const MAX_ASK_OVERLAP_TOKENS = 12;
 const MIN_ASK_OVERLAP_TOKENS_FOR_DOUBLE_MATCH = 3;
 const REQUIRED_SUMMARY_SECTIONS = [
+  "## Primary Request and Intent",
   "## Decisions",
+  "## Files and Code Sections",
   "## Open TODOs",
   "## Constraints/Rules",
   "## Pending user asks",
+  "## Current Work",
+  "## All user messages",
   "## Exact identifiers",
 ] as const;
 const STRICT_EXACT_IDENTIFIERS_INSTRUCTION =
@@ -441,9 +445,32 @@ function buildCompactionStructureInstructions(
     resolveExactIdentifierSectionInstruction(summarizationInstructions);
   const sectionsTemplate = [
     "Produce a compact, factual summary with these exact section headings:",
-    ...REQUIRED_SUMMARY_SECTIONS,
+    "",
+    "## Primary Request and Intent",
+    "What is the user's original goal? What are they trying to accomplish? State concisely.",
+    "",
+    "## Decisions",
+    "Technical and design decisions made, with rationale.",
+    "",
+    "## Files and Code Sections",
+    "Files read or modified and relevant code snippets. Include complete code when the snippet is short enough to avoid re-reading the file.",
+    "",
+    "## Open TODOs",
+    "Active tasks and their current status (in-progress, blocked, pending). Include batch progress (e.g., \"5/17 items completed\").",
+    "",
+    "## Constraints/Rules",
+    "Rules, constraints, and conventions established during the conversation.",
+    "",
+    "## Pending user asks",
+    "Unresolved questions or requests from the user. Do not omit unresolved asks.",
+    "",
+    "## Current Work",
+    "What was being worked on at the moment of compaction? Describe in detail — the agent needs to resume seamlessly.",
+    "",
+    "## All user messages",
+    "Reproduce every user message (non-tool-result) verbatim or near-verbatim, in chronological order. This is the ground truth — do not paraphrase.",
+    "",
     identifierSectionInstruction,
-    "Do not omit unresolved asks from the user.",
   ].join("\n");
   const custom = customInstructions?.trim();
   if (!custom) {
@@ -488,8 +515,14 @@ function buildStructuredFallbackSummary(
   }
   const exactIdentifiersSummary = "None captured.";
   return [
-    "## Decisions",
+    "## Primary Request and Intent",
     trimmedPreviousSummary || "No prior history.",
+    "",
+    "## Decisions",
+    "None.",
+    "",
+    "## Files and Code Sections",
+    "None.",
     "",
     "## Open TODOs",
     "None.",
@@ -498,6 +531,12 @@ function buildStructuredFallbackSummary(
     "None.",
     "",
     "## Pending user asks",
+    "None.",
+    "",
+    "## Current Work",
+    "None.",
+    "",
+    "## All user messages",
     "None.",
     "",
     "## Exact identifiers",
