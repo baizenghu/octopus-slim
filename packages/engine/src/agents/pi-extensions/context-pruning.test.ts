@@ -375,6 +375,60 @@ describe("context-pruning", () => {
     expect(toolText(tool)).toContain("x".repeat(20_000));
   });
 
+  describe("token-threshold mode", () => {
+    it("prunes when token ratio exceeds softTrimRatio regardless of TTL", () => {
+      const messages = [
+        makeUser("setup question"),
+        ...makeSimpleToolPruningMessages(true),
+        makeUser("a".repeat(500)),
+        makeAssistant("response"),
+      ];
+
+      const settings = computeEffectiveSettings({ mode: "token-threshold" })!;
+      expect(settings).not.toBeNull();
+      expect(settings.mode).toBe("token-threshold");
+
+      const result = pruneWithAggressiveDefaults(messages, {
+        mode: "token-threshold",
+        softTrimRatio: 0.1,
+      });
+
+      const originalToolText = toolText(findToolResult(messages, "t1"));
+      const prunedToolText = toolText(findToolResult(result, "t1"));
+      expect(prunedToolText.length).toBeLessThan(originalToolText.length);
+    });
+
+    it("does not prune when token ratio is below softTrimRatio", () => {
+      const messages = [makeUser("hi"), makeAssistant("hello")];
+      const result = pruneWithAggressiveDefaults(messages, {
+        mode: "token-threshold",
+        softTrimRatio: 0.3,
+      });
+      expect(result).toEqual(messages);
+    });
+
+    it("extension handler skips TTL check in token-threshold mode", async () => {
+      const handler = createContextHandler();
+      const sessionManager = {} as any;
+
+      setContextPruningRuntime(sessionManager, {
+        settings: {
+          ...DEFAULT_CONTEXT_PRUNING_SETTINGS,
+          mode: "token-threshold",
+          softTrimRatio: 0.01,
+          keepLastAssistants: 0,
+        },
+        contextWindowTokens: 1000,
+        isToolPrunable: () => true,
+        lastCacheTouchAt: Date.now(), // just touched — TTL would block in cache-ttl mode
+      });
+
+      const messages = makeSimpleToolPruningMessages(true);
+      const result = runContextHandler(handler, messages, sessionManager);
+      expect(result).toBeDefined();
+    });
+  });
+
   it("soft-trims across block boundaries", () => {
     const messages: AgentMessage[] = [
       makeUser("u1"),
