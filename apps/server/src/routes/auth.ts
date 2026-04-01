@@ -62,7 +62,9 @@ export function createAuthRouter(authService: AuthService, workspaceManager: Wor
             }
           } else {
             // 用户不在数据库中，拒绝登录（必须由 Admin 先在系统中创建账号）
-            res.status(401).json({ error: 'User account not found. Please contact administrator.' });
+            // 不透露账户不存在，防止用户枚举（等保要求）
+            logger.warn('[auth] login rejected: user not in DB', { username });
+            res.status(401).json({ error: '用户名或密码错误' });
             return;
           }
         } catch (dbErr: unknown) {
@@ -95,7 +97,8 @@ export function createAuthRouter(authService: AuthService, workspaceManager: Wor
       if (username) {
         securityMonitor.recordLoginFailure(ip, username);
       }
-      res.status(401).json({ error: err instanceof Error ? err.message : 'Login failed' });
+      logger.warn('[auth] login failed', { username, reason: err instanceof Error ? err.message : String(err), ip });
+      res.status(401).json({ error: '用户名或密码错误' });
     }
   });
 
@@ -116,13 +119,14 @@ export function createAuthRouter(authService: AuthService, workspaceManager: Wor
       if (prisma && typedResult.user?.id) {
         const dbUser = await prisma.user.findUnique({ where: { userId: typedResult.user.id } });
         if (!dbUser || dbUser.status !== 'active') {
-          res.status(401).json({ error: 'User disabled' });
+          logger.warn('[auth] refresh rejected: user disabled or not found', { userId: typedResult.user.id });
+          res.status(401).json({ error: '用户名或密码错误' });
           return;
         }
       }
       res.json(result);
     } catch (err: unknown) {
-      res.status(401).json({ error: err instanceof Error ? err.message : 'Token refresh failed' });
+      res.status(401).json({ error: 'Token 无效或已过期，请重新登录' });
     }
   });
 
