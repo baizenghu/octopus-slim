@@ -15,6 +15,7 @@ import { asyncAgentRegistry, type AsyncAgentTask } from '../services/AsyncAgentR
 import { createLogger } from '../utils/logger';
 import type { EngineAdapter } from '../services/EngineAdapter';
 import type { AppPrismaClient } from '../types/prisma';
+import { TenantEngineAdapter } from '../services/TenantEngineAdapter';
 
 const logger = createLogger('agent-tasks');
 
@@ -65,10 +66,15 @@ export function createAgentTasksRouter(
     }
 
     try {
+      const userId = req.user!.id;
+      const tenantBridge = TenantEngineAdapter.forUser(bridge, userId);
+      const resolvedAgentId = tenantBridge.agentId(agentName ?? 'default');
+      const sessionId = `async-${Date.now()}`;
+      const resolvedSessionKey = tenantBridge.sessionKey(agentName ?? 'default', sessionId);
       const { taskId } = await bridge.callAgentAsync({
-        agentId: agentName ?? 'default',
+        agentId: resolvedAgentId,
         message: message.trim(),
-        sessionKey: `async:${req.user!.id}:${Date.now()}`,
+        sessionKey: resolvedSessionKey,
       });
       logger.info('agent task triggered via POST', { taskId, userId: req.user!.id, agentName });
       res.status(202).json({ taskId, status: 'pending' });

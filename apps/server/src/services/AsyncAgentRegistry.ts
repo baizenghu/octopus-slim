@@ -13,6 +13,9 @@ const _log = {
   warn: (msg: string, meta?: Record<string, unknown>) =>
     // eslint-disable-next-line no-console
     console.warn(`[AsyncAgentRegistry] ${msg}`, meta ?? ''),
+  info: (msg: string, meta?: Record<string, unknown>) =>
+    // eslint-disable-next-line no-console
+    console.info(`[AsyncAgentRegistry] ${msg}`, meta ?? ''),
 };
 
 export type AsyncAgentStatus =
@@ -99,6 +102,7 @@ export class AsyncAgentRegistry {
    */
   async restoreFromDB(prisma: AppPrismaClient): Promise<void> {
     this.setPrisma(prisma);
+    // 1. 将残留的 running/pending 任务标记为 failed
     const staleTasks = await prisma.agentTask.findMany({
       where: { status: { in: ['running', 'pending'] } },
     });
@@ -110,6 +114,31 @@ export class AsyncAgentRegistry {
     }
     if (staleTasks.length > 0) {
       _log.warn(`restoreFromDB: marked ${staleTasks.length} stale task(s) as failed`);
+    }
+    // 2. 回填最近 24h 的任务到内存（让 GET /api/agent-tasks 重启后仍可查到历史）
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const recentTasks = await prisma.agentTask.findMany({
+      where: { createdAt: { gte: since } },
+      orderBy: { createdAt: 'desc' },
+      take: 200,
+    });
+    for (const t of recentTasks) {
+      if (!this.tasks.has(t.taskId)) {
+        this.tasks.set(t.taskId, {
+          ...t,
+          status: t.status as AsyncAgentTask['status'],
+          progress: (t.progress as string[]) ?? [],
+          result: t.result ?? undefined,
+          error: t.error ?? undefined,
+          runId: t.runId ?? undefined,
+          sessionKey: t.sessionKey ?? undefined,
+          startedAt: t.startedAt ?? undefined,
+          completedAt: t.completedAt ?? undefined,
+        });
+      }
+    }
+    if (recentTasks.length > 0) {
+      _log.info(`restoreFromDB: loaded ${recentTasks.length} recent task(s) into memory`);
     }
   }
 
