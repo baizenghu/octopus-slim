@@ -1517,6 +1517,17 @@ export function createToolSourcesRouter(
         }
       }
 
+      // 阻止绕过安全扫描：已拒绝的 Skill 不可被直接 enabled
+      if (existing.type === 'skill' && enabled === true) {
+        const existingCfg = (existing.config || {}) as Record<string, unknown>;
+        const existingStatus = existingCfg['status'] as string | undefined;
+        const scanReport = existingCfg['scanReport'] as { passed?: boolean } | undefined;
+        if (existingStatus === 'rejected' || scanReport?.passed === false) {
+          res.status(403).json({ error: '安全扫描未通过或已被拒绝的 Skill 不可启用，请重新上传或联系管理员' });
+          return;
+        }
+      }
+
       const source = await prisma.toolSource.update({
         where: { id },
         data: {
