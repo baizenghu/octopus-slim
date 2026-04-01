@@ -27,6 +27,7 @@ import type { WorkspaceManager } from '@octopus/workspace';
 import type { AuditLogger } from '@octopus/audit';
 import { EngineAdapter } from '../services/EngineAdapter';
 import { ensureAndSyncNativeAgent } from '../services/AgentConfigSync';
+import { TenantEngineAdapter } from '../services/TenantEngineAdapter';
 
 import { validateSessionOwnership } from '../utils/ownership';
 import { sanitizeResponse } from '../utils/ContentSanitizer';
@@ -88,7 +89,7 @@ export function createChatRouter(
     message: string,
     _userId: string,
     sessionId: string,
-    agent?: { mcpFilter?: string[] | null; skillsFilter?: string[] | null } | null,
+    agent?: { mcpFilter?: string[] | null; skillsFilter?: string[] | null; name?: string | null } | null,
   ): Promise<{ reply: string; passthrough?: string } | null> {
     if (!message.startsWith('/')) return null;
 
@@ -104,6 +105,7 @@ export function createChatRouter(
           '- `/help` — 显示此帮助信息',
           '- `/mcp <名称> [问题]` — 使用指定 MCP 工具（可直接附带问题）',
           '- `/skill <名称> [问题]` — 使用指定 Skill（可直接附带问题）',
+          '- `/remember <内容>` — 将内容存入 Agent 长期记忆（后续对话自动引用）',
         ].join('\n') };
 
       case '/mcp': {
@@ -175,6 +177,33 @@ export function createChatRouter(
           return { reply: `使用 Skill: \`${skillName}\``, passthrough: `[请严格按照 ${skillName} skill 的操作指南执行以下任务，必须使用技能自带的脚本，禁止自行编写替代代码]\n${skillQuestion}` };
         }
         return { reply: `已设置本会话 Skill 偏好: \`${skillName}\`，后续消息将优先使用该 Skill` };
+      }
+
+      case '/remember': {
+        if (!arg.trim()) {
+          return { reply: '用法: `/remember <需要记住的内容>` — 例如: `/remember 我们的 API 前缀是 /api/v2`' };
+        }
+        if (!bridge?.isConnected) {
+          return { reply: '引擎未连接，记忆暂时无法保存' };
+        }
+        try {
+          const agentName = agent?.name || 'default';
+          const nativeAgentId = TenantEngineAdapter.forUser(bridge, _userId).agentId(agentName);
+          await bridge.call('memory.add', {
+            agentId: nativeAgentId,
+            content: arg.trim(),
+            metadata: {
+              source: 'user_command',
+              timestamp: new Date().toISOString(),
+              sessionId,
+            },
+          });
+          const preview = arg.trim().slice(0, 100) + (arg.trim().length > 100 ? '...' : '');
+          return { reply: `已记住：${preview}` };
+        } catch (e: unknown) {
+          const msg = e instanceof Error ? e.message : String(e);
+          return { reply: `记忆保存失败：${msg}` };
+        }
       }
 
       case '/lesson': {

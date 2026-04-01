@@ -477,7 +477,7 @@ git commit -m "fix(D-002): prevent enabling rejected skills via PUT /personal/:i
 
 **Context:** 企业级 MCP 创建（第 377 行）有 `stdio && !command` 校验，个人级缺失，可创建 command 为 null 的 stdio MCP，引擎执行时崩溃。
 
-- [ ] **Step 1: 在个人 MCP 创建逻辑中补充 stdio 校验**
+- [x] **Step 1: 在个人 MCP 创建逻辑中补充 stdio 校验**
 
 ```typescript
 // tool-sources.ts:1052-1053 附近（POST /personal 的 MCP 创建分支）
@@ -487,7 +487,7 @@ if (transport === 'stdio' && !command?.trim()) {
 }
 ```
 
-- [ ] **Step 2: 提交**
+- [x] **Step 2: 提交**
 
 ```bash
 git add apps/server/src/routes/tool-sources.ts
@@ -503,7 +503,7 @@ git commit -m "fix(A-012): validate command required for personal MCP in stdio m
 
 **Context:** `TenantEngineAdapter.forUser(bridge!, userId)` 引擎未连接时抛 TypeError，返回无语义 500。
 
-- [ ] **Step 1: 在 Agent CRUD 操作前检查 bridge**
+- [x] **Step 1: 在 Agent CRUD 操作前检查 bridge**
 
 ```typescript
 // agents.ts:327 前（PUT /agents/:name 中）
@@ -525,13 +525,13 @@ if (!bridge?.isConnected) {
 await syncAgentToEngine(bridge, user.id, syncOpts);
 ```
 
-- [ ] **Step 2: 类型检查**
+- [x] **Step 2: 类型检查**
 
 ```bash
 npx tsc --noEmit --project apps/server/tsconfig.json
 ```
 
-- [ ] **Step 3: 提交**
+- [x] **Step 3: 提交**
 
 ```bash
 git add apps/server/src/routes/agents.ts
@@ -547,7 +547,7 @@ git commit -m "fix(A-013): replace bridge! non-null assertion with explicit 503 
 
 **Context:** 先清理引擎/Docker，再执行 DB 事务。若 Docker 抛异常，引擎 Agent 已删但 DB 仍有记录，形成不一致。
 
-- [ ] **Step 1: 将外部资源清理移到 DB 事务之后**
+- [x] **Step 1: 将外部资源清理移到 DB 事务之后**
 
 重组删除用户逻辑为：
 
@@ -580,13 +580,13 @@ try {
 }
 ```
 
-- [ ] **Step 2: 类型检查**
+- [x] **Step 2: 类型检查**
 
 ```bash
 npx tsc --noEmit --project apps/server/tsconfig.json
 ```
 
-- [ ] **Step 3: 提交**
+- [x] **Step 3: 提交**
 
 ```bash
 git add apps/server/src/routes/admin.ts
@@ -893,7 +893,7 @@ const result = await bridge.call<EngineCronListResponse>('cron.list', {
 // 如引擎暂不支持 prefix，暂时保留注释说明，记录为 TODO(A-010)
 ```
 
-- [ ] **Step 4: 类型检查 + 测试**
+- [x] **Step 4: 类型检查 + 测试**
 
 ```bash
 npx tsc --noEmit --project apps/server/tsconfig.json
@@ -1108,7 +1108,7 @@ git commit -m "feat(skills): add built-in parallel-review skill with 4 specializ
 
 **Context:** 类似 Claude Code `/remember` 命令，允许用户在对话中主动存储长期记忆（存入 Agent 的 memory LanceDB），后续对话自动引用。使用引擎原生 `memory.add` RPC（已有）。
 
-- [ ] **Step 1: 添加 /remember 命令到 handleSlashCommand**
+- [x] **Step 1: 添加 /remember 命令到 handleSlashCommand**
 
 ```typescript
 // chat.ts:100 — switch(cmd) 中新增
@@ -1141,7 +1141,7 @@ case '/remember': {
 }
 ```
 
-- [ ] **Step 2: 更新 /help 命令展示新命令**
+- [x] **Step 2: 更新 /help 命令展示新命令**
 
 ```typescript
 case '/help':
@@ -1154,7 +1154,7 @@ case '/help':
   ].join('\n') };
 ```
 
-- [ ] **Step 3: 写单元测试**
+- [x] **Step 3: 写单元测试**
 
 ```typescript
 // apps/server/src/routes/__tests__/slash-commands.test.ts
@@ -1183,7 +1183,7 @@ npx tsc --noEmit --project apps/server/tsconfig.json
 npx vitest run apps/server/src/routes/__tests__/ --reporter=verbose
 ```
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add apps/server/src/routes/chat.ts apps/server/src/routes/__tests__/slash-commands.test.ts
