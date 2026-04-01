@@ -16,6 +16,7 @@ import { TenantEngineAdapter } from '../services/TenantEngineAdapter';
 import { syncAgentToEngine } from '../services/AgentConfigSync';
 import { ensureAgentTemplates } from '../services/SoulTemplate';
 import { buildHeartbeatRunPrompt, parseEveryToMs } from '../routes/scheduler';
+import { loadAndRegisterMarkdownAgents, resolveAgentsDir } from './load-markdown-agents';
 import { initRuntimeConfig } from '../config';
 import type { AppPrismaClient } from '../types/prisma';
 import type { loadConfig } from '../config';
@@ -277,6 +278,18 @@ export async function initServices(config: AppConfig): Promise<Services> {
   const mcpExecutor = new MCPExecutor();
 
   ensureAgentTemplates(config.workspace.dataRoot);
+
+  // ── Markdown Agent 加载（data/agents/ 目录）──
+  // 数据库初始化完成后，扫描 data/agents/ 目录，将 Markdown 定义注册为企业公共 Agent。
+  // 若 DB 中已有同名手动创建的 Agent，跳过不覆盖（参见 load-markdown-agents.ts 中的优先级说明）。
+  if (prismaClient) {
+    const agentsDir = resolveAgentsDir(config.workspace.dataRoot);
+    loadAndRegisterMarkdownAgents(prismaClient, agentsDir).catch((err: unknown) => {
+      logger.warn('Markdown agent loading failed (non-critical)', {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    });
+  }
 
   const enterpriseMcpDir = path.join(config.workspace.dataRoot, 'mcp-servers');
   if (!fs.existsSync(enterpriseMcpDir)) {
