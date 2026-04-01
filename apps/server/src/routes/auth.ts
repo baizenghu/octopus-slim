@@ -68,7 +68,13 @@ export function createAuthRouter(authService: AuthService, workspaceManager: Wor
             return;
           }
         } catch (dbErr: unknown) {
-          logger.warn('User sync warning', { error: dbErr instanceof Error ? dbErr.message : String(dbErr) });
+          // DB 故障（网络抖动、MySQL 宕机），无法安全继续，返回 503
+          logger.error('[auth] DB sync failed during login, refusing to continue', {
+            error: dbErr instanceof Error ? dbErr.message : String(dbErr),
+            username,
+          });
+          res.status(503).json({ error: '服务暂时不可用，请稍后重试' });
+          return;
         }
       }
 
