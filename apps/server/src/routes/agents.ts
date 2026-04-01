@@ -110,7 +110,14 @@ export function createAgentsRouter(
     const nativeAgentId = TenantEngineAdapter.forUser(bridge!, userId).agentId(agentName);
 
     try {
-      const lines = ['# 可用工具', '', '以下是你当前被授权使用的所有工具，请在需要时主动使用：', ''];
+      const lines = [
+        '# 可用工具', '',
+        '以下是你当前被授权使用的所有工具。每个工具可能标注了适用场景和风险等级。', '',
+        '**工具选择原则：**',
+        '- 优先使用 safe 级别的工具完成任务',
+        '- moderate 工具使用前简要说明原因',
+        '- dangerous 工具使用前必须获得用户确认', '',
+      ];
 
       // 1. 原生工具（toolsFilter）
       if (Array.isArray(toolsFilter) && toolsFilter.length > 0) {
@@ -175,14 +182,18 @@ export function createAgentsRouter(
       if (!shouldFilter || filterSet!.size > 0) {
         const skills = await prisma.toolSource.findMany({
           where: { type: 'skill', enabled: true },
-          select: { name: true, description: true, scope: true, ownerId: true },
+          select: { name: true, description: true, scope: true, ownerId: true, riskLevel: true, whenToUse: true },
         });
         const allowedSkills = shouldFilter ? skills.filter(s => filterSet!.has(s.name)) : skills;
         if (allowedSkills.length > 0) {
           lines.push('## Skills');
           lines.push('');
           for (const skill of allowedSkills) {
-            lines.push(`- **${skill.name}**${skill.description ? ` — ${skill.description}` : ''}`);
+            const risk = skill.riskLevel ? ` [${skill.riskLevel}]` : '';
+            lines.push(`- **${skill.name}**${skill.description ? ` — ${skill.description}` : ''}${risk}`);
+            if (skill.whenToUse) {
+              lines.push(`  适用场景: ${skill.whenToUse}`);
+            }
             lines.push(`  调用方式: \`run_skill(skill_name="${skill.name}", args="...")\``);
             skillCount++;
           }
@@ -311,9 +322,15 @@ export function createAgentsRouter(
       // 计算 tools deny/profile/alsoAllow 写入 DB（引擎通过 AgentStore 从 DB 读取）
       const computedTools = computeToolsFromAllowedSources(resolvedSources, toolsFilter ?? ['read', 'write', 'exec'], name.trim());
 
+      // 引擎未连接时无法生成有效 agentId，拒绝创建
+      if (!bridge?.isConnected) {
+        res.status(503).json({ error: '引擎未连接，请稍后重试' });
+        return;
+      }
+
       // 使用引擎格式的 agentId（ent_{userId}_{agentName}），
       // 确保 DB 中的 id 与引擎运行时查询的 id 一致
-      const nativeAgentId = TenantEngineAdapter.forUser(bridge!, user.id).agentId(name.trim());
+      const nativeAgentId = TenantEngineAdapter.forUser(bridge, user.id).agentId(name.trim());
       const agent = await prisma.agent.create({
         data: {
           id: nativeAgentId,
@@ -342,8 +359,13 @@ export function createAgentsRouter(
       try {
         await syncToNative(user.id, agent.name, null, agent.identity as { name?: string; emoji?: string; vibe?: string } | null, false, agent.description);
         // 同步 agent 配置到引擎（通过 RPC）
+        if (!bridge?.isConnected) {
+          // DB 已写入，引擎不可达时返回 503，告知客户端 Agent 已保存待同步
+          res.status(503).json({ error: '引擎未连接，Agent 已保存到 DB，待引擎恢复后自动同步' });
+          return;
+        }
         const enabledAgents = await prisma.agent.findMany({ where: { ownerId: user.id, enabled: true }, select: { name: true } });
-        await syncAgentToEngine(bridge!, user.id, {
+        await syncAgentToEngine(bridge, user.id, {
           agentName: agent.name,
           model: model?.trim() || null,
           // toolsFilter 触发从 DB 读取已预计算的 tools 配置
