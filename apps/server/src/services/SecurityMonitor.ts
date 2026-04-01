@@ -120,6 +120,8 @@ export class SecurityMonitor extends EventEmitter {
     const port = process.env['PORT'] || '18790';
     if (!token) return; // 无 token 时跳过 IM 通知
 
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 5_000);
     try {
       const resp = await fetch(`http://127.0.0.1:${port}/api/_internal/im/send`, {
         method: 'POST',
@@ -131,12 +133,19 @@ export class SecurityMonitor extends EventEmitter {
           userId: 'admin', // 发送给管理员
           message: `[安全告警] ${event.message}`,
         }),
+        signal: controller.signal,
       });
       if (!resp.ok) {
-        logger.warn(`IM 告警发送失败: ${resp.status}`);
+        logger.warn('[SecurityMonitor] IM alert HTTP error', { status: resp.status });
       }
-    } catch (err) {
-      logger.warn('发送 IM 安全告警失败', { error: (err as Error)?.message || String(err) });
+    } catch (e: unknown) {
+      if ((e as Error).name === 'AbortError') {
+        logger.warn('[SecurityMonitor] IM alert timed out after 5s');
+      } else {
+        logger.warn('[SecurityMonitor] IM alert failed', { error: String(e) });
+      }
+    } finally {
+      clearTimeout(timer);
     }
   }
 
