@@ -454,7 +454,10 @@ export class EngineAdapter extends EventEmitter {
           }
           if (attempt < maxRetries - 1 && (msg.includes('config changed since last load') || msg.includes('rate limit'))) {
             const delay = msg.includes('rate limit')
-              ? (parseInt(msg.match(/retry after (\d+)s/)?.[1] || '10', 10) * 1000 + 1000)
+              ? Math.min(
+                  (parseInt(msg.match(/retry after (\d+)s/)?.[1] || '10', 10) * 1000 + 1_000),
+                  30_000,  // 最多等 30s，不持锁超过半分钟
+                )
               : (500 * (attempt + 1));
             logger.warn(`${label} attempt ${attempt + 1} failed: ${msg}, retrying in ${delay}ms`);
             await new Promise(r => setTimeout(r, delay));
