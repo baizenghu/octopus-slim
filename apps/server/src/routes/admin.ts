@@ -22,6 +22,7 @@ import { TenantEngineAdapter } from '../services/TenantEngineAdapter';
 import { syncAgentToEngine } from '../services/AgentConfigSync';
 import { validatePassword } from '../utils/password';
 import { createLogger } from '../utils/logger';
+import { loadAndRegisterMarkdownAgents, resolveAgentsDir } from '../startup/load-markdown-agents';
 
 import type { AppPrismaClient } from '../types/prisma';
 
@@ -32,6 +33,7 @@ export function createAdminRouter(
   prisma: AppPrismaClient,
   workspaceManager?: WorkspaceManager,
   bridge?: EngineAdapter,
+  dataRoot?: string,
 ): Router {
   const router = Router();
   const authMiddleware = createAuthMiddleware(authService, prisma);
@@ -469,6 +471,22 @@ export function createAdminRouter(
         totalScheduledTasks,
         enabledScheduledTasks,
       });
+    } catch (err: unknown) {
+      next(err instanceof Error ? err : new Error(String(err)));
+    }
+  });
+
+  // ─── 手动触发 Markdown Agent 重新加载 ──────────
+  // POST /api/admin/reload-agents
+  // 重新扫描 data/agents/ 目录并 upsert 到 DB，返回加载数量。
+
+  router.post('/reload-agents', authMiddleware, adminOnly, async (_req: AuthenticatedRequest, res, next: NextFunction) => {
+    try {
+      const agentsDir = dataRoot
+        ? resolveAgentsDir(dataRoot)
+        : resolveAgentsDir(process.env['DATA_ROOT'] || '');
+      const count = await loadAndRegisterMarkdownAgents(prisma, agentsDir);
+      res.json({ message: `Markdown agents reloaded successfully`, count });
     } catch (err: unknown) {
       next(err instanceof Error ? err : new Error(String(err)));
     }

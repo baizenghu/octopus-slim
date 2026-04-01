@@ -192,7 +192,7 @@ export async function initRoutes(params: {
   app.use('/api/chat', createChatRouter(config, authService, workspaceManager, bridge, prismaClient, auditLogger));
   app.use('/api/chat', createSessionsRouter(authService, bridge, prismaClient));
   app.use('/api/audit', createAuditRouter(authService, auditLogger, prismaClient));
-  app.use('/api/admin', createAdminRouter(authService, prismaClient!, workspaceManager, bridge));
+  app.use('/api/admin', createAdminRouter(authService, prismaClient!, workspaceManager, bridge, config.workspace.dataRoot));
   if (bridge) {
     app.use('/api/admin/config', createSystemConfigRouter(authService, bridge, prismaClient));
   }

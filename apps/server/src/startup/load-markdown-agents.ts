@@ -18,6 +18,7 @@
  */
 
 import * as path from 'path';
+import * as fsSync from 'fs';
 import type { PrismaClient } from '@prisma/client';
 import { createLogger } from '../utils/logger';
 
@@ -159,15 +160,16 @@ async function upsertMarkdownAgents(
 /**
  * 从指定目录加载所有 Markdown Agent 定义并注册到数据库。
  *
- * 此函数在服务启动时（数据库初始化完成后）调用一次。
+ * 此函数在服务启动时（数据库初始化完成后）调用一次；也可由热加载或 admin 接口触发。
  *
  * @param prisma     Prisma Client 实例
  * @param agentsDir  data/agents/ 目录的绝对路径
+ * @returns          成功 upsert 的 agent 数量
  */
 export async function loadAndRegisterMarkdownAgents(
   prisma: PrismaClient,
   agentsDir: string,
-): Promise<void> {
+): Promise<number> {
   logger.info(`Loading markdown agents from: ${agentsDir}`);
 
   let defs: AgentMarkdownDef[];
@@ -180,12 +182,12 @@ export async function loadAndRegisterMarkdownAgents(
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     logger.error('loadAgentsFromDir threw unexpectedly', { error: msg });
-    return;
+    return 0;
   }
 
   if (defs.length === 0) {
     logger.info('No markdown agents to register');
-    return;
+    return 0;
   }
 
   const { upserted, skipped, failed } = await upsertMarkdownAgents(prisma, defs);
@@ -194,6 +196,58 @@ export async function loadAndRegisterMarkdownAgents(
     `Markdown agent loading complete: ${upserted} upserted, ${skipped} skipped (manual), ${failed} failed`,
     { agentsDir, total: defs.length },
   );
+
+  return upserted;
+}
+
+/**
+ * 使用 fs.watch 监听 agentsDir 目录变更，变更时防抖重新加载所有 Markdown Agent。
+ *
+ * @param prisma     Prisma Client 实例
+ * @param agentsDir  data/agents/ 目录的绝对路径
+ * @returns          停止监听的清理函数
+ */
+export function watchAgentsDir(prisma: PrismaClient, agentsDir: string): () => void {
+  const DEBOUNCE_MS = 800;
+  let debounceTimer: ReturnType<typeof setTimeout> | undefined;
+
+  // 目录不存在时跳过 watch，避免 ENOENT
+  if (!fsSync.existsSync(agentsDir)) {
+    logger.warn(`watchAgentsDir: directory not found, skipping watch: ${agentsDir}`);
+    return () => { /* noop */ };
+  }
+
+  logger.info(`watchAgentsDir: watching ${agentsDir}`);
+
+  const watcher = fsSync.watch(agentsDir, { recursive: false }, (_event, filename) => {
+    if (filename && !filename.endsWith('.md')) return;
+
+    if (debounceTimer !== undefined) {
+      clearTimeout(debounceTimer);
+    }
+    debounceTimer = setTimeout(() => {
+      debounceTimer = undefined;
+      logger.info(`watchAgentsDir: change detected (${filename ?? 'unknown'}), reloading agents`);
+      loadAndRegisterMarkdownAgents(prisma, agentsDir).catch((err: unknown) => {
+        logger.error('watchAgentsDir: reload failed', {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      });
+    }, DEBOUNCE_MS);
+  });
+
+  watcher.on('error', (err: Error) => {
+    logger.error(`watchAgentsDir: watcher error`, { error: err.message });
+  });
+
+  return () => {
+    if (debounceTimer !== undefined) {
+      clearTimeout(debounceTimer);
+      debounceTimer = undefined;
+    }
+    watcher.close();
+    logger.info('watchAgentsDir: watcher closed');
+  };
 }
 
 /**
