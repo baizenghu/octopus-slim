@@ -49,6 +49,41 @@ describe('generateSkillMd', () => {
     });
     expect(result).not.toContain('version');
   });
+
+  it('includes author when provided', () => {
+    const result = generateSkillMd({
+      name: 'test',
+      description: 'desc',
+      scope: 'enterprise',
+      ownerId: null,
+      author: 'octopus-team',
+    });
+    expect(result).toContain('author: octopus-team');
+  });
+
+  it('includes triggers list when provided', () => {
+    const result = generateSkillMd({
+      name: 'test',
+      description: 'desc',
+      scope: 'enterprise',
+      ownerId: null,
+      triggers: ['代码审查', 'code review'],
+    });
+    expect(result).toContain('triggers:');
+    expect(result).toContain('  - 代码审查');
+    expect(result).toContain('  - code review');
+  });
+
+  it('omits author and triggers when not provided', () => {
+    const result = generateSkillMd({
+      name: 'test',
+      description: 'desc',
+      scope: 'enterprise',
+      ownerId: null,
+    });
+    expect(result).not.toContain('author');
+    expect(result).not.toContain('triggers');
+  });
 });
 
 describe('mergeSkillMd', () => {

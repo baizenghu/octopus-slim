@@ -8,6 +8,8 @@ export interface SkillMdParams {
   command?: string | null;
   scriptPath?: string | null;
   version?: string | null;
+  author?: string | null;        // 作者/团队
+  triggers?: string[] | null;    // 触发关键词（引擎路由参考）
 }
 
 /** 生成标准 SKILL.md frontmatter（引擎可识别格式） */
@@ -22,6 +24,11 @@ export function generateSkillMd(params: SkillMdParams): string {
     `description: ${params.description}`,
   ];
   if (params.version) lines.push(`version: ${params.version}`);
+  if (params.author) lines.push(`author: ${params.author}`);
+  if (params.triggers?.length) {
+    lines.push('triggers:');
+    for (const t of params.triggers) lines.push(`  - ${t}`);
+  }
 
   // command-dispatch: tool 让引擎知道 /skill_name 命令应调用 run_skill 工具
   lines.push('command-dispatch: tool');

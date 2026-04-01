@@ -23,7 +23,7 @@
 
 **Context:** `ldap.createClient({ url })` 无 `connectTimeout`/`socketTimeout`，LDAP 宕机时登录请求永久挂起，耗尽 Event Loop。
 
-- [ ] **Step 1: 修改 createClient 调用**
+- [x] **Step 1: 修改 createClient 调用**
 
 ```typescript
 // packages/auth/src/AuthService.ts:118
@@ -34,13 +34,13 @@ const client = ldap.createClient({
 });
 ```
 
-- [ ] **Step 2: 类型检查**
+- [x] **Step 2: 类型检查**
 
 ```bash
 npx tsc --noEmit --project packages/auth/tsconfig.json
 ```
 
-- [ ] **Step 3: 提交**
+- [x] **Step 3: 提交**
 
 ```bash
 git add packages/auth/src/AuthService.ts
@@ -57,7 +57,7 @@ git commit -m "fix(C-001): add connectTimeout/socketTimeout to LDAP client"
 
 **Context:** 客户端断开 SSE 但引擎未发 `lifecycle:end` 时，`unsubscribe` 永久残留，长期 O(n) 退化→OOM。必须在 SSE `close` 事件中显式调用 cleanup。
 
-- [ ] **Step 1: callAgent 返回 cleanup 函数**
+- [x] **Step 1: callAgent 返回 cleanup 函数**
 
 `EngineAdapter.ts:262` 函数签名修改为同时返回 cleanup：
 
@@ -74,7 +74,7 @@ async callAgent(
 }
 ```
 
-- [ ] **Step 2: 为 callAgent 添加强制超时兜底**
+- [x] **Step 2: 为 callAgent 添加强制超时兜底**
 
 在 `cleanup` 定义后（`EngineAdapter.ts:282`）添加 30 分钟强制清理：
 
@@ -99,7 +99,7 @@ const forcedCleanupTimer = setTimeout(() => {
 if (forcedCleanupTimer.unref) forcedCleanupTimer.unref();
 ```
 
-- [ ] **Step 3: chat.ts SSE close 时调用 cleanup**
+- [x] **Step 3: chat.ts SSE close 时调用 cleanup**
 
 找到两处 `callAgent(...)` 调用点（约 `chat.ts:275` 和 `chat.ts:570`），在 `res.on('close', ...)` 中添加：
 
@@ -112,13 +112,13 @@ res.on('close', () => {
 });
 ```
 
-- [ ] **Step 4: 类型检查**
+- [x] **Step 4: 类型检查**
 
 ```bash
 npx tsc --noEmit --project apps/server/tsconfig.json
 ```
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add apps/server/src/services/EngineAdapter.ts apps/server/src/routes/chat.ts
@@ -134,7 +134,7 @@ git commit -m "fix(C-002): callAgent returns cleanup(), SSE close triggers expli
 
 **Context:** 引擎返回 `"retry after 300s"` 时 delay=301s，在 `configMutex.runExclusive` 内等待 5 分钟，所有 Agent 创建/更新全部阻塞。
 
-- [ ] **Step 1: 添加 30s 上限**
+- [x] **Step 1: 添加 30s 上限**
 
 ```typescript
 // apps/server/src/services/EngineAdapter.ts:444-446
@@ -146,14 +146,14 @@ const delay = msg.includes('rate limit')
   : 500 * (attempt + 1);
 ```
 
-- [ ] **Step 2: 类型检查 + 运行相关测试**
+- [x] **Step 2: 类型检查 + 运行相关测试**
 
 ```bash
 npx tsc --noEmit --project apps/server/tsconfig.json
 npx vitest run apps/server/src/services/__tests__/EngineAdapter.test.ts --reporter=verbose
 ```
 
-- [ ] **Step 3: 提交**
+- [x] **Step 3: 提交**
 
 ```bash
 git add apps/server/src/services/EngineAdapter.ts
@@ -169,7 +169,7 @@ git commit -m "fix(C-003): cap configRetryLoop rate-limit delay at 30s to preven
 
 **Context:** `prisma.user.update` 异常后 catch 仅 `logger.warn`，流程继续走 `workspaceManager.initWorkspace` 并返回成功响应，但 `result.user.id` 可能是错误 userId，导致后续所有操作指向错误用户。
 
-- [ ] **Step 1: 分离 DB 写入失败与 id 不一致两种情况**
+- [x] **Step 1: 分离 DB 写入失败与 id 不一致两种情况**
 
 ```typescript
 // apps/server/src/routes/auth.ts:45-70（原 try 块内）
@@ -194,17 +194,17 @@ try {
 }
 ```
 
-- [ ] **Step 2: 确认 id 不一致分支（正常路径）不受影响**
+- [x] **Step 2: 确认 id 不一致分支（正常路径）不受影响**
 
 第 57-61 行的 id 覆盖逻辑是正常路径，无需 catch。
 
-- [ ] **Step 3: 类型检查**
+- [x] **Step 3: 类型检查**
 
 ```bash
 npx tsc --noEmit --project apps/server/tsconfig.json
 ```
 
-- [ ] **Step 4: 提交**
+- [x] **Step 4: 提交**
 
 ```bash
 git add apps/server/src/routes/auth.ts
@@ -220,7 +220,7 @@ git commit -m "fix(A-001): return 503 on DB sync failure during login instead of
 
 **Context:** 改密码后旧 Token 仍有效，攻击者密码泄露后无法止损。等保合规要求密码变更后会话失效。
 
-- [ ] **Step 1: 改密成功后废止当前 Token**
+- [x] **Step 1: 改密成功后废止当前 Token**
 
 ```typescript
 // apps/server/src/routes/auth.ts:178-195，在 prisma.user.update 成功后添加
@@ -240,13 +240,13 @@ if (currentToken) {
 res.json({ message: '密码已修改，请重新登录' });
 ```
 
-- [ ] **Step 2: 类型检查**
+- [x] **Step 2: 类型检查**
 
 ```bash
 npx tsc --noEmit --project apps/server/tsconfig.json
 ```
 
-- [ ] **Step 3: 提交**
+- [x] **Step 3: 提交**
 
 ```bash
 git add apps/server/src/routes/auth.ts
@@ -262,7 +262,7 @@ git commit -m "fix(A-003): invalidate current token after password change (等�
 
 **Context:** catch 块直接返回 `err.message`（如 `user 'xxx' not found`），攻击者可枚举用户名，等保要求。
 
-- [ ] **Step 1: 统一 401 响应为固定字符串**
+- [x] **Step 1: 统一 401 响应为固定字符串**
 
 ```typescript
 // auth.ts:65 — 用户不在 DB
@@ -283,13 +283,13 @@ res.status(401).json({ error: 'Token 无效或已过期，请重新登录' });
 // auth.ts:167 — 旧密码错误（已有 401，无需改动消息，但需补限流，见 Task 8）
 ```
 
-- [ ] **Step 2: 类型检查**
+- [x] **Step 2: 类型检查**
 
 ```bash
 npx tsc --noEmit --project apps/server/tsconfig.json
 ```
 
-- [ ] **Step 3: 提交**
+- [x] **Step 3: 提交**
 
 ```bash
 git add apps/server/src/routes/auth.ts
@@ -305,7 +305,7 @@ git commit -m "fix(D-004): unify 401 error messages to prevent user enumeration 
 
 **Context:** 第 9-11 行模块顶层 `throw new Error('[FATAL] AUDIT_HMAC_KEY...')`，未配置环境变量时 `enterprise-audit` 插件加载失败，引擎 gateway 启动失败。降级为告警可允许在无 HMAC 签名的情况下启动（运维可修复）。
 
-- [ ] **Step 1: 将顶层 throw 改为 warn + 运行时检查**
+- [x] **Step 1: 将顶层 throw 改为 warn + 运行时检查**
 
 ```typescript
 // plugins/audit/src/file-writer.ts:7-11
@@ -328,13 +328,13 @@ if (AUDIT_HMAC_KEY) {
 }
 ```
 
-- [ ] **Step 2: 类型检查**
+- [x] **Step 2: 类型检查**
 
 ```bash
 npx tsc --noEmit --project plugins/audit/tsconfig.json 2>/dev/null || echo "no tsconfig, skip"
 ```
 
-- [ ] **Step 3: 提交**
+- [x] **Step 3: 提交**
 
 ```bash
 git add plugins/audit/src/file-writer.ts
@@ -354,7 +354,7 @@ git commit -m "fix(C-008): degrade AUDIT_HMAC_KEY from startup-fatal to runtime-
 
 **Context:** 用户名不存在时早期 `return res.status(401)` 不触发 `securityMonitor.recordLoginFailure()`，攻击者可无声枚举用户名。密码修改验证失败也不触发告警。
 
-- [ ] **Step 1: 在所有 401 路径前统一触发 securityMonitor**
+- [x] **Step 1: 在所有 401 路径前统一触发 securityMonitor**
 
 ```typescript
 // auth.ts:63-66（用户不在 DB，在 return 前添加）
@@ -374,7 +374,7 @@ res.status(401).json({ error: '当前密码不正确' });
 return;
 ```
 
-- [ ] **Step 2: 提交**
+- [x] **Step 2: 提交**
 
 ```bash
 git add apps/server/src/routes/auth.ts
@@ -390,7 +390,7 @@ git commit -m "fix(A-002+D-006): trigger securityMonitor on all 401 paths includ
 
 **Context:** MCP 删除时只检查旧字段 `mcpFilter`，忽略 `allowedToolSources`，导致新 Agent 出现悬空引用。Skill 的删除路径（第 697 行）已正确处理。
 
-- [ ] **Step 1: 补充 allowedToolSources 引用检查**
+- [x] **Step 1: 补充 allowedToolSources 引用检查**
 
 在第 680 行（`const filterField = ...`）之前插入：
 
@@ -413,13 +413,13 @@ if (existing.type === 'mcp') {
 }
 ```
 
-- [ ] **Step 2: 类型检查**
+- [x] **Step 2: 类型检查**
 
 ```bash
 npx tsc --noEmit --project apps/server/tsconfig.json
 ```
 
-- [ ] **Step 3: 提交**
+- [x] **Step 3: 提交**
 
 ```bash
 git add apps/server/src/routes/tool-sources.ts
@@ -602,7 +602,7 @@ git commit -m "fix(A-018): commit DB transaction before cleaning up engine/Docke
 
 **Context:** `fetch(webhookUrl)` 无 AbortController，IM 服务无响应时告警线程永久挂起。
 
-- [ ] **Step 1: 添加 5s 超时**
+- [x] **Step 1: 添加 5s 超时**
 
 ```typescript
 // SecurityMonitor.ts:118 sendImAlert 方法中
@@ -632,7 +632,7 @@ private async sendImAlert(event: SecurityEvent): Promise<void> {
 }
 ```
 
-- [ ] **Step 2: 提交**
+- [x] **Step 2: 提交**
 
 ```bash
 git add apps/server/src/services/SecurityMonitor.ts
@@ -648,7 +648,7 @@ git commit -m "fix(C-004): add 5s AbortController timeout to SecurityMonitor.sen
 
 **Context:** `findFirst` + `create` 非原子，两个并发请求都通过检查，后者触发 P2002 MySQL unique key 冲突但 catch 未处理，返回无语义 500。
 
-- [ ] **Step 1: catch 中处理 P2002**
+- [x] **Step 1: catch 中处理 P2002**
 
 ```typescript
 // admin.ts:155 catch 块
@@ -662,7 +662,7 @@ git commit -m "fix(C-004): add 5s AbortController timeout to SecurityMonitor.sen
 }
 ```
 
-- [ ] **Step 2: 提交**
+- [x] **Step 2: 提交**
 
 ```bash
 git add apps/server/src/routes/admin.ts
@@ -678,7 +678,7 @@ git commit -m "fix(C-005): handle P2002 race condition in admin user creation wi
 
 **Context:** `api.on('before_tool_call', async (...) => { await audit(...) })` 若引擎串行 await hook，DB 写入延迟直接叠加到工具调用响应时间。
 
-- [ ] **Step 1: 改为 fire-and-forget**
+- [x] **Step 1: 改为 fire-and-forget**
 
 ```typescript
 // plugins/audit/src/index.ts:149-165
@@ -695,13 +695,13 @@ api.on('before_tool_call', (event, ctx) => {
 });
 ```
 
-- [ ] **Step 2: 类型检查**
+- [x] **Step 2: 类型检查**
 
 ```bash
 npx tsc --noEmit --project plugins/audit/tsconfig.json 2>/dev/null || true
 ```
 
-- [ ] **Step 3: 提交**
+- [x] **Step 3: 提交**
 
 ```bash
 git add plugins/audit/src/index.ts
@@ -719,7 +719,7 @@ git commit -m "fix(C-007): change before_tool_call hook to fire-and-forget to pr
 
 **Context:** `ea1e9be` 已实现 `shell-injection-detect` 模块（7 层检测），路由层创建 stdio MCP 时未校验 `command` 字段，上传 Skill 脚本时未校验内容，存在注入风险。
 
-- [ ] **Step 1: 创建企业层桥接工具函数**
+- [x] **Step 1: 创建企业层桥接工具函数**
 
 ```typescript
 // apps/server/src/utils/shell-safety.ts（新文件）
@@ -737,7 +737,7 @@ export async function checkShellInjection(command: string): Promise<ShellInjecti
 }
 ```
 
-- [ ] **Step 2: 企业级 stdio MCP 创建时校验 command**
+- [x] **Step 2: 企业级 stdio MCP 创建时校验 command**
 
 ```typescript
 // tool-sources.ts:377 附近（POST / 企业级 MCP，transport==='stdio' 校验后）
@@ -750,7 +750,7 @@ if (transport === 'stdio' && command) {
 }
 ```
 
-- [ ] **Step 3: 个人 stdio MCP 创建时同样校验**
+- [x] **Step 3: 个人 stdio MCP 创建时同样校验**
 
 ```typescript
 // tool-sources.ts:1052 附近（POST /personal，stdio 分支）
@@ -763,13 +763,13 @@ if (transport === 'stdio' && command?.trim()) {
 }
 ```
 
-- [ ] **Step 4: 类型检查**
+- [x] **Step 4: 类型检查**
 
 ```bash
 npx tsc --noEmit --project apps/server/tsconfig.json
 ```
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add apps/server/src/utils/shell-safety.ts apps/server/src/routes/tool-sources.ts
@@ -918,13 +918,13 @@ git commit -m "fix(B-001+A-010): remove invalidatePromptCache no-op and add pref
 
 **Context:** 当前 `skill-md-generator.ts` 已支持基本 frontmatter（`command-dispatch`、`name`），需对齐 superpowers 技能规范增加 `description`、`triggers`、`version`、`author` 字段，使技能自描述性更强，便于引擎精确路由。
 
-- [ ] **Step 1: 查看现有 skill-md-generator.ts 格式**
+- [x] **Step 1: 查看现有 skill-md-generator.ts 格式**
 
 ```bash
 cat apps/server/src/utils/skill-md-generator.ts
 ```
 
-- [ ] **Step 2: 扩展 SkillFrontmatter 接口**
+- [x] **Step 2: 扩展 SkillFrontmatter 接口**
 
 ```typescript
 // apps/server/src/utils/skill-md-generator.ts
@@ -939,7 +939,7 @@ export interface SkillFrontmatter {
 }
 ```
 
-- [ ] **Step 3: 更新 generateSkillMd 生成逻辑**
+- [x] **Step 3: 更新 generateSkillMd 生成逻辑**
 
 ```typescript
 export function generateSkillMd(opts: SkillFrontmatter): string {
@@ -956,7 +956,7 @@ export function generateSkillMd(opts: SkillFrontmatter): string {
 }
 ```
 
-- [ ] **Step 4: 路由层接受并写入扩展字段**
+- [x] **Step 4: 路由层接受并写入扩展字段**
 
 在企业级/个人 Skill 上传 API（`tool-sources.ts:485` 和 `1344` 附近），从 `req.body` 接受 `description`、`triggers`、`version`：
 
@@ -973,19 +973,19 @@ const frontmatter = generateSkillMd({
 });
 ```
 
-- [ ] **Step 5: 更新单元测试**
+- [x] **Step 5: 更新单元测试**
 
 ```bash
 npx vitest run apps/server/src/utils/__tests__/skill-md-generator.test.ts --reporter=verbose
 ```
 
-- [ ] **Step 6: 类型检查**
+- [x] **Step 6: 类型检查**
 
 ```bash
 npx tsc --noEmit --project apps/server/tsconfig.json
 ```
 
-- [ ] **Step 7: 提交**
+- [x] **Step 7: 提交**
 
 ```bash
 git add apps/server/src/utils/skill-md-generator.ts apps/server/src/routes/tool-sources.ts apps/server/src/utils/__tests__/skill-md-generator.test.ts
