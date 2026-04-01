@@ -435,7 +435,7 @@ git commit -m "fix(A-006): check allowedToolSources references before deleting M
 
 **Context:** `passed === false` 的 Skill 存为 `enabled=false`，但用户可通过 `PUT /personal/:id` 直接将 `enabled` 改为 `true` 绕过。
 
-- [ ] **Step 1: PUT /personal/:id 中阻止 rejected Skill 改为 enabled**
+- [x] **Step 1: PUT /personal/:id 中阻止 rejected Skill 改为 enabled**
 
 在更新前（约 `tool-sources.ts:1452`）添加：
 
@@ -455,13 +455,13 @@ if (existingStatus === 'rejected' || scanReport?.passed === false) {
 }
 ```
 
-- [ ] **Step 2: 类型检查**
+- [x] **Step 2: 类型检查**
 
 ```bash
 npx tsc --noEmit --project apps/server/tsconfig.json
 ```
 
-- [ ] **Step 3: 提交**
+- [x] **Step 3: 提交**
 
 ```bash
 git add apps/server/src/routes/tool-sources.ts
@@ -1006,7 +1006,7 @@ git commit -m "feat(skills): extend SKILL.md frontmatter with description/trigge
 
 **Context:** 参考 ea1e9be 的安全模块（Agent A/B/C/D 并行分析模式），实现内建并行代码审查技能：4 个 Agent 并行从不同视角审查代码，结果汇总后输出报告。
 
-- [ ] **Step 1: 创建技能 SKILL.md**
+- [x] **Step 1: 创建技能 SKILL.md**
 
 ```markdown
 ---
@@ -1036,7 +1036,7 @@ timeout: 300
 ```
 ```
 
-- [ ] **Step 2: 创建调度脚本 run.sh**
+- [x] **Step 2: 创建调度脚本 run.sh**
 
 ```bash
 #!/usr/bin/env bash
@@ -1068,7 +1068,7 @@ echo ""
 echo "=== 审查完成，请查看各 Agent 输出 ==="
 ```
 
-- [ ] **Step 3: 创建各 Agent 提示模板**
+- [x] **Step 3: 创建各 Agent 提示模板**
 
 ```markdown
 <!-- data/skills/ent_parallel-review/agents/agent-a.md -->
@@ -1085,13 +1085,13 @@ echo "=== 审查完成，请查看各 Agent 输出 ==="
 
 （类似创建 agent-b.md 稳定性视角、agent-c.md 安全视角）
 
-- [ ] **Step 4: 类型检查（无 TS 变更，仅 bash 脚本）**
+- [x] **Step 4: 类型检查（无 TS 变更，仅 bash 脚本）**
 
 ```bash
 bash -n data/skills/ent_parallel-review/run.sh
 ```
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add data/skills/ent_parallel-review/
