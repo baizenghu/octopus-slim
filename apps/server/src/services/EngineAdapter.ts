@@ -606,18 +606,14 @@ export class EngineAdapter extends EventEmitter {
     params: AgentCallParams & { background?: boolean; backgroundAfterMs?: number },
     onProgress?: (entry: ProgressEntry) => void,
   ): Promise<{ taskId: string; cancel: () => void }> {
-    const limit = (getRuntimeConfig() as any).agents?.maxConcurrentCoordinators ?? 5;
+    const limit = getRuntimeConfig().agents.maxConcurrentCoordinators;
+    // 检查并发上限：_callAgentAsyncImpl 是 fire-and-forget，计数器由 runBackground 全程持有
     if (this.activeCoordinatorTasks >= limit) {
       const err = new Error(`系统繁忙，Coordinator 并发已达上限（${limit}），请稍后重试`);
       (err as any).code = 'COORDINATOR_LIMIT_EXCEEDED';
       throw err;
     }
-    this.activeCoordinatorTasks++;
-    try {
-      return await this._callAgentAsyncImpl(params, onProgress);
-    } finally {
-      this.activeCoordinatorTasks--;
-    }
+    return this._callAgentAsyncImpl(params, onProgress);
   }
 
   /** 返回当前活跃的 Coordinator 任务数（供健康检查使用） */
@@ -652,6 +648,9 @@ export class EngineAdapter extends EventEmitter {
 
     // 后台执行：不 await，错误通过 registry.fail 记录
     const runBackground = async () => {
+      // 占用 coordinator 并发槽（全程持有，避免 fire-and-forget 导致计数立即释放）
+      this.activeCoordinatorTasks++;
+      try {
       // event.content = data.text = 累积文本（每次含之前所有内容）
       // 需要按文本段（text block）分别收集，工具调用时文本段结束
       const textBlocks: string[] = [];
@@ -743,6 +742,10 @@ export class EngineAdapter extends EventEmitter {
         }
       } else {
         await runPromise;
+      }
+      } finally {
+        // 释放 coordinator 并发槽
+        this.activeCoordinatorTasks--;
       }
     };
 

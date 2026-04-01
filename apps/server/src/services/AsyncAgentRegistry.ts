@@ -148,7 +148,7 @@ export class AsyncAgentRegistry {
     params: Omit<AsyncAgentTask, 'taskId' | 'status' | 'progress' | 'createdAt'>,
   ): AsyncAgentTask {
     // Per-user 配额检查
-    const perUserLimit = (getRuntimeConfig() as any).agents?.maxAsyncTasksPerUser ?? 2;
+    const perUserLimit = getRuntimeConfig().agents.maxAsyncTasksPerUser;
     const running = this.listByUser(params.userId).filter(
       (t) => t.status === 'running' || t.status === 'pending',
     );
@@ -197,6 +197,8 @@ export class AsyncAgentRegistry {
     if (task.progress.length > PROGRESS_MAX) {
       task.progress.shift();
     }
+    // 推送进度更新到 SSE 订阅者
+    this.emit(taskId);
   }
 
   complete(taskId: string, result: string): void {

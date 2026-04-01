@@ -109,6 +109,13 @@ export interface RuntimeConfig {
   skills: {
     maxSkillMdChars: number;
   };
+  /** 异步 Agent 任务 */
+  agents: {
+    /** 每用户最大并发后台任务数（默认 2） */
+    maxAsyncTasksPerUser: number;
+    /** 全局最大并发 Coordinator 任务数（默认 5） */
+    maxConcurrentCoordinators: number;
+  };
 }
 
 const RUNTIME_DEFAULTS: RuntimeConfig = {
@@ -161,6 +168,10 @@ const RUNTIME_DEFAULTS: RuntimeConfig = {
   skills: {
     maxSkillMdChars: 8000,
   },
+  agents: {
+    maxAsyncTasksPerUser: 2,
+    maxConcurrentCoordinators: 5,
+  },
 };
 
 let _runtimeConfig: RuntimeConfig = { ...RUNTIME_DEFAULTS };
@@ -181,6 +192,7 @@ export function initRuntimeConfig(enterprise?: Record<string, any>): void {
     admin: { ...RUNTIME_DEFAULTS.admin, ...enterprise.admin },
     files: { ...RUNTIME_DEFAULTS.files, ...enterprise.files },
     skills: { ...RUNTIME_DEFAULTS.skills, ...enterprise.skills },
+    agents: { ...RUNTIME_DEFAULTS.agents, ...enterprise.agents },
   };
 }
 
