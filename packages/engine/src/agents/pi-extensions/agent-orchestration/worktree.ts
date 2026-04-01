@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import * as fs from "node:fs/promises";
+import * as os from "os";
 import * as path from "node:path";
 import { promisify } from "node:util";
 
@@ -70,6 +71,19 @@ async function runGit(args: string[], cwd?: string): Promise<string> {
 }
 
 /**
+ * Return true if repoRoot is inside a git repository.
+ * Used for graceful degradation to tmpdir on non-git deployments.
+ */
+async function isGitRepo(repoRoot: string): Promise<boolean> {
+  try {
+    await runGit(["rev-parse", "--git-dir"], repoRoot);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Check whether a worktree directory is already registered in git.
  */
 async function worktreeExists(worktreePath: string, repoRoot: string): Promise<boolean> {
@@ -99,6 +113,16 @@ export async function createAgentWorktree(
   baseBranch: string = "HEAD",
   repoRoot: string,
 ): Promise<string> {
+  const safeId = sanitizeAgentId(agentId);
+
+  // Graceful degradation: non-git environments fall back to a tmpdir
+  if (!(await isGitRepo(repoRoot))) {
+    const tmpPath = path.join(os.tmpdir(), `oct-agent-${safeId}`);
+    await fs.mkdir(tmpPath, { recursive: true });
+    console.warn(`[worktree] not a git repo, using tmpdir fallback: ${tmpPath}`);
+    return tmpPath;
+  }
+
   const worktreePath = getWorktreePath(agentId, repoRoot);
   const branch = getWorktreeBranch(agentId);
 
@@ -124,6 +148,13 @@ export async function createAgentWorktree(
  * @param repoRoot - Absolute path to the git repository root.
  */
 export async function removeAgentWorktree(agentId: string, repoRoot: string): Promise<void> {
+  // Graceful degradation: non-git environments clean up the tmpdir
+  if (!(await isGitRepo(repoRoot))) {
+    const tmpPath = path.join(os.tmpdir(), `oct-agent-${sanitizeAgentId(agentId)}`);
+    await fs.rm(tmpPath, { recursive: true, force: true });
+    return;
+  }
+
   const worktreePath = getWorktreePath(agentId, repoRoot);
   const branch = getWorktreeBranch(agentId);
 
@@ -196,6 +227,11 @@ function parseWorktreeStanza(stanza: string): WorktreeInfo | null {
  * @returns Array of WorktreeInfo objects.
  */
 export async function listAgentWorktrees(repoRoot: string): Promise<WorktreeInfo[]> {
+  // Graceful degradation: no git worktrees in non-git environments
+  if (!(await isGitRepo(repoRoot))) {
+    return [];
+  }
+
   const output = await runGit(["worktree", "list", "--porcelain"], repoRoot);
 
   // Stanzas are separated by blank lines
@@ -237,6 +273,11 @@ export async function getWorktreeDiff(
   agentId: string,
   repoRoot: string,
 ): Promise<{ files: string[]; insertions: number; deletions: number } | null> {
+  // Graceful degradation: no diff available in non-git environments
+  if (!(await isGitRepo(repoRoot))) {
+    return null;
+  }
+
   const worktreePath = getWorktreePath(agentId, repoRoot);
 
   const exists = await worktreeExists(worktreePath, repoRoot);

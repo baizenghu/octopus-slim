@@ -73,6 +73,9 @@ export class EngineAdapter extends EventEmitter {
   /** 由 callAgent 发起的 runId 集合，用于区分心跳等非 callAgent 触发的事件 */
   readonly trackedRunIds = new Set<string>();
 
+  /** 当前活跃的 Coordinator 任务数（全局并发信号量） */
+  private activeCoordinatorTasks = 0;
+
   constructor() {
     super();
     this.configBatcher = new ConfigBatcher(
@@ -600,6 +603,29 @@ export class EngineAdapter extends EventEmitter {
    * @returns            taskId（注册表中的任务 ID）和 cancel 函数
    */
   async callAgentAsync(
+    params: AgentCallParams & { background?: boolean; backgroundAfterMs?: number },
+    onProgress?: (entry: ProgressEntry) => void,
+  ): Promise<{ taskId: string; cancel: () => void }> {
+    const limit = (getRuntimeConfig() as any).agents?.maxConcurrentCoordinators ?? 5;
+    if (this.activeCoordinatorTasks >= limit) {
+      const err = new Error(`系统繁忙，Coordinator 并发已达上限（${limit}），请稍后重试`);
+      (err as any).code = 'COORDINATOR_LIMIT_EXCEEDED';
+      throw err;
+    }
+    this.activeCoordinatorTasks++;
+    try {
+      return await this._callAgentAsyncImpl(params, onProgress);
+    } finally {
+      this.activeCoordinatorTasks--;
+    }
+  }
+
+  /** 返回当前活跃的 Coordinator 任务数（供健康检查使用） */
+  getActiveCoordinatorCount(): number {
+    return this.activeCoordinatorTasks;
+  }
+
+  private async _callAgentAsyncImpl(
     params: AgentCallParams & { background?: boolean; backgroundAfterMs?: number },
     onProgress?: (entry: ProgressEntry) => void,
   ): Promise<{ taskId: string; cancel: () => void }> {
