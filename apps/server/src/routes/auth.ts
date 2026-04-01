@@ -63,6 +63,8 @@ export function createAuthRouter(authService: AuthService, workspaceManager: Wor
           } else {
             // 用户不在数据库中，拒绝登录（必须由 Admin 先在系统中创建账号）
             // 不透露账户不存在，防止用户枚举（等保要求）
+            const ip = req.ip || req.socket.remoteAddress || 'unknown';
+            securityMonitor.recordLoginFailure(ip, username);
             logger.warn('[auth] login rejected: user not in DB', { username });
             res.status(401).json({ error: '用户名或密码错误' });
             return;
@@ -174,6 +176,7 @@ export function createAuthRouter(authService: AuthService, workspaceManager: Wor
       try {
         await authService.login(user.username!, oldPassword);
       } catch {
+        securityMonitor.recordLoginFailure(req.ip || 'unknown', user.username!);
         res.status(401).json({ error: '当前密码不正确' });
         return;
       }
