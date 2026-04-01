@@ -115,7 +115,11 @@ export class RealLDAPProvider implements LDAPProvider {
     const ldap = (ldapModule as any).default || ldapModule;
     
     return new Promise((resolve, reject) => {
-      const client = ldap.createClient({ url: this.config.url });
+      const client = ldap.createClient({
+        url: this.config.url,
+        connectTimeout: 5_000,   // 5s 建立连接超时
+        socketTimeout: 10_000,   // 10s socket 读写超时
+      });
 
       // Step 1: 使用管理员账号绑定
       client.bind(this.config.bindDN, this.config.bindPassword, (bindErr: any) => {
