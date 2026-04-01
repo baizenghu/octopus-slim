@@ -6,6 +6,8 @@ export type ContextPruningRuntimeValue = {
   contextWindowTokens?: number | null;
   isToolPrunable: (toolName: string) => boolean;
   lastCacheTouchAt?: number | null;
+  /** Fallback model for Level 5 error recovery. */
+  fallbackModel?: string | null;
 };
 
 // Important: this relies on Pi passing the same SessionManager object instance into
