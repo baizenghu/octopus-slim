@@ -23,6 +23,7 @@ import { collectTextContentBlocks } from "../content-blocks.js";
 import { wrapUntrustedPromptDataBlock } from "../sanitize-for-prompt.js";
 import { repairToolUseResultPairing } from "../session-transcript-repair.js";
 import { extractToolCallsFromAssistant, extractToolResultId } from "../tool-call-id.js";
+import { createCompactBoundaryLine } from "../compact-boundary.js";
 import { getCompactionSafeguardRuntime } from "./compaction-safeguard-runtime.js";
 
 const log = createSubsystemLogger("compaction-safeguard");
@@ -999,12 +1000,18 @@ export default function compactionSafeguardExtension(api: ExtensionAPI): void {
         summary = appendSummarySection(summary, workspaceContext);
       }
 
+      const boundaryLine = createCompactBoundaryLine({
+        trigger: customInstructions ? "manual" : "auto",
+        preTokens: preparation.tokensBefore,
+        messagesSummarized: preparation.messageCount - (preservedRecentTurns?.length ?? 0),
+      });
+
       return {
         compaction: {
           summary,
           firstKeptEntryId: preparation.firstKeptEntryId,
           tokensBefore: preparation.tokensBefore,
-          details: { readFiles, modifiedFiles },
+          details: { readFiles, modifiedFiles, compactBoundary: boundaryLine },
         },
       };
     } catch (error) {
