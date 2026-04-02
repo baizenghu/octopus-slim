@@ -42,6 +42,16 @@ describe('sanitizeUserContent', () => {
     expect(sanitizeUserContent(input)).toBe('Hello');
   });
 
+  it('strips <context-note> tags and content', () => {
+    const input = '<context-note>\n当前用户: baizh\n工作区路径: /home/...\n</context-note>\n\n帮我算工资';
+    expect(sanitizeUserContent(input)).toBe('帮我算工资');
+  });
+
+  it('strips context-note with nested content', () => {
+    const input = '<context-note>\n可委派的专业 Agent:\n- **小财**（agent 名称: caiwu_1）\n</context-note>\n\n你好';
+    expect(sanitizeUserContent(input)).toBe('你好');
+  });
+
   it('leaves clean content unchanged', () => {
     expect(sanitizeUserContent('Just a normal message')).toBe('Just a normal message');
   });

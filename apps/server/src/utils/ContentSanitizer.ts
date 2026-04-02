@@ -15,6 +15,7 @@ const TIMESTAMP_PREFIX_GLOBAL_RE = /^\[[A-Za-z]{3}\s\d{4}-\d{2}-\d{2}.*?\]\s*/gm
 const SKILL_INJECT_RE = /^\[请(?:使用|严格按照|优先使用)\s+[^\]]*(?:\]|\S*…)\s*/gm;
 const LESSON_PREFIX_RE = /^\/lesson\s+/m;
 const ATTACHMENT_PREFIX_RE = /^\[用户上传了 \d+ 个文件，已保存到工作空间\]\n(?:- .+\n?)+\n?/m;
+const CONTEXT_NOTE_RE = /<context-note>[\s\S]*?<\/context-note>\s*/g;
 // Legacy: 保留用于清理旧 session 中残留的 reminder 标签，新提醒走 cron 工具
 const REMINDER_TAG_RE = /<enterprise-reminder[^>]*\/?>(<\/enterprise-reminder>)?/g;
 const RUNTIME_CONTEXT_RE = /Octopus runtime context/;
@@ -27,6 +28,7 @@ import { stripReasoningTagsFromText } from './reasoning-tags';
 /** 净化用户消息（history 和 title 共用） */
 export function sanitizeUserContent(content: string): string {
   return content
+    .replace(CONTEXT_NOTE_RE, '')
     .replace(MEMORY_TAG_RE, '')
     .replace(UNTRUSTED_DATA_RE, '')
     .replace(TIMESTAMP_PREFIX_RE, '')
