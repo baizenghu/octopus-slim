@@ -492,6 +492,7 @@ function runAgentAttempt(params: {
     lane: params.opts.lane,
     abortSignal: params.opts.abortSignal,
     extraSystemPrompt: params.opts.extraSystemPrompt,
+    contextNote: params.opts.contextNote,
     inputProvenance: params.opts.inputProvenance,
     streamParams: params.opts.streamParams,
     agentDir: params.agentDir,
@@ -1167,6 +1168,8 @@ async function agentCommandInternal(
             endedAt: Date.now(),
             aborted: result.meta.aborted ?? false,
             stopReason,
+            usage: result.meta.agentMeta?.usage,
+            model: result.meta.agentMeta?.model,
           },
         });
       }
