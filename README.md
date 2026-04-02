@@ -63,6 +63,33 @@
 - **安全沙箱**：代码执行在 Docker 内，资源配额可控
 - **权限控制**：Tool 级白名单 / 黑名单硬执行，不依赖 Prompt
 
+### ⚡ 借鉴 Claude Code 的工程实践（Wave 5）
+
+Octopus 深度参考了 [Claude Code](https://github.com/anthropics/claude-code) 的源码，将其经过生产验证的工程经验移植到企业场景：
+
+| 特性 | 参考来源 | 实现效果 |
+|------|---------|---------|
+| **API 重试 + 抖动** | `withRetry.ts` | 指数退避 + 随机 jitter，自动应对限流 |
+| **Token 消耗统计** | `cost-tracker.ts` | 异步任务按 input/output/model 维度统计 |
+| **会话自动压缩** | `compact.ts` | 长对话触发前自动 compaction，防止上下文溢出 |
+| **文件访问安全** | `filesystem.ts` | workspaceOnly 路径校验，防止目录穿越 |
+| **子 Agent 编排** | Coordinator 架构 | 主 Agent 自主 spawn 子 Agent，结果自动汇聚 |
+
+#### Claude Code Dispatch 技能
+
+Octopus Agent 可以将编码任务直接派发给 **Claude Code** 在后台执行：
+
+```
+用户: 帮我重构 apps/server/src/routes/auth.ts，添加速率限制
+
+Agent: 好的，我来调用 Claude Code 处理这个任务...
+→ run_skill(claude-code-dispatch, --prompt "重构 auth.ts 添加速率限制" --workdir /path/to/project)
+→ Claude Code 在后台自主完成代码修改
+→ 完成后通过飞书/Web 自动通知结果
+```
+
+这使 Octopus 能作为「AI 任务调度中心」，将复杂编码工作委托给专业 AI 编码助手异步完成。
+
 ---
 
 ## 系统架构
