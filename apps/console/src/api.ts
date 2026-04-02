@@ -296,6 +296,13 @@ class AdminApi {
 
   // ─── Auth ───
 
+  async register(username: string, password: string, displayName?: string) {
+    return this.request<{ message: string; user: { userId: string; username: string } }>('/auth/register', {
+      method: 'POST',
+      body: JSON.stringify({ username, password, displayName }),
+    });
+  }
+
   async login(username: string, password: string) {
     return this.request<{
       user: { id: string; username: string; email: string; department: string; roles: string[] };

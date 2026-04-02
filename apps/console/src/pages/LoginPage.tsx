@@ -3,6 +3,7 @@
  */
 import { useState } from 'react';
 import { useAuthStore } from '../store';
+import { adminApi } from '../api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -19,6 +20,8 @@ import {
   Sparkles,
   Shield,
   Zap,
+  UserPlus,
+  CheckCircle2,
 } from 'lucide-react';
 import { OctopusIcon } from '@/components/OctopusIcon';
 
@@ -30,18 +33,55 @@ const features = [
 ];
 
 export default function LoginPage() {
+  const [mode, setMode] = useState<'login' | 'register'>('login');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [displayName, setDisplayName] = useState('');
   const [error, setError] = useState('');
+  const [registerSuccess, setRegisterSuccess] = useState(false);
+  const [isRegistering, setIsRegistering] = useState(false);
   const { login, isLoading } = useAuthStore();
+
+  const switchMode = (next: 'login' | 'register') => {
+    setMode(next);
+    setError('');
+    setRegisterSuccess(false);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError('');
+
+    if (mode === 'register') {
+      if (!username.trim() || !password.trim()) {
+        setError('请输入用户名和密码');
+        return;
+      }
+      if (password !== confirmPassword) {
+        setError('两次输入的密码不一致');
+        return;
+      }
+      setIsRegistering(true);
+      try {
+        await adminApi.register(username.trim(), password, displayName.trim() || undefined);
+        setRegisterSuccess(true);
+        setPassword('');
+        setConfirmPassword('');
+        setDisplayName('');
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : '注册失败';
+        setError(message);
+      } finally {
+        setIsRegistering(false);
+      }
+      return;
+    }
+
     if (!username.trim() || !password.trim()) {
       setError('请输入用户名和密码');
       return;
     }
-    setError('');
     try {
       await login(username, password);
     } catch (err: unknown) {
@@ -126,9 +166,11 @@ export default function LoginPage() {
           {/* 标题 */}
           <div className="space-y-2 animate-slide-up delay-100">
             <h2 className="text-3xl font-bold tracking-tight text-gray-900">
-              欢迎回来
+              {mode === 'login' ? '欢迎回来' : '创建账号'}
             </h2>
-            <p className="text-muted-foreground">请输入您的账号信息登录系统</p>
+            <p className="text-muted-foreground">
+              {mode === 'login' ? '请输入您的账号信息登录系统' : '填写以下信息完成注册'}
+            </p>
           </div>
 
           {/* 错误提示 */}
@@ -139,7 +181,24 @@ export default function LoginPage() {
             </Alert>
           )}
 
-          {/* 登录表单 */}
+          {/* 注册成功提示 */}
+          {registerSuccess && (
+            <Alert className="border-emerald-200 bg-emerald-50 animate-slide-down">
+              <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+              <AlertDescription className="text-emerald-700">
+                注册成功！请使用新账号登录。
+                <button
+                  type="button"
+                  onClick={() => switchMode('login')}
+                  className="ml-1 font-medium underline cursor-pointer"
+                >
+                  立即登录
+                </button>
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {/* 表单 */}
           <form onSubmit={handleSubmit} className="space-y-5 animate-slide-up delay-200">
             <div className="space-y-2">
               <Label htmlFor="username">用户名</Label>
@@ -147,7 +206,7 @@ export default function LoginPage() {
                 <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground transition-colors group-focus-within:text-indigo-500" />
                 <Input
                   id="username"
-                  placeholder="请输入用户名"
+                  placeholder={mode === 'register' ? '字母、数字、连字符，2-32位' : '请输入用户名'}
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   className="pl-10 h-11 transition-shadow duration-300 focus:shadow-[0_0_0_3px_rgba(99,102,241,0.1)]"
@@ -156,6 +215,22 @@ export default function LoginPage() {
               </div>
             </div>
 
+            {mode === 'register' && (
+              <div className="space-y-2">
+                <Label htmlFor="displayName">显示名称 <span className="text-muted-foreground text-xs">（可选）</span></Label>
+                <div className="relative group">
+                  <UserPlus className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground transition-colors group-focus-within:text-indigo-500" />
+                  <Input
+                    id="displayName"
+                    placeholder="您的姓名或昵称"
+                    value={displayName}
+                    onChange={(e) => setDisplayName(e.target.value)}
+                    className="pl-10 h-11 transition-shadow duration-300 focus:shadow-[0_0_0_3px_rgba(99,102,241,0.1)]"
+                  />
+                </div>
+              </div>
+            )}
+
             <div className="space-y-2">
               <Label htmlFor="password">密码</Label>
               <div className="relative group">
@@ -163,14 +238,32 @@ export default function LoginPage() {
                 <Input
                   id="password"
                   type="password"
-                  placeholder="请输入密码"
+                  placeholder={mode === 'register' ? '至少8位，含字母和数字' : '请输入密码'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="pl-10 h-11 transition-shadow duration-300 focus:shadow-[0_0_0_3px_rgba(99,102,241,0.1)]"
-                  autoComplete="current-password"
+                  autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
                 />
               </div>
             </div>
+
+            {mode === 'register' && (
+              <div className="space-y-2">
+                <Label htmlFor="confirmPassword">确认密码</Label>
+                <div className="relative group">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground transition-colors group-focus-within:text-indigo-500" />
+                  <Input
+                    id="confirmPassword"
+                    type="password"
+                    placeholder="再次输入密码"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    className="pl-10 h-11 transition-shadow duration-300 focus:shadow-[0_0_0_3px_rgba(99,102,241,0.1)]"
+                    autoComplete="new-password"
+                  />
+                </div>
+              </div>
+            )}
 
             <Button
               type="submit"
@@ -180,27 +273,44 @@ export default function LoginPage() {
                 'transition-all duration-300 hover:shadow-lg hover:shadow-indigo-500/25',
                 'active:scale-[0.98]'
               )}
-              disabled={isLoading}
+              disabled={isLoading || isRegistering}
             >
-              {isLoading ? (
+              {(isLoading || isRegistering) ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  登录中...
+                  {mode === 'register' ? '注册中...' : '登录中...'}
                 </>
               ) : (
-                '登 录'
+                mode === 'register' ? '立即注册' : '登 录'
               )}
             </Button>
           </form>
 
-          {/* 分隔线 */}
-          <div className="relative animate-fade-in delay-400">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-gray-200" />
-            </div>
-            <div className="relative flex justify-center text-xs">
-              <span className="bg-white px-3 text-muted-foreground">企业内网专用</span>
-            </div>
+          {/* 切换登录/注册 */}
+          <div className="text-center text-sm animate-fade-in delay-400">
+            {mode === 'login' ? (
+              <span className="text-muted-foreground">
+                还没有账号？
+                <button
+                  type="button"
+                  onClick={() => switchMode('register')}
+                  className="ml-1 text-indigo-600 hover:text-indigo-700 font-medium cursor-pointer"
+                >
+                  立即注册
+                </button>
+              </span>
+            ) : (
+              <span className="text-muted-foreground">
+                已有账号？
+                <button
+                  type="button"
+                  onClick={() => switchMode('login')}
+                  className="ml-1 text-indigo-600 hover:text-indigo-700 font-medium cursor-pointer"
+                >
+                  返回登录
+                </button>
+              </span>
+            )}
           </div>
 
           {/* 底部版权 */}

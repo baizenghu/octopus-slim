@@ -409,7 +409,7 @@ export default function ChatPage() {
         }]);
 
         const pollInterval = 5000;
-        const maxPolls = 36; // 最多轮询 3 分钟
+        const maxPolls = 72; // 最多轮询 6 分钟（Agent Team 多子 Agent 场景耗时更长）
         let polls = 0;
         let lastCount = -1;     // 上一次 status 返回的 messageCount
         let baselineCount = -1; // 委派开始时的 messageCount（用于判断是否有新内容）
@@ -436,8 +436,9 @@ export default function ChatPage() {
 
             if (status.messageCount === lastCount) {
               stableCount++;
-              // 只有 messageCount 真正增长过（subagent 返回了内容），才判定稳定停止
-              if (stableCount >= 2 && hasGrown) {
+              // 只有 messageCount 真正增长过（subagent 返回了内容）且主 Agent 已完成汇总，才停止
+              // Agent Team 场景：子 Agent 完成后主 Agent 需要额外一轮汇总，必须等 completed=true
+              if (stableCount >= 2 && hasGrown && status.completed) {
                 console.log('[chat] delegation result stabilized after growth, done.');
                 clearInterval(pollTimer);
                 delegationPollRef.current = null;

@@ -1,6 +1,7 @@
 /**
  * 认证路由
- * 
+ *
+ * POST /api/auth/register - 用户自助注册
  * POST /api/auth/login    - 登录
  * POST /api/auth/refresh  - 刷新 Token
  * POST /api/auth/logout   - 登出
@@ -135,6 +136,86 @@ export function createAuthRouter(authService: AuthService, workspaceManager: Wor
       res.json(result);
     } catch (err: unknown) {
       res.status(401).json({ error: 'Token 无效或已过期，请重新登录' });
+    }
+  });
+
+  /**
+   * 用户自助注册（无需 Admin 预创建）
+   */
+  router.post('/register', async (req, res, next) => {
+    if (!prisma) {
+      res.status(503).json({ error: '数据库未就绪' });
+      return;
+    }
+    try {
+      const { username, password, displayName } = req.body;
+
+      if (!username || !password) {
+        res.status(400).json({ error: '用户名和密码不能为空' });
+        return;
+      }
+      if (/_/.test(username)) {
+        res.status(400).json({ error: '用户名不能包含下划线，请使用连字符（-）' });
+        return;
+      }
+      if (!/^[a-zA-Z0-9\-]{2,32}$/.test(username)) {
+        res.status(400).json({ error: '用户名只能包含字母、数字、连字符，长度 2-32 位' });
+        return;
+      }
+
+      const pwError = validatePassword(password);
+      if (pwError) {
+        res.status(400).json({ error: pwError });
+        return;
+      }
+
+      const existing = await prisma.user.findFirst({ where: { username } });
+      if (existing) {
+        res.status(409).json({ error: '该用户名已被注册' });
+        return;
+      }
+
+      const bcryptModule = await import('bcryptjs');
+      const bcrypt = (bcryptModule as { default?: typeof bcryptModule }).default || bcryptModule;
+      const hashedPassword = await bcrypt.hash(password, 12);
+
+      const user = await prisma.user.create({
+        data: {
+          userId: `user-${username}`,
+          username,
+          email: `${username}@no-email.local`,
+          displayName: displayName?.trim() || username,
+          department: '',
+          roles: ['USER'],
+          quotas: {},
+          status: 'active',
+          passwordHash: hashedPassword,
+        },
+      });
+
+      // 同步到 MockLDAP
+      try {
+        authService.registerMockUser(
+          { username, email: user.email, displayName: user.displayName, department: '' },
+          hashedPassword,
+        );
+      } catch (e: unknown) {
+        logger.warn('[auth] MockLDAP registration failed during self-register', {
+          username,
+          error: e instanceof Error ? e.message : String(e),
+        });
+      }
+
+      logger.info('[auth] self-registration success', { username });
+      const { passwordHash: _ph, ...safeUser } = user;
+      res.status(201).json({ message: '注册成功，请登录', user: safeUser });
+    } catch (err: unknown) {
+      const prismaError = err as { code?: string };
+      if (prismaError.code === 'P2002') {
+        res.status(409).json({ error: '该用户名已被注册' });
+        return;
+      }
+      next(err instanceof Error ? err : new Error(String(err)));
     }
   });
 

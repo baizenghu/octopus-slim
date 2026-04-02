@@ -4,6 +4,7 @@ import * as path from 'path';
 import * as crypto from 'crypto';
 import { spawn, type ChildProcess } from 'child_process';
 import { PrismaClient } from '@prisma/client';
+import { buildBehaviorSections, buildContextSections, type EnterpriseSectionParams } from '../../../apps/server/src/services/enterprise-prompt-sections';
 import { MCPExecutor, type MCPTool, setSandboxConfig, sandboxConfig } from './executor';
 import { Type } from '@sinclair/typebox';
 
@@ -310,6 +311,8 @@ let _prisma: PrismaClient | null = null;
 let _initDone = false;
 /** 已注册的个人工具 server 前缀（防止重复注册） */
 const _registeredPersonalTools = new Set<string>();
+/** 已注册的企业工具 server 前缀（防止重复注册） */
+const _registeredEnterpriseTools = new Set<string>();
 /** 个人 MCP 刷新 interval ID，gateway_stop 时需清理 */
 let _refreshInterval: ReturnType<typeof setInterval> | null = null;
 let _dataRootGlobal: string = './data';
@@ -641,7 +644,7 @@ export default function enterpriseMcpPlugin(api: any) {
           description: '传递给脚本的命令行参数字符串，例如 "--data sales.xlsx --output outputs/report.html"。如果不需要参数可以留空。',
         })),
       }),
-      async execute(_toolCallId: string, params: { skill_name: string; read?: boolean; script?: string; args?: string }) {
+      async execute(_toolCallId: string, params: { skill_name: string; read?: boolean; script?: string; args?: string }, signal?: AbortSignal) {
         // execute 时重新取最新的 _prisma（避免闭包捕获旧引用）
         const prisma = _prisma;
         if (!prisma) {
@@ -876,10 +879,10 @@ export default function enterpriseMcpPlugin(api: any) {
           let result: SkillExecResult;
           if (skill.scope === 'enterprise') {
             // 企业 Skill: 宿主机子进程执行
-            result = await executeSkillInProcess(skillPath, scriptRelPath, argsArray, userWorkspacePath, outputsPath, extraEnv);
+            result = await executeSkillInProcess(skillPath, scriptRelPath, argsArray, userWorkspacePath, outputsPath, extraEnv, signal);
           } else {
             // 个人 Skill: Docker 容器执行
-            result = await executeSkillInDocker(skill.id, skillPath, scriptRelPath, argsArray, userWorkspacePath, outputsPath, extraEnv);
+            result = await executeSkillInDocker(skill.id, skillPath, scriptRelPath, argsArray, userWorkspacePath, outputsPath, extraEnv, signal);
           }
 
           // 9. 构建返回
@@ -985,7 +988,8 @@ export default function enterpriseMcpPlugin(api: any) {
 
   // ── 企业上下文注入（before_prompt_build hook）──
   // 让所有 session（包括 cron isolated、subagent）都能拿到企业级上下文
-  const _enterpriseCtxCache = new Map<string, { text: string; ts: number }>();
+  // 段落构建逻辑统一由 enterprise-prompt-sections.ts 实现
+  const _enterpriseCtxCache = new Map<string, { behavior: string; context: string; ts: number }>();
   const ENTERPRISE_CTX_TTL = 5 * 60 * 1000; // 5 分钟
 
   api.on('before_prompt_build', async (_event: any, ctx: any) => {
@@ -995,17 +999,17 @@ export default function enterpriseMcpPlugin(api: any) {
     const userId = extractUserIdFromAgentId(agentId);
     if (!userId || !_prisma) return;
 
-    // 缓存命中
+    // 缓存命中 — 分别返回 behavior（system prompt）和 context（contextNote）
     const cached = _enterpriseCtxCache.get(agentId);
     if (cached && Date.now() - cached.ts < ENTERPRISE_CTX_TTL) {
-      return { appendSystemContext: cached.text };
+      return { appendSystemContext: cached.behavior, contextNote: cached.context };
     }
 
     try {
       const agentName = extractAgentNameFromAgentId(agentId);
       const isDefault = agentName === 'default';
 
-      // 插件 Prisma 没有 users/agents 表，用 raw SQL
+      // 插件 Prisma 没有 users/agents 表，用 raw SQL 查询数据
       const users: any[] = await _prisma.$queryRaw`SELECT username, display_name FROM users WHERE user_id = ${userId} LIMIT 1`;
       const user = users[0];
       const displayName = user?.display_name || user?.username || userId;
@@ -1014,62 +1018,33 @@ export default function enterpriseMcpPlugin(api: any) {
       const agents: any[] = await _prisma.$queryRaw`SELECT agent_id, name, system_prompt, allowed_connections, identity, description, enabled, is_default FROM agents WHERE owner_id = ${userId} AND name = ${agentName || 'default'} LIMIT 1`;
       const agent = agents[0];
 
-      const sections: string[] = [];
-
-      // 身份
-      if (isDefault) {
-        sections.push(
-          `## 你的身份\n` +
-          `你是 Octopus AI 企业级超级智能助手，是用户 ${displayName} 的主助手。\n` +
-          `自我介绍时只说"我是 Octopus AI"，不要说"Octopus AI AI 助手"或其他重复 AI 的表述。`
-        );
-      }
-
-      // 用户信息
-      sections.push(`## 用户信息\n当前用户: ${username}${displayName !== username ? ` (${displayName})` : ''}`);
-
-      // 工作区
+      // 工作区路径
       const dataRoot = (config as any).dataRoot || '/home/baizh/octopus/data';
-      const wsBase = path.join(dataRoot, 'users', userId, 'workspace');
-      sections.push(
-        `## 工作区\n` +
-        `工作空间根目录: ${wsBase}\n` +
-        `用户上传文件: ${path.join(wsBase, 'files')}\n` +
-        `用户可下载文件: ${path.join(wsBase, 'outputs')}\n` +
-        `临时工作目录: ${path.join(wsBase, 'temp')}\n\n` +
-        `**文件管理规范：**\n` +
-        `- files/：用户上传的文件，只读取不修改\n` +
-        `- outputs/：交付给用户的成果文件。系统会**自动**将 outputs/ 中的新文件发送给用户（包括 IM 渠道）\n` +
-        `- temp/：中间产物（脚本、临时数据、草稿）写入此目录\n` +
-        `- 不要在工作空间根目录直接创建文件`
-      );
-
-      // Agent 指令
-      if (agent?.system_prompt) {
-        sections.push(`## Agent 指令\n${agent.system_prompt}`);
-      }
+      const wsBase = agentName === 'default'
+        ? path.join(dataRoot, 'users', userId, 'agents', 'default', 'workspace')
+        : path.join(dataRoot, 'users', userId, 'agents', agentName, 'workspace');
 
       // 专业 Agent 列表（仅 default agent）
+      let specialists: EnterpriseSectionParams['specialists'];
       if (isDefault) {
         try {
-          const specialists: any[] = await _prisma.$queryRaw`SELECT name, description, identity FROM agents WHERE owner_id = ${userId} AND enabled = true AND is_default = false ORDER BY created_at ASC`;
-          if (specialists.length > 0) {
-            const list = specialists.map((a: any) => {
+          const rows: any[] = await _prisma.$queryRaw`SELECT name, description, identity FROM agents WHERE owner_id = ${userId} AND enabled = true AND is_default = false ORDER BY created_at ASC`;
+          if (rows.length > 0) {
+            specialists = rows.map((a: any) => {
               let identity: { name?: string } | null = null;
               try { identity = typeof a.identity === 'string' ? JSON.parse(a.identity) : a.identity; } catch { /* ignore */ }
-              const dn = identity?.name || a.name;
-              const desc = a.description ? ` — ${a.description}` : '';
-              return `- **${dn}**（agent 名称: ${a.name}）${desc}`;
-            }).join('\n');
-            sections.push(
-              `## 可委派的专业 Agent\n` +
-              `以下是用户创建的专业 Agent，可在需要时委派任务。\n${list}`
-            );
+              return {
+                name: a.name,
+                displayName: identity?.name || a.name,
+                description: a.description || undefined,
+              };
+            });
           }
         } catch { /* ignore */ }
       }
 
       // 数据库连接
+      let dbConnections: EnterpriseSectionParams['dbConnections'];
       let allowedConns: string[] | null = null;
       try {
         allowedConns = typeof agent?.allowed_connections === 'string'
@@ -1079,42 +1054,46 @@ export default function enterpriseMcpPlugin(api: any) {
       if (Array.isArray(allowedConns) && allowedConns.length > 0) {
         try {
           const dbConns: any[] = await _prisma.$queryRaw`SELECT name, db_type, db_name, host, port, db_user FROM database_connections WHERE user_id = ${userId} AND enabled = true`;
-          const filtered = dbConns.filter((c: any) => allowedConns!.includes(c.name));
-          if (filtered.length > 0) {
-            const lines = [
-              '## 数据库连接',
-              '调用 SQL 相关工具时需要传入 connection_name 参数：',
-              '',
-            ];
-            for (const c of filtered) {
-              lines.push(`- \`${c.name}\`：${c.db_type} \`${c.db_name}\`@${c.host}:${c.port} (user: ${c.db_user})`);
-            }
-            sections.push(lines.join('\n'));
-          }
+          dbConnections = dbConns
+            .filter((c: any) => allowedConns!.includes(c.name))
+            .map((c: any) => ({
+              name: c.name,
+              dbType: c.db_type,
+              dbName: c.db_name,
+              host: c.host,
+              port: c.port,
+              dbUser: c.db_user,
+            }));
+          if (dbConnections.length === 0) dbConnections = undefined;
         } catch { /* ignore */ }
       }
 
-      // 定时提醒
-      sections.push(
-        `## 定时提醒\n` +
-        `设置提醒或定时任务请使用 cron 工具。\n` +
-        `**必须使用** sessionTarget="isolated"，payload.kind="agentTurn"，delivery.mode="none"。\n` +
-        `提醒的送达方式：在 payload.message 中指示 agent 用 send_im_message 工具发送通知。\n` +
-        `示例（2分钟后提醒开会）：\n` +
-        `cron add，action="add"，job={\n` +
-        `  "name": "提醒开会",\n` +
-        `  "schedule": { "kind": "at", "at": "<ISO-8601时间>" },\n` +
-        `  "sessionTarget": "isolated",\n` +
-        `  "payload": { "kind": "agentTurn", "message": "你是一个提醒助手。请立即用 send_im_message 工具向用户发送以下提醒：该开会了！" },\n` +
-        `  "delivery": { "mode": "none" }\n` +
-        `}\n` +
-        `**禁止** sessionTarget="main"、payload.kind="systemEvent"、delivery.mode="announce"，均会报错。`
-      );
+      // 调用共享构建函数（双通道：行为指令 + 上下文信息）
+      const sectionParams: EnterpriseSectionParams = {
+        userId,
+        username,
+        displayName,
+        agentName,
+        isDefault,
+        workspacePaths: {
+          root: wsBase,
+          files: path.join(wsBase, 'files'),
+          outputs: path.join(wsBase, 'outputs'),
+          temp: path.join(wsBase, 'temp'),
+        },
+        specialists,
+        dbConnections,
+        agentInstructions: agent?.system_prompt || undefined,
+      };
+      const behaviorText = buildBehaviorSections(sectionParams);
+      const contextText = buildContextSections(sectionParams);
 
-      const text = sections.join('\n\n');
-      _enterpriseCtxCache.set(agentId, { text, ts: Date.now() });
-      api.logger.info(`[enterprise-mcp] before_prompt_build OK for ${agentId} (${text.length} chars, sections: ${sections.length})`);
-      return { appendSystemContext: text };
+      _enterpriseCtxCache.set(agentId, { behavior: behaviorText, context: contextText, ts: Date.now() });
+      api.logger.info(`[enterprise-mcp] before_prompt_build OK for ${agentId} (behavior=${behaviorText.length}, context=${contextText.length} chars)`);
+      return {
+        appendSystemContext: behaviorText,
+        contextNote: contextText,
+      };
     } catch (err: any) {
       api.logger.warn(`[enterprise-mcp] before_prompt_build failed for ${agentId}: ${err.message || err.stack || String(err)}`);
       return;
@@ -1136,7 +1115,8 @@ export default function enterpriseMcpPlugin(api: any) {
       const mtime = stat.mtimeMs;
       if (mtime > _lastRefreshCheck && _executor && _prisma && _initDone) {
         _lastRefreshCheck = Date.now();
-        api.logger.info('personal MCP refresh signal detected, reloading...');
+        api.logger.info('MCP refresh signal detected, reloading...');
+        await refreshEnterpriseMCPServers(api, _executor, _prisma);
         await refreshPersonalMCPServers(api, _executor, _prisma);
       }
     } catch {
@@ -1209,6 +1189,7 @@ async function initMCPServers(api: any, executor: MCPExecutor, prisma: PrismaCli
           inputSchema: (tool.inputSchema as Record<string, unknown>) || {},
         });
       }
+      _registeredEnterpriseTools.add(`mcp_${server.id}`.replace(/[^a-zA-Z0-9_]/g, '_'));
     } catch (err: any) {
       api.logger.warn(`failed to connect MCP server ${server.name}: ${err.message}`);
     }
@@ -1402,6 +1383,78 @@ function registerPersonalMCPToolFromCache(api: any, cached: CachedMCPTool) {
   });
 }
 
+/** 热加载企业 MCP：发现新 server 后连接并注册工具，更新缓存 */
+async function refreshEnterpriseMCPServers(api: any, executor: MCPExecutor, prisma: PrismaClient) {
+  try {
+    const servers = await (prisma as any).toolSource.findMany({
+      where: { type: 'mcp', scope: 'enterprise', enabled: true },
+    });
+
+    let changed = false;
+    for (const server of servers) {
+      const toolNamePrefix = `mcp_${server.id}`.replace(/[^a-zA-Z0-9_]/g, '_');
+      if (_registeredEnterpriseTools.has(toolNamePrefix)) continue;
+
+      try {
+        await executor.connect({
+          id: server.id,
+          name: server.name,
+          transport: server.transport,
+          command: server.command || undefined,
+          args: Array.isArray(server.args) ? server.args : [],
+          url: server.url || undefined,
+          env: server.env && typeof server.env === 'object'
+            ? (server.env as Record<string, string>) : {},
+        });
+
+        const tools = await executor.listTools(server.id);
+        for (const tool of tools) {
+          const toolName = nativeToolName(server.id, tool.name);
+          registerMCPTool(api, executor, server, tool, toolName);
+        }
+        _registeredEnterpriseTools.add(toolNamePrefix);
+        changed = true;
+        api.logger.info(`enterprise MCP hot-loaded: ${server.name} (${tools.length} tools)`);
+      } catch (err: any) {
+        api.logger.warn(`enterprise MCP hot-load failed for ${server.name}: ${err.message}`);
+      }
+    }
+
+    if (changed && _cachedTools) {
+      // 重建缓存：保留 personal 工具 + 重新收集所有企业工具
+      const personalCache = _cachedTools.filter((t: any) => t.scope === 'personal');
+      const enterpriseCache: CachedMCPTool[] = [];
+      for (const server of servers) {
+        try {
+          const tools = await executor.listTools(server.id);
+          for (const tool of tools) {
+            enterpriseCache.push({
+              serverId: server.id,
+              serverName: server.name,
+              toolName: tool.name,
+              nativeToolName: nativeToolName(server.id, tool.name),
+              description: tool.description || tool.name,
+              inputSchema: (tool.inputSchema as Record<string, unknown>) || {},
+            });
+          }
+        } catch { /* skip */ }
+      }
+      const freshCache = [...enterpriseCache, ...personalCache];
+      _cachedTools = freshCache;
+      try {
+        const tmpPath = TOOLS_CACHE_PATH + '.tmp';
+        fs.writeFileSync(tmpPath, JSON.stringify(freshCache, null, 2));
+        fs.renameSync(tmpPath, TOOLS_CACHE_PATH);
+        api.logger.info(`enterprise-mcp: tool cache updated (${freshCache.length} tools)`);
+      } catch (err: any) {
+        api.logger.warn(`enterprise-mcp: failed to write tool cache: ${err.message}`);
+      }
+    }
+  } catch (err: any) {
+    api.logger.error(`enterprise MCP refresh failed: ${err.message}`);
+  }
+}
+
 /** 重新加载个人 MCP（CRUD 变更后调用） */
 async function refreshPersonalMCPServers(api: any, executor: MCPExecutor, prisma: PrismaClient) {
   try {
@@ -1554,6 +1607,7 @@ function executeSkillInProcess(
   userWorkspacePath: string,
   outputsPath: string,
   extraEnv: Record<string, string>,
+  signal?: AbortSignal,
 ): Promise<SkillExecResult> {
   const startTime = Date.now();
   const timeout = 300_000; // 5 min
@@ -1613,8 +1667,17 @@ function executeSkillInProcess(
 
     const timer = setTimeout(() => { killed = true; child.kill('SIGKILL'); }, timeout);
 
+    // 用户点击停止时终止子进程
+    const onAbort = () => { if (!killed) { killed = true; child.kill('SIGTERM'); } };
+    if (signal?.aborted) {
+      onAbort();
+    } else {
+      signal?.addEventListener('abort', onAbort, { once: true });
+    }
+
     child.on('close', (code) => {
       clearTimeout(timer);
+      signal?.removeEventListener('abort', onAbort);
       resolve({
         success: !killed && code === 0,
         exitCode: code ?? -1,
@@ -1628,6 +1691,7 @@ function executeSkillInProcess(
 
     child.on('error', (err) => {
       clearTimeout(timer);
+      signal?.removeEventListener('abort', onAbort);
       resolve({
         success: false, exitCode: -1, stdout,
         stderr: `进程启动失败: ${err.message}`,
@@ -1646,6 +1710,7 @@ function executeSkillInDocker(
   userWorkspacePath: string,
   outputsPath: string,
   extraEnv: Record<string, string>,
+  signal?: AbortSignal,
 ): Promise<SkillExecResult> {
   const startTime = Date.now();
   const timeout = 305_000; // 5 min + 5s Docker overhead
@@ -1703,8 +1768,17 @@ function executeSkillInDocker(
 
     const timer = setTimeout(() => { killed = true; child.kill('SIGKILL'); }, timeout);
 
+    // 用户点击停止时终止 Docker 子进程
+    const onAbort = () => { if (!killed) { killed = true; child.kill('SIGTERM'); } };
+    if (signal?.aborted) {
+      onAbort();
+    } else {
+      signal?.addEventListener('abort', onAbort, { once: true });
+    }
+
     child.on('close', (code) => {
       clearTimeout(timer);
+      signal?.removeEventListener('abort', onAbort);
       resolve({
         success: !killed && code === 0,
         exitCode: code ?? -1,
@@ -1718,6 +1792,7 @@ function executeSkillInDocker(
 
     child.on('error', (err) => {
       clearTimeout(timer);
+      signal?.removeEventListener('abort', onAbort);
       resolve({
         success: false, exitCode: -1, stdout: '',
         stderr: `Docker 启动失败: ${err.message}`,
