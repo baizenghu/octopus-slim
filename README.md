@@ -75,21 +75,6 @@ Octopus 深度参考了 [Claude Code](https://github.com/anthropics/claude-code)
 | **文件访问安全** | `filesystem.ts` | workspaceOnly 路径校验，防止目录穿越 |
 | **子 Agent 编排** | Coordinator 架构 | 主 Agent 自主 spawn 子 Agent，结果自动汇聚 |
 
-#### Claude Code Dispatch 技能
-
-Octopus Agent 可以将编码任务直接派发给 **Claude Code** 在后台执行：
-
-```
-用户: 帮我重构 apps/server/src/routes/auth.ts，添加速率限制
-
-Agent: 好的，我来调用 Claude Code 处理这个任务...
-→ run_skill(claude-code-dispatch, --prompt "重构 auth.ts 添加速率限制" --workdir /path/to/project)
-→ Claude Code 在后台自主完成代码修改
-→ 完成后通过飞书/Web 自动通知结果
-```
-
-这使 Octopus 能作为「AI 任务调度中心」，将复杂编码工作委托给专业 AI 编码助手异步完成。
-
 ---
 
 ## 记忆插件（memory-lancedb-pro）
