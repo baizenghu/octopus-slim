@@ -67,6 +67,39 @@ export class AsyncAgentRegistry {
     this.prisma = prisma;
   }
 
+  // ── 内存清理 ─────────────────────────────────────────────────────────────
+
+  private cleanupTimer?: ReturnType<typeof setInterval>;
+
+  /** 启动定时清理，移除已完成/失败/取消超过 ttlMs 的任务，防止内存泄漏 */
+  startCleanup(intervalMs = 5 * 60 * 1000, ttlMs = 24 * 60 * 60 * 1000): void {
+    this.cleanupTimer = setInterval(() => {
+      const now = Date.now();
+      let removed = 0;
+      for (const [taskId, task] of this.tasks) {
+        if (
+          (task.status === 'completed' || task.status === 'failed' || task.status === 'cancelled') &&
+          task.completedAt &&
+          (now - task.completedAt.getTime()) > ttlMs
+        ) {
+          this.tasks.delete(taskId);
+          removed++;
+        }
+      }
+      if (removed > 0) {
+        _log.info(`cleanup: removed ${removed} expired task(s) from memory (${this.tasks.size} remaining)`);
+      }
+    }, intervalMs);
+    this.cleanupTimer.unref();
+  }
+
+  stopCleanup(): void {
+    if (this.cleanupTimer) {
+      clearInterval(this.cleanupTimer);
+      this.cleanupTimer = undefined;
+    }
+  }
+
   // ── Persistence ──────────────────────────────────────────────────────────
 
   private async persistTask(task: AsyncAgentTask): Promise<void> {
@@ -158,6 +191,8 @@ export class AsyncAgentRegistry {
     if (recentTasks.length > 0) {
       _log.info(`restoreFromDB: loaded ${recentTasks.length} recent task(s) into memory`);
     }
+    // 启动定时清理，防止 tasks Map 无限增长（每 5 分钟清理完成超过 24h 的任务）
+    this.startCleanup();
   }
 
   // ── CRUD ─────────────────────────────────────────────────────────────────

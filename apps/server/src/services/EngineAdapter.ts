@@ -669,13 +669,20 @@ export class EngineAdapter extends EventEmitter {
     onProgress?: (entry: ProgressEntry) => void,
   ): Promise<{ taskId: string; cancel: () => void }> {
     const limit = getRuntimeConfig().agents.maxConcurrentCoordinators;
-    // 检查并发上限：_callAgentAsyncImpl 是 fire-and-forget，计数器由 runBackground 全程持有
+    // 同步检查+递增，避免 check-then-act 竞态（runBackground 是 fire-and-forget，
+    // 若在 async 内递增，并发请求可在递增前通过检查突破限制）
     if (this.activeCoordinatorTasks >= limit) {
       const err = new Error(`系统繁忙，Coordinator 并发已达上限（${limit}），请稍后重试`);
       (err as any).code = 'COORDINATOR_LIMIT_EXCEEDED';
       throw err;
     }
-    return this._callAgentAsyncImpl(params, onProgress);
+    this.activeCoordinatorTasks++;
+    try {
+      return await this._callAgentAsyncImpl(params, onProgress);
+    } catch (e) {
+      this.activeCoordinatorTasks--;
+      throw e;
+    }
   }
 
   /** 返回当前活跃的 Coordinator 任务数（供健康检查使用） */
@@ -710,9 +717,8 @@ export class EngineAdapter extends EventEmitter {
     };
 
     // 后台执行：不 await，错误通过 registry.fail 记录
+    // 计数器在 callAgentAsync 中同步递增，此处 finally 中递减
     const runBackground = async () => {
-      // 占用 coordinator 并发槽（全程持有，避免 fire-and-forget 导致计数立即释放）
-      this.activeCoordinatorTasks++;
       try {
       // 自动压缩过长 session（幂等，小 session 短路）
       await this.maybeCompact(agentParams.sessionKey);
@@ -788,9 +794,9 @@ export class EngineAdapter extends EventEmitter {
           if (!cancelled) {
             if (currentBlockText) textBlocks.push(currentBlockText);
             asyncAgentRegistry.complete(taskId, textBlocks.join('\n').trim(), {
-              inputTokens: usageAccum.inputTokens || undefined,
-              outputTokens: usageAccum.outputTokens || undefined,
-              modelName: usageAccum.modelName || undefined,
+              inputTokens: usageAccum.inputTokens ?? undefined,
+              outputTokens: usageAccum.outputTokens ?? undefined,
+              modelName: usageAccum.modelName ?? undefined,
             });
           }
           if (bgResolve) bgResolve();
