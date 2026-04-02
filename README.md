@@ -205,6 +205,73 @@ PORT=18790
 
 ---
 
+## Skills 使用说明
+
+Skills 是 Octopus 的脚本扩展系统，支持 Python 和 Node.js，在 Docker 沙箱中安全执行。
+
+### 类型
+
+| 类型 | 前缀 | 创建权限 | 使用范围 |
+|------|------|---------|---------|
+| **企业 Skill** | `ent_` | 管理员 | 全体用户可调用 |
+| **个人 Skill** | `usr_{userId}_` | 普通用户 | 仅创建者可用 |
+
+### 目录结构
+
+```
+data/skills/
+├── ent_my-skill/          # 企业 Skill
+│   ├── SKILL.md           # Skill 定义（name、description、command）
+│   ├── run.sh             # 入口脚本
+│   └── scripts/
+│       └── main.py
+└── usr_user-alice_my-tool/  # 个人 Skill
+    ├── SKILL.md
+    └── scripts/
+        └── tool.py
+```
+
+### Python 依赖管理
+
+上传 Python Skill 时，**将依赖 `.whl` 文件一并放入 `deps/` 目录**，系统启动时自动创建隔离的虚拟环境并安装依赖，无需网络访问：
+
+```
+ent_my-skill/
+├── SKILL.md
+├── scripts/
+│   └── main.py
+└── deps/                        # 离线依赖包
+    ├── requests-2.32.5-*.whl
+    ├── urllib3-2.6.3-*.whl
+    └── certifi-*.whl
+```
+
+下载 `.whl` 文件：
+
+```bash
+pip download requests -d ./deps --only-binary=:all: --platform manylinux2014_x86_64 --python-version 312
+```
+
+系统会在 `data/skills/<skill-id>/.venv/` 下自动创建虚拟环境，每个 Skill 环境独立隔离。
+
+### SKILL.md 格式
+
+```markdown
+---
+name: my-skill
+description: 一句话描述，Agent 据此决定何时调用
+version: 1.0.0
+command-dispatch: tool
+command-tool: run_skill
+---
+
+# My Skill
+
+详细说明和调用示例...
+```
+
+---
+
 ## 目录结构
 
 ```
