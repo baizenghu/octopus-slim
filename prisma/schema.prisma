@@ -237,6 +237,7 @@ model AgentTask {
   error       String?   @db.Text
   runId       String?   @map("run_id") @db.VarChar(128)
   sessionKey   String?   @map("session_key") @db.VarChar(255)
+  priority     Int       @default(0) @map("priority")
   inputTokens  Int?      @map("input_tokens")
   outputTokens Int?      @map("output_tokens")
   modelName    String?   @map("model_name") @db.VarChar(128)

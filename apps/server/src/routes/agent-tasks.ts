@@ -49,11 +49,14 @@ export function createAgentTasksRouter(
    * Body: { agentName?: string; message: string; coordinatorConfig?: unknown }
    */
   router.post('/', authMiddleware, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
-    const { agentName, message, coordinatorConfig: _coordinatorConfig } = req.body as {
+    const { agentName, message, coordinatorConfig: _coordinatorConfig, priority: rawPriority } = req.body as {
       agentName?: string;
       message: string;
       coordinatorConfig?: unknown;
+      priority?: number;
     };
+    // 校验 priority 值域：仅允许 -1/0/1，默认 0
+    const priority = typeof rawPriority === 'number' && [-1, 0, 1].includes(rawPriority) ? rawPriority : 0;
 
     if (!message?.trim()) {
       res.status(400).json({ error: 'message 不能为空' });
@@ -75,6 +78,7 @@ export function createAgentTasksRouter(
         agentId: resolvedAgentId,
         message: message.trim(),
         sessionKey: resolvedSessionKey,
+        priority,
       });
       logger.info('agent task triggered via POST', { taskId, userId: req.user!.id, agentName });
       res.status(202).json({ taskId, status: 'pending' });

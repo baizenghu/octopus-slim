@@ -665,7 +665,7 @@ export class EngineAdapter extends EventEmitter {
    * @returns            taskId（注册表中的任务 ID）和 cancel 函数
    */
   async callAgentAsync(
-    params: AgentCallParams & { background?: boolean; backgroundAfterMs?: number },
+    params: AgentCallParams & { background?: boolean; backgroundAfterMs?: number; priority?: number },
     onProgress?: (entry: ProgressEntry) => void,
   ): Promise<{ taskId: string; cancel: () => void }> {
     const limit = getRuntimeConfig().agents.maxConcurrentCoordinators;
@@ -684,10 +684,10 @@ export class EngineAdapter extends EventEmitter {
   }
 
   private async _callAgentAsyncImpl(
-    params: AgentCallParams & { background?: boolean; backgroundAfterMs?: number },
+    params: AgentCallParams & { background?: boolean; backgroundAfterMs?: number; priority?: number },
     onProgress?: (entry: ProgressEntry) => void,
   ): Promise<{ taskId: string; cancel: () => void }> {
-    const { background: _background, backgroundAfterMs = 120_000, ...agentParams } = params;
+    const { background: _background, backgroundAfterMs = 120_000, priority, ...agentParams } = params;
 
     const agentName = agentParams.agentId.replace(/^ent_[^_]+_/, '');
 
@@ -697,6 +697,7 @@ export class EngineAdapter extends EventEmitter {
       agentName,
       message: agentParams.message,
       sessionKey: agentParams.sessionKey,
+      priority,
     });
 
     const taskId = task.taskId;

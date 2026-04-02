@@ -39,6 +39,8 @@ export interface AsyncAgentTask {
   /** 引擎 runId（callAgent 返回后填充） */
   runId?: string;
   sessionKey?: string;
+  /** 任务优先级：1=high, 0=normal（用户手动）, -1=low（后台/定时） */
+  priority: number;
   /** Token 消耗统计（任务完成时写入） */
   inputTokens?: number;
   outputTokens?: number;
@@ -82,6 +84,7 @@ export class AsyncAgentRegistry {
         error: task.error ?? null,
         runId: task.runId ?? null,
         sessionKey: task.sessionKey ?? null,
+        priority: task.priority,
         inputTokens: task.inputTokens ?? null,
         outputTokens: task.outputTokens ?? null,
         modelName: task.modelName ?? null,
@@ -96,6 +99,7 @@ export class AsyncAgentRegistry {
         error: task.error ?? null,
         runId: task.runId ?? null,
         sessionKey: task.sessionKey ?? null,
+        priority: task.priority,
         inputTokens: task.inputTokens ?? null,
         outputTokens: task.outputTokens ?? null,
         modelName: task.modelName ?? null,
@@ -142,6 +146,7 @@ export class AsyncAgentRegistry {
           error: t.error ?? undefined,
           runId: t.runId ?? undefined,
           sessionKey: t.sessionKey ?? undefined,
+          priority: t.priority ?? 0,
           inputTokens: (t as any).inputTokens ?? undefined,
           outputTokens: (t as any).outputTokens ?? undefined,
           modelName: (t as any).modelName ?? undefined,
@@ -158,7 +163,7 @@ export class AsyncAgentRegistry {
   // ── CRUD ─────────────────────────────────────────────────────────────────
 
   create(
-    params: Omit<AsyncAgentTask, 'taskId' | 'status' | 'progress' | 'createdAt'>,
+    params: Omit<AsyncAgentTask, 'taskId' | 'status' | 'progress' | 'createdAt' | 'priority'> & { priority?: number },
   ): AsyncAgentTask {
     // Per-user 配额检查
     const perUserLimit = getRuntimeConfig().agents.maxAsyncTasksPerUser;
@@ -179,6 +184,7 @@ export class AsyncAgentRegistry {
       taskId,
       status: 'pending',
       progress: [],
+      priority: params.priority ?? 0,
       createdAt: new Date(),
     };
     this.tasks.set(taskId, task);
