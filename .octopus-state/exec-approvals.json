@@ -1,9 +1,0 @@
-{
-  "version": 1,
-  "socket": {
-    "path": "/home/baizh/.octopus/exec-approvals.sock",
-    "token": "LcLKg1tsdTI8Z4kzuSXrnOm3atDdRJ7H"
-  },
-  "defaults": {},
-  "agents": {}
-}

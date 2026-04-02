@@ -36,6 +36,9 @@ docker/data/
 /data/audit-logs/
 /data/mcp-servers/
 /data/tmp/
+/data/avatars/
+/data/octopus.db
+/data/claude-code-results/
 
 # Turbo
 .turbo/
@@ -86,6 +89,8 @@ plugins/*/tools-cache.json
 .octopus-state/workspace/
 # 安全：排除含敏感 token 的配置文件
 .octopus-state/octopus.json
+.octopus-state/enterprise.json
+.octopus-state/exec-approvals.json
 
 __pycache__/
 *.pyc
