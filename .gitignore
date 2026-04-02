@@ -121,7 +121,12 @@ outputs/
 .claude/
 .octopus-state/feishu/
 .octopus-state/mcp-refresh-signal
-.octopus-state/extensions/
+# extensions: 除 memory-lancedb-pro 外全部忽略
+.octopus-state/extensions/*/
+!.octopus-state/extensions/memory-lancedb-pro/
+.octopus-state/extensions/memory-lancedb-pro/node_modules/
+.octopus-state/extensions/memory-lancedb-pro/.git/
+.octopus-state/extensions/memory-lancedb-pro/*.zip
 
 # Browser data (engine sandbox browser)
 .octopus-state/browser/
