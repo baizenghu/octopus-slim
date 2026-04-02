@@ -115,6 +115,10 @@ export interface RuntimeConfig {
     maxAsyncTasksPerUser: number;
     /** 全局最大并发 Coordinator 任务数（默认 5） */
     maxConcurrentCoordinators: number;
+    /** 是否在异步任务执行前自动压缩 session 历史（默认 true） */
+    compactionEnabled: boolean;
+    /** 压缩后保留的最大行数（默认 400） */
+    compactionMaxLines: number;
   };
 }
 
@@ -171,6 +175,8 @@ const RUNTIME_DEFAULTS: RuntimeConfig = {
   agents: {
     maxAsyncTasksPerUser: 2,
     maxConcurrentCoordinators: 5,
+    compactionEnabled: true,
+    compactionMaxLines: 400,
   },
 };
 

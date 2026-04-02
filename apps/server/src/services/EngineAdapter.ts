@@ -626,6 +626,29 @@ export class EngineAdapter extends EventEmitter {
     return match ? match[1] : null;
   }
 
+  // ---- Session 自动压缩 ----
+
+  /**
+   * 在 async task 执行前尝试压缩 session 历史，防止上下文窗口爆炸。
+   * 调用引擎 sessions.compact RPC（幂等——session 行数不超过 maxLines 时短路返回）。
+   */
+  private async maybeCompact(sessionKey: string): Promise<void> {
+    const { compactionEnabled, compactionMaxLines } = getRuntimeConfig().agents;
+    if (!compactionEnabled || !sessionKey) return;
+    try {
+      const result = await this.call<{ ok?: boolean; compacted?: boolean; kept?: number }>(
+        'sessions.compact',
+        { key: sessionKey, maxLines: compactionMaxLines },
+      );
+      if (result?.compacted) {
+        logger.info(`[EngineAdapter] session compacted: kept ${result.kept} lines (key=${sessionKey.slice(0, 40)}…)`);
+      }
+    } catch (e) {
+      // 压缩失败不中断正常流程
+      logger.warn('[EngineAdapter] session compaction failed, continuing', { error: e instanceof Error ? e.message : String(e) });
+    }
+  }
+
   // ---- 异步后台 Agent 调用 ----
 
   /**
@@ -690,6 +713,9 @@ export class EngineAdapter extends EventEmitter {
       // 占用 coordinator 并发槽（全程持有，避免 fire-and-forget 导致计数立即释放）
       this.activeCoordinatorTasks++;
       try {
+      // 自动压缩过长 session（幂等，小 session 短路）
+      await this.maybeCompact(agentParams.sessionKey);
+
       // event.content = data.text = 累积文本（每次含之前所有内容）
       // 需要按文本段（text block）分别收集，工具调用时文本段结束
       const textBlocks: string[] = [];
