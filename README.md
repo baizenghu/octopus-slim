@@ -92,6 +92,22 @@ Agent: 好的，我来调用 Claude Code 处理这个任务...
 
 ---
 
+## 记忆插件（memory-lancedb-pro）
+
+> 基于 [CortexReach/memory-lancedb-pro](https://github.com/CortexReach/memory-lancedb-pro) 集成，感谢原作者的开源贡献。
+
+位于 `.octopus-state/extensions/memory-lancedb-pro/`，基于 LanceDB 实现：
+
+- **混合检索**：向量（70%）+ BM25（30%），可调权重
+- **重排序**：Jina Reranker 交叉编码器
+- **智能提取**：LLM 自动从对话中提炼可记忆内容
+- **记忆衰减**：时间衰减 + 近期权重偏置
+- **多 scope 隔离**：不同 Agent 可独立或共享记忆空间
+
+配置项在 `octopus.json` 的 `plugins.entries.memory-lancedb-pro.config` 中。
+
+---
+
 ## 系统架构
 
 ```
@@ -264,22 +280,6 @@ pm2 start ecosystem.config.js
 # 或 systemd 方式
 sudo systemctl start octopus
 ```
-
----
-
-## 记忆插件（memory-lancedb-pro）
-
-> 基于 [CortexReach/memory-lancedb-pro](https://github.com/CortexReach/memory-lancedb-pro) 集成，感谢原作者的开源贡献。
-
-位于 `.octopus-state/extensions/memory-lancedb-pro/`，基于 LanceDB 实现：
-
-- **混合检索**：向量（70%）+ BM25（30%），可调权重
-- **重排序**：Jina Reranker 交叉编码器
-- **智能提取**：LLM 自动从对话中提炼可记忆内容
-- **记忆衰减**：时间衰减 + 近期权重偏置
-- **多 scope 隔离**：不同 Agent 可独立或共享记忆空间
-
-配置项在 `octopus.json` 的 `plugins.entries.memory-lancedb-pro.config` 中。
 
 ---
 
