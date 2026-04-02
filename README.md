@@ -269,6 +269,8 @@ sudo systemctl start octopus
 
 ## 记忆插件（memory-lancedb-pro）
 
+> 基于 [CortexReach/memory-lancedb-pro](https://github.com/CortexReach/memory-lancedb-pro) 集成，感谢原作者的开源贡献。
+
 位于 `.octopus-state/extensions/memory-lancedb-pro/`，基于 LanceDB 实现：
 
 - **混合检索**：向量（70%）+ BM25（30%），可调权重
