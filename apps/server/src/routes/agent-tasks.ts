@@ -92,7 +92,15 @@ export function createAgentTasksRouter(
     const user = req.user!;
     const tasks = asyncAgentRegistry
       .listByUser(user.id)
-      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .map((t) => ({
+        ...t,
+        tokenUsage: {
+          input: t.inputTokens ?? 0,
+          output: t.outputTokens ?? 0,
+          model: t.modelName ?? '',
+        },
+      }));
     res.json({ tasks });
   });
 

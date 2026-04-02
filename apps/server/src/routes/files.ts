@@ -30,6 +30,7 @@ import type { AuthService } from '@octopus/auth';
 import type { WorkspaceManager } from '@octopus/workspace';
 import type { AppPrismaClient } from '../types/prisma';
 import { createLogger } from '../utils/logger';
+import { isPathSafe, hasPathTraversal } from '../utils/filesystem-guard.js';
 
 const logger = createLogger('files');
 
@@ -415,10 +416,22 @@ export function createFilesRouter(
       const agentWorkspace = workspaceManager.getAgentWorkspacePath(user.id, agentName);
       const fullPath = path.join(agentWorkspace, rest);
 
+      // 危险路径快速检查（路径穿越特征）
+      if (hasPathTraversal(rest)) {
+        res.status(403).json({ error: '路径不允许访问' });
+        return;
+      }
+
       // 路径安全验证（validatePath 检查路径是否在用户空间内）
       const validation = await workspaceManager.validatePath(user.id, fullPath);
       if (!validation.valid) {
         res.status(403).json({ error: `路径不合法: ${validation.reason}` });
+        return;
+      }
+
+      // 危险文件名/目录检查（防止访问敏感配置文件）
+      if (!isPathSafe(fullPath, agentWorkspace)) {
+        res.status(403).json({ error: '路径不允许访问' });
         return;
       }
 
@@ -505,9 +518,21 @@ export function createFilesRouter(
       const agentWorkspace = workspaceManager.getAgentWorkspacePath(user.id, agentName);
       const fullPath = path.join(agentWorkspace, rest);
 
+      // 危险路径快速检查
+      if (hasPathTraversal(rest)) {
+        res.status(403).json({ error: '路径不允许访问' });
+        return;
+      }
+
       const validation = await workspaceManager.validatePath(user.id, fullPath);
       if (!validation.valid) {
         res.status(403).json({ error: `路径不合法: ${validation.reason}` });
+        return;
+      }
+
+      // 危险文件名/目录检查
+      if (!isPathSafe(fullPath, agentWorkspace)) {
+        res.status(403).json({ error: '路径不允许访问' });
         return;
       }
 
@@ -570,9 +595,21 @@ export function createFilesRouter(
       const agentWorkspace = workspaceManager.getAgentWorkspacePath(user.id, agentName);
       const fullPath = path.join(agentWorkspace, rest);
 
+      // 危险路径快速检查
+      if (hasPathTraversal(rest)) {
+        res.status(403).json({ error: '路径不允许访问' });
+        return;
+      }
+
       const validation = await workspaceManager.validatePath(user.id, fullPath);
       if (!validation.valid) {
         res.status(403).json({ error: `路径不合法: ${validation.reason}` });
+        return;
+      }
+
+      // 危险文件名/目录检查
+      if (!isPathSafe(fullPath, agentWorkspace)) {
+        res.status(403).json({ error: '路径不允许访问' });
         return;
       }
 

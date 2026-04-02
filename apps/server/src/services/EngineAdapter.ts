@@ -15,6 +15,7 @@ import { ConfigBatcher } from '../utils/config-batcher';
 import { getRuntimeConfig } from '../config';
 import { createLogger } from '../utils/logger';
 import type { EngineRawEvent } from '../types/engine';
+import { calcRetryDelay, isRetryableError } from '../utils/retry.js';
 import { asyncAgentRegistry } from './AsyncAgentRegistry';
 import { ProgressTracker, type ProgressEntry } from './ProgressTracker';
 
@@ -58,6 +59,12 @@ export interface AgentStreamEvent {
   phase?: string;
   error?: string;
   runId?: string;
+  /** Token 消耗与模型信息（done 事件携带，best-effort） */
+  usage?: {
+    inputTokens?: number;
+    outputTokens?: number;
+    modelName?: string;
+  };
 }
 
 // ---- 主类 ----
@@ -263,6 +270,27 @@ export class EngineAdapter extends EventEmitter {
     return Promise.race([rpcPromise, timeoutPromise]);
   }
 
+  // ---- 带重试的 RPC 调用（429/503/529/rate limit/overloaded）----
+
+  private async callWithRetry<T>(
+    method: string,
+    params: unknown,
+    maxAttempts = 3,
+  ): Promise<T> {
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      try {
+        return await this.call<T>(method, params);
+      } catch (e: unknown) {
+        if (!isRetryableError(e) || attempt >= maxAttempts - 1) throw e;
+        const delay = calcRetryDelay(attempt);
+        const msg = e instanceof Error ? e.message : String(e);
+        logger.warn(`[EngineAdapter] ${method} attempt ${attempt + 1} failed (${msg.slice(0, 80)}), retry in ${delay}ms`);
+        await new Promise(r => setTimeout(r, delay));
+      }
+    }
+    throw new Error('unreachable');
+  }
+
   // ---- Agent 调用 ----
 
   async callAgent(
@@ -391,7 +419,7 @@ export class EngineAdapter extends EventEmitter {
 
     try {
       const { isAdmin, ...rpcParams } = params;
-      const result = await this.call<{ runId?: string; accepted?: boolean }>('agent', {
+      const result = await this.callWithRetry<{ runId?: string; accepted?: boolean }>('agent', {
         ...rpcParams,
         idempotencyKey,
         deliver: params.deliver ?? false,
@@ -448,7 +476,18 @@ export class EngineAdapter extends EventEmitter {
         };
       case 'lifecycle':
         if (data['phase'] === 'end') {
-          return { type: 'done', runId };
+          // best-effort: 如果引擎将来在 end 事件中携带 usage，直接提取
+          const endUsageRaw = data['usage'] as Record<string, unknown> | undefined;
+          const endModelRaw = (data['activeModel'] ?? data['model']) as string | undefined;
+          const endUsage =
+            endUsageRaw || endModelRaw
+              ? {
+                  inputTokens: endUsageRaw?.['input'] != null ? Number(endUsageRaw['input']) : undefined,
+                  outputTokens: endUsageRaw?.['output'] != null ? Number(endUsageRaw['output']) : undefined,
+                  modelName: endModelRaw,
+                }
+              : undefined;
+          return { type: 'done', runId, ...(endUsage ? { usage: endUsage } : {}) };
         }
         if (data['phase'] === 'error') {
           return { type: 'error', error: (data['error'] as string) ?? 'unknown error', runId };
@@ -495,7 +534,7 @@ export class EngineAdapter extends EventEmitter {
                   (parseInt(msg.match(/retry after (\d+)s/)?.[1] || '10', 10) * 1000 + 1_000),
                   30_000,  // 最多等 30s，不持锁超过半分钟
                 )
-              : (500 * (attempt + 1));
+              : calcRetryDelay(attempt);
             logger.warn(`${label} attempt ${attempt + 1} failed: ${msg}, retrying in ${delay}ms`);
             await new Promise(r => setTimeout(r, delay));
             continue;
@@ -657,6 +696,9 @@ export class EngineAdapter extends EventEmitter {
       let currentBlockText = '';
       let timedOut = false;
 
+      // Token 消耗累积器（best-effort：引擎在 done 事件中携带 usage 时填充）
+      const usageAccum = { inputTokens: 0, outputTokens: 0, modelName: '' };
+
       // backgroundAfterMs 超时计时器：超时后 resolve，但任务继续后台运行
       let bgResolve: (() => void) | null = null;
       const bgTimer = backgroundAfterMs > 0
@@ -702,12 +744,27 @@ export class EngineAdapter extends EventEmitter {
           currentBlockText = '';
         }
 
-        // 任务完成
+        // 任务完成：从 done 事件提取 usage（mapEngineEvent 从 lifecycle end data 提取）
         if (event.type === 'done') {
           if (bgTimer) clearTimeout(bgTimer);
+          if (event.usage) {
+            if (typeof event.usage.inputTokens === 'number') {
+              usageAccum.inputTokens = event.usage.inputTokens;
+            }
+            if (typeof event.usage.outputTokens === 'number') {
+              usageAccum.outputTokens = event.usage.outputTokens;
+            }
+            if (event.usage.modelName) {
+              usageAccum.modelName = event.usage.modelName;
+            }
+          }
           if (!cancelled) {
             if (currentBlockText) textBlocks.push(currentBlockText);
-            asyncAgentRegistry.complete(taskId, textBlocks.join('\n').trim());
+            asyncAgentRegistry.complete(taskId, textBlocks.join('\n').trim(), {
+              inputTokens: usageAccum.inputTokens || undefined,
+              outputTokens: usageAccum.outputTokens || undefined,
+              modelName: usageAccum.modelName || undefined,
+            });
           }
           if (bgResolve) bgResolve();
         }

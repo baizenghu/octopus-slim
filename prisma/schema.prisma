@@ -236,10 +236,13 @@ model AgentTask {
   result      String?   @db.LongText
   error       String?   @db.Text
   runId       String?   @map("run_id") @db.VarChar(128)
-  sessionKey  String?   @map("session_key") @db.VarChar(255)
-  createdAt   DateTime  @default(now()) @map("created_at")
-  startedAt   DateTime? @map("started_at")
-  completedAt DateTime? @map("completed_at")
+  sessionKey   String?   @map("session_key") @db.VarChar(255)
+  inputTokens  Int?      @map("input_tokens")
+  outputTokens Int?      @map("output_tokens")
+  modelName    String?   @map("model_name") @db.VarChar(128)
+  createdAt    DateTime  @default(now()) @map("created_at")
+  startedAt    DateTime? @map("started_at")
+  completedAt  DateTime? @map("completed_at")
 
   user User @relation(fields: [userId], references: [userId], onDelete: Cascade)
 

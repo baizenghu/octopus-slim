@@ -39,6 +39,10 @@ export interface AsyncAgentTask {
   /** 引擎 runId（callAgent 返回后填充） */
   runId?: string;
   sessionKey?: string;
+  /** Token 消耗统计（任务完成时写入） */
+  inputTokens?: number;
+  outputTokens?: number;
+  modelName?: string;
   createdAt: Date;
   startedAt?: Date;
   completedAt?: Date;
@@ -78,6 +82,9 @@ export class AsyncAgentRegistry {
         error: task.error ?? null,
         runId: task.runId ?? null,
         sessionKey: task.sessionKey ?? null,
+        inputTokens: task.inputTokens ?? null,
+        outputTokens: task.outputTokens ?? null,
+        modelName: task.modelName ?? null,
         createdAt: task.createdAt,
         startedAt: task.startedAt ?? null,
         completedAt: task.completedAt ?? null,
@@ -89,6 +96,9 @@ export class AsyncAgentRegistry {
         error: task.error ?? null,
         runId: task.runId ?? null,
         sessionKey: task.sessionKey ?? null,
+        inputTokens: task.inputTokens ?? null,
+        outputTokens: task.outputTokens ?? null,
+        modelName: task.modelName ?? null,
         startedAt: task.startedAt ?? null,
         completedAt: task.completedAt ?? null,
       },
@@ -132,6 +142,9 @@ export class AsyncAgentRegistry {
           error: t.error ?? undefined,
           runId: t.runId ?? undefined,
           sessionKey: t.sessionKey ?? undefined,
+          inputTokens: (t as any).inputTokens ?? undefined,
+          outputTokens: (t as any).outputTokens ?? undefined,
+          modelName: (t as any).modelName ?? undefined,
           startedAt: t.startedAt ?? undefined,
           completedAt: t.completedAt ?? undefined,
         });
@@ -201,13 +214,22 @@ export class AsyncAgentRegistry {
     this.emit(taskId);
   }
 
-  complete(taskId: string, result: string): void {
+  complete(
+    taskId: string,
+    result: string,
+    usage?: { inputTokens?: number; outputTokens?: number; modelName?: string },
+  ): void {
     const task = this.tasks.get(taskId);
     if (!task) return;
     task.status = 'completed';
     task.result = result;
     task.completedAt = new Date();
     if (!task.startedAt) task.startedAt = new Date();
+    if (usage) {
+      if (typeof usage.inputTokens === 'number') task.inputTokens = usage.inputTokens;
+      if (typeof usage.outputTokens === 'number') task.outputTokens = usage.outputTokens;
+      if (usage.modelName) task.modelName = usage.modelName;
+    }
     this.emit(taskId);
     this.persistTask(task).catch((e: unknown) =>
       _log.warn('DB sync failed on complete', { error: String(e) }),
