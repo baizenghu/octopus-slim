@@ -35,6 +35,8 @@
 - 统一 OpenAI 兼容接口，支持 DeepSeek、MiniMax、Claude、GPT 等主流模型
 - 流式输出（SSE）+ 思考链分离展示
 - 自动 failover：主模型失败切备用模型
+- API 重试 + 随机抖动（指数退避），自动应对限流
+- 长对话自动 compaction，防止上下文溢出
 
 ### 🧠 持久化记忆系统（memory-lancedb-pro）
 - LanceDB 向量存储 + BM25 混合检索
@@ -62,18 +64,8 @@
 - **审计日志**：全操作双写（MySQL + 文件），满足等保要求
 - **安全沙箱**：代码执行在 Docker 内，资源配额可控
 - **权限控制**：Tool 级白名单 / 黑名单硬执行，不依赖 Prompt
-
-### ⚡ 借鉴 Claude Code 的工程实践（Wave 5）
-
-Octopus 深度参考了 [Claude Code](https://github.com/anthropics/claude-code) 的源码，将其经过生产验证的工程经验移植到企业场景：
-
-| 特性 | 参考来源 | 实现效果 |
-|------|---------|---------|
-| **API 重试 + 抖动** | `withRetry.ts` | 指数退避 + 随机 jitter，自动应对限流 |
-| **Token 消耗统计** | `cost-tracker.ts` | 异步任务按 input/output/model 维度统计 |
-| **会话自动压缩** | `compact.ts` | 长对话触发前自动 compaction，防止上下文溢出 |
-| **文件访问安全** | `filesystem.ts` | workspaceOnly 路径校验，防止目录穿越 |
-| **子 Agent 编排** | Coordinator 架构 | 主 Agent 自主 spawn 子 Agent，结果自动汇聚 |
+- **文件访问安全**：workspaceOnly 路径校验，防止目录穿越
+- **Token 消耗统计**：异步任务按 input/output/model 维度统计
 
 ---
 
